@@ -147,7 +147,8 @@ class MintTickFnoDiscoveryFacts {
 class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     with WidgetsBindingObserver {
   String? _roomId;
-  String _section = 'Chain';
+  String _section = 'Overview';
+  String _strikeQuery = '';
   bool _showAllStrikes = false;
   DateTime? _centeredExpiry;
   final ScrollController _chainScroll = ScrollController();
@@ -358,7 +359,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     }
   }
 
-  static const int _windowRadius = 12;
+  static const int _windowRadius = 7;
   static const double _cellWidth = 66;
   static const double _strikeWidth = 84;
   static const double _tableWidth = _cellWidth * 6 + _strikeWidth;
@@ -393,39 +394,34 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           color: theme.colorScheme.onSurfaceVariant)),
       const SizedBox(height: 12),
       _summary(context, market, now, freshCount),
-      const SizedBox(height: 14),
-      _roomPicker(context, room),
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
       _navigation(context),
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
       if (_error != null) Padding(
         padding: const EdgeInsets.only(top: 7, bottom: 9),
         child: Text(_error!,
             style: TextStyle(color: theme.colorScheme.error))),
-      if (!_readOnlyConfigured || market == null) _unavailable(context,
-          'NIFTY options data',
-          'Market discovery uses the independent Upstox source. '
-          '${_rightsStatus == 'CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED'
-              ? 'Expiries and contract identities are listed from the verified source. '
-                'Live prices, OI and Greeks are not authorized for display.'
-              : '${(_rightsStatus ?? 'Data not yet verified').replaceAll('_', ' ')}.'}',
-          action: room == null || widget.onOpenRoom == null ? null : 'Open terminal',
-          onTap: room == null ? null : () => widget.onOpenRoom?.call(room)),
-      if (_section == 'Chain') ...[
+      if (_section == 'Overview') ...[
+        _overview(context, market, now, room),
+      ] else if (_section == 'Chain') ...[
         _expiryRow(context),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _chain(context, market, now),
-        const SizedBox(height: 14),
-        _notConnected(context),
       ] else if (_section == 'Insights') ...[
         _insights(context, market, now),
       ] else if (_section == 'Movers') ...[
         _movers(context, market, now),
       ] else ...[
+        _roomPicker(context, room),
+        const SizedBox(height: 10),
         _trade(context, room),
       ],
       const SizedBox(height: 20),
+    ]);
+  }
+
+  Widget _statusChip      const SizedBox(height: 20),
     ]);
   }
 
@@ -531,7 +527,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final c = Theme.of(context).colorScheme;
     return SizedBox(height: 43,
       child: Row(children: [
-        for (final name in const ['Chain', 'Insights', 'Movers', 'Trade'])
+        for (final name in const ['Overview', 'Chain', 'Insights', 'Movers', 'Trade'])
           Expanded(child: InkWell(
             key: ValueKey('fno-discovery-tab-${name.toLowerCase()}'),
             onTap: () => setState(() => _section = name),
@@ -541,13 +537,86 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 color: _section == name ? c.primary : c.outlineVariant,
                 width: _section == name ? 2.5 : 1))),
               child: Text(name, maxLines: 1,
-                style: TextStyle(fontSize: 13,
+                style: TextStyle(fontSize: 12,
                   color: _section == name ? c.onSurface : c.onSurfaceVariant,
                   fontWeight: _section == name ? FontWeight.w800 : FontWeight.w500)),
             ),
           )),
       ]),
     );
+  }
+
+
+  Widget _overview(BuildContext context, CustomerFnoMarket? market,
+      DateTime now, TradingRoomDraft? room) {
+    final theme = Theme.of(context);
+    final c = theme.colorScheme;
+    final type = theme.textTheme;
+    final fresh = market == null
+        ? <CustomerFnoLeg>[]
+        : MintTickFnoDiscoveryFacts.freshLegs(market, now).toList();
+    final movers = fresh.where((leg) =>
+        leg.priceChangePct != null && leg.priceChangePct!.isFinite).toList()
+      ..sort((a, b) => b.priceChangePct!.abs()
+          .compareTo(a.priceChangePct!.abs()));
+    Widget shortcut(String label, IconData icon, String target) =>
+      OutlinedButton.icon(
+        key: ValueKey('fno-discovery-quick-' + target.toLowerCase()),
+        onPressed: () => setState(() => _section = target),
+        icon: Icon(icon, size: 16),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8)),
+      );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _panel(context, 'Explore NIFTY options',
+        'Verified NSE contracts · no synthetic prices',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (_expiries.isNotEmpty) ...[
+            Text('SELECT EXPIRY', style: type.labelSmall?.copyWith(
+              color: c.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            _expiryRow(context),
+            const SizedBox(height: 10),
+          ],
+          Wrap(spacing: 7, runSpacing: 2, children: [
+            shortcut('Option chain', Icons.view_list_outlined, 'Chain'),
+            shortcut('OI Insights', Icons.insights_outlined, 'Insights'),
+            shortcut('Price movers', Icons.trending_up, 'Movers'),
+            shortcut('Trade desk', Icons.candlestick_chart_outlined, 'Trade'),
+          ]),
+          if (_availableRooms.isEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Market discovery works without a room.',
+              style: type.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+            TextButton(
+              key: const ValueKey('fno-discovery-create-room'),
+              onPressed: widget.onCreateRoom,
+              child: const Text('Create F&O room'),
+            ),
+          ],
+        ])),
+      if (movers.isEmpty)
+        _panel(context, 'Price leaders unavailable',
+          market?.status == 'MARKET_CLOSED'
+            ? 'Market closed · contract identities remain browsable'
+            : 'Source-verified quotes required',
+          Text('Fresh exchange-timed option prices are unavailable. '
+              'Browse listed contracts in Option chain, or return when '
+              'the feed is authorized and current. No stale price is LIVE.',
+              style: type.bodySmall))
+      else
+        _panel(context, 'Largest verified price moves',
+          'Change since previous close · not intraday momentum',
+          Column(children: [
+            for (final leg in movers.take(5))
+              _moverRow(context, market!, leg, now),
+          ])),
+      Text('Futures, basket execution and event-driven recommendations '
+           'require separate verified integrations.',
+           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+    ]);
   }
 
   Widget _expiryRow(BuildContext context) {
@@ -580,7 +649,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         const Text('No verified option contracts available for this expiry.'));
     }
     final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
-    final strikes = _visibleStrikes(market.strikes, atm);
+    final searchedStrike = num.tryParse(_strikeQuery.trim());
+    final strikes = _visibleStrikes(market.strikes, searchedStrike ?? atm);
     final hiddenCount = market.strikes.length - strikes.length;
     if (atm != null && _centeredExpiry != market.expiry) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -597,11 +667,42 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       'exchange-listed',
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(atm == null
-            ? 'ATM unavailable until CE and PE quotes are both fresh.'
-            : 'ATM ≈ ${_strike(atm)} · estimated where CE and PE last prices '
-              'are closest. Not a spot price.',
+            ? 'ATM unavailable without fresh CE and PE quotes. '
+              'Search a listed strike or choose Show all.'
+            : 'ATM ≈ ' + _strike(atm) +
+              ' · estimated from fresh CE/PE prices, not spot.',
           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        const SizedBox(height: 8),
+        TextField(
+          key: const ValueKey('fno-discovery-strike-search'),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search, size: 20),
+            isDense: true,
+            border: OutlineInputBorder(),
+            hintText: 'Search strike, e.g. 25800',
+          ),
+          onChanged: (value) => setState(() {
+            _strikeQuery = value;
+            _showAllStrikes = false;
+          }),
+        ),
+        if (searchedStrike != null) ...[
+          const SizedBox(height: 6),
+          Text('Showing listed strikes near ' + _strike(searchedStrike) +
+              ' · search selection is not an ATM estimate.',
+              style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        ],
         const SizedBox(height: 10),
+        if (strikes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text('No strike selected. Search to avoid scrolling '
+                'through the full chain while prices are unavailable.',
+                style: type.bodySmall),
+          )
+        else
+        SingleChildScrollView(        const SizedBox(height: 10),
         SingleChildScrollView(
           controller: _chainScroll,
           scrollDirection: Axis.horizontal,
@@ -629,9 +730,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   List<CustomerFnoStrike> _visibleStrikes(
       List<CustomerFnoStrike> strikes, num? atm) {
     final window = _windowRadius * 2 + 1;
-    if (_showAllStrikes || atm == null || strikes.length <= window) {
-      return strikes;
-    }
+    if (_showAllStrikes) return strikes;
+    if (atm == null || strikes.isEmpty) return const [];
+    if (strikes.length <= window) return strikes;
     var centre = 0;
     for (var i = 1; i < strikes.length; i++) {
       if ((strikes[i].strikePrice - atm).abs() <
