@@ -120,6 +120,29 @@ class FnoCreditSpreadResearchServiceTest {
     }
 
     @Test
+    void historicalCreditSourceReadsOnlySelectedTwoLegPairAndAccountMargin(){
+        var daily=daily("125");var source=spread();
+        var r=service(daily,source,true,ACCOUNT).evaluateOne("strategy.STR-185",NOW);
+        assertEquals("RESEARCH_CANDIDATE",r.status());
+        assertEquals("VERIFIED_TWO_LEG_PE_CREDIT_SPREAD_RESEARCH_NO_ORDER",r.inputState());
+        verify(daily).verifiedRecentCloses(NOW);
+        verify(source).oneCurrentSpread(ACCOUNT,"BULL_PUT",BULL_LOW,BULL_HIGH,NOW);
+        verify(source,never()).oneCurrentSpread(eq(ACCOUNT),eq("BEAR_CALL"),any(),any(),any());
+        verifyNoMoreInteractions(source,daily);
+    }
+
+    @Test
+    void absentAccountOrHistoricalRightsCannotQueryMarginSource(){
+        var daily=daily("125");var source=spread();
+        var missing=service(daily,source,true,"").evaluateOne("strategy.STR-186",NOW);
+        assertEquals("CREDIT_SPREAD_ACCOUNT_OR_MARGIN_NOT_CONFIGURED",missing.reasonCode());
+        verifyNoInteractions(daily,source);
+        var denied=service(daily,source,false,ACCOUNT).evaluateOne("strategy.STR-186",NOW);
+        assertEquals("CREDIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED",denied.reasonCode());
+        verifyNoInteractions(daily,source);
+    }
+
+    @Test
     void bullishThirtyFiveSourceClosesRunTrueBullPutCreditEvaluatorWithoutExecution() {
         var daily = daily("125");
         var source = spread();

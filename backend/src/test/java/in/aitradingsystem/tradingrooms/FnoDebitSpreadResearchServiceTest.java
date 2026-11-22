@@ -115,6 +115,28 @@ class FnoDebitSpreadResearchServiceTest {
     }
 
     @Test
+    void historicalDebitSourceReadsOnlySelectedOriginalTwoLegOptionPair(){
+        var daily=daily("125");var source=source();
+        var r=service(daily,source,true).evaluateOne("strategy.STR-183",NOW);
+        assertEquals("RESEARCH_CANDIDATE",r.status());
+        assertEquals("VERIFIED_TWO_LEG_CE_DEBIT_SPREAD_RESEARCH_NO_ORDER",r.inputState());
+        verify(daily).verifiedRecentCloses(NOW);
+        verify(source).oneCurrentSpread("BULL_CALL",BULL_LOW,BULL_HIGH,NOW);
+        verify(source,never()).oneCurrentSpread(eq("BEAR_PUT"),any(),any(),any());
+        verifyNoMoreInteractions(source,daily);
+    }
+
+    @Test
+    void deniedHistoricalDebitSourceDoesNotQueryMarket(){
+        var daily=daily("125");var source=source();
+        var r=service(daily,source,false).evaluateOne("strategy.STR-184",NOW);
+        assertEquals("DEBIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED",r.reasonCode());
+        verifyNoInteractions(daily,source);
+        assertThrows(IllegalArgumentException.class,()->
+            service(daily,source,true).evaluateOne("strategy.STR-191",NOW));
+    }
+
+    @Test
     void bullishCrossoverAndTwoDifferentCEOptionsGiveResearchOnlyDebitSpread() {
         var daily = daily("125");
         var spreads = source();
