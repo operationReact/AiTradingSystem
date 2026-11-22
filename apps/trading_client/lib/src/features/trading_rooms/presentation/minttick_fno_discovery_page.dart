@@ -360,7 +360,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     }
   }
 
-  static const int _windowRadius = 7;
+  static const int _windowRadius = 4;
   static const double _cellWidth = 66;
   static const double _strikeWidth = 84;
   static const double _tableWidth = _cellWidth * 6 + _strikeWidth;
@@ -648,7 +648,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
     final searchedStrike = num.tryParse(_strikeQuery.trim());
     final strikes = _visibleStrikes(market.strikes, searchedStrike ?? atm);
-    final hiddenCount = market.strikes.length - strikes.length;
+    final pages = (market.strikes.length / (_windowRadius * 2 + 1)).ceil();
     if (atm != null && _centeredExpiry != market.expiry) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_chainScroll.hasClients) return;
@@ -664,8 +664,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       'exchange-listed',
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(atm == null
-            ? 'ATM unavailable without fresh CE and PE quotes. '
-              'Search a listed strike or choose Show all.'
+            ? 'No fresh option prices. Search by strike to view contracts.'
             : 'ATM ≈ ${_strike(atm)} · estimated from fresh CE/PE prices, '
               'not spot.',
           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
@@ -682,6 +681,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           onChanged: (value) => setState(() {
             _strikeQuery = value;
             _showAllStrikes = false;
+            _strikePage = 0;
           }),
         ),
         if (searchedStrike != null) ...[
@@ -694,10 +694,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         if (strikes.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('No strike selected. Search to avoid scrolling '
-                'through the full chain while prices are unavailable.',
-                style: type.bodySmall),
+            child: Row(children: [
+              Icon(Icons.search_rounded, size: 20, color: c.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Expanded(child: Text('No strike selected. Enter a strike above '
+                'or browse listed contracts in short pages.',
+                style: type.bodySmall?.copyWith(color: c.onSurfaceVariant))),
+            ]),
           )
+        else if (MintTickFnoDiscoveryFacts.freshLegs(market, now).isEmpty)
+          _listedOnlyChain(context, market, strikes, now)
         else if (MediaQuery.sizeOf(context).width < 600)
           _compactChain(context, market, strikes, atm, now)
         else
@@ -710,14 +716,40 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 _chainRow(context, market, strike, atm, now),
             ])),
           ),
-        const SizedBox(height: 8),
-        if (market.strikes.length > strikes.length || _showAllStrikes)
+        const SizedBox(height: 4),
+        if (_showAllStrikes)
+          Row(children: [
+            Text('Page ${_strikePage + 1} of $pages',
+              style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+            const Spacer(),
+            TextButton(
+              key: const ValueKey('fno-discovery-prev-page'),
+              onPressed: _strikePage == 0
+                  ? null : () => setState(() => _strikePage--),
+              child: const Text('Previous')),
+            TextButton(
+              key: const ValueKey('fno-discovery-next-page'),
+              onPressed: _strikePage + 1 >= pages
+                  ? null : () => setState(() => _strikePage++),
+              child: const Text('Next')),
+            TextButton(
+              onPressed: () => setState(() {
+                _showAllStrikes = false;
+                _strikePage = 0;
+              }),
+              child: const Text('Close')),
+          ])
+        else if (strikes.isEmpty)
           Align(alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => setState(() => _showAllStrikes = !_showAllStrikes),
-              child: Text(_showAllStrikes
-                  ? 'Collapse full chain'
-                  : 'Show all ${market.strikes.length} strikes ($hiddenCount more)'),
+            child: TextButton.icon(
+              key: const ValueKey('fno-discovery-browse-strikes'),
+              onPressed: market.strikes.isEmpty ? null : () => setState(() {
+                _showAllStrikes = true;
+                _strikePage = 0;
+                _strikeQuery = '';
+              }),
+              icon: const Icon(Icons.view_list_rounded, size: 16),
+              label: const Text('Browse listed strikes'),
             )),
         if (market.status == 'MARKET_CLOSED')
           Text('Market closed · no stale contract is labelled LIVE.',
@@ -728,8 +760,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   List<CustomerFnoStrike> _visibleStrikes(
       List<CustomerFnoStrike> strikes, num? atm) {
     final window = _windowRadius * 2 + 1;
-    if (_showAllStrikes) return strikes;
-    if (atm == null || strikes.isEmpty) return const [];
+    if (strikes.isEmpty) return const [];
+    if (_showAllStrikes) {
+      final start = (_strikePage * window).clamp(0,
+          math.max(0, strikes.length - 1));
+      return strikes.sublist(start,
+          math.min(strikes.length, start + window));
+    }
+    if (atm == null) return const [];
     if (strikes.length <= window) return strikes;
     var centre = 0;
     for (var i = 1; i < strikes.length; i++) {
@@ -741,6 +779,46 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final start = math.max(0,
         math.min(centre - _windowRadius, strikes.length - window));
     return strikes.sublist(start, start + window);
+  }
+
+  /// Contract identities remain browsable when prices cannot be verified.
+  Widget _listedOnlyChain(BuildContext context, CustomerFnoMarket market,
+      List<CustomerFnoStrike> strikes, DateTime now) {
+    final c = Theme.of(context).colorScheme;
+    final heading = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: c.onSurfaceVariant, fontWeight: FontWeight.w700);
+    Widget side(CustomerFnoLeg? leg, String label) =>
+      Expanded(child: Align(alignment: Alignment.center,
+        child: TextButton(
+          onPressed: leg == null
+              ? null : () => _showLeg(context, market, leg, now),
+          child: Text(label, style: const TextStyle(
+            fontWeight: FontWeight.w700, fontSize: 12)),
+        )));
+    return Column(children: [
+      Row(children: [
+        Expanded(child: Text('CALL · CE',
+          textAlign: TextAlign.center, style: heading)),
+        Expanded(child: Text('STRIKE',
+          textAlign: TextAlign.center, style: heading)),
+        Expanded(child: Text('PUT · PE',
+          textAlign: TextAlign.center, style: heading)),
+      ]),
+      const SizedBox(height: 5),
+      for (final strike in strikes)
+        Container(
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(
+            width: 0.5, color: c.outlineVariant.withValues(alpha: 0.5)))),
+          child: Row(children: [
+            side(strike.call, 'View CE'),
+            Expanded(child: Text(_strike(strike.strikePrice),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w800))),
+            side(strike.put, 'View PE'),
+          ]),
+        ),
+    ]);
   }
 
   /// On a phone both CE and PE prices must be visible without horizontal
@@ -756,7 +834,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       return Expanded(child: InkWell(
         onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 3),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 3),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(_price(fresh ? leg.ltp : null),
               maxLines: 1,
