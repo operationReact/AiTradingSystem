@@ -208,8 +208,8 @@ void main() {
       )),
     ));
     await tester.pump();
-    expect(find.text('F&O · Discover'), findsOneWidget);
-    expect(find.textContaining('Market discovery works without a room.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-title')), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-index-picker')), findsOneWidget);
     expect(find.textContaining('No verified'), findsWidgets);
     expect(find.text('Create F&O room'), findsWidgets);
     final create = find.text('Create F&O room').first;
@@ -236,9 +236,21 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
-    expect(find.text('LIVE'), findsOneWidget);
-    expect(find.textContaining('ATM ≈ 25300'), findsOneWidget);
-    expect(find.text('ATM'), findsOneWidget);
+    expect(find.text('NO FRESH QUOTES'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-ce')), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-pe')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('minttick-options-pe')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_PE')),
+      findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_CE')),
+      findsNothing);
+    await tester.tap(find.byKey(const ValueKey('minttick-options-expiry-picker')));
+    await tester.pumpAndSettle();
+    expect(find.text('Expiry date'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
     await tester.pump();
