@@ -302,7 +302,8 @@ class _MintTickRoomProductionWorkspaceState
           SizedBox(height: 53, child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15),
             child: Row(children: [
-              const MintTickLockup(markWidth: 29, fontSize: 19),
+              const Flexible(fit: FlexFit.loose,
+                child: MintTickLockup(markWidth: 29, fontSize: 19)),
               const Spacer(),
               Text('ROOMS', style: type.labelSmall?.copyWith(
                 color: colors.onSurfaceVariant, fontSize: 10)),
@@ -462,12 +463,13 @@ class _MintTickRoomProductionWorkspaceState
                       bottom: BorderSide(
                         color: _tab == tab ? colors.primary : colors.outlineVariant,
                         width: _tab == tab ? 2 : 1))),
-                    child: Text(tab, maxLines: 1,
-                      style: type.labelMedium?.copyWith(
-                        fontSize: 12,
-                        color: _tab == tab ? colors.onSurface
-                          : colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w700)),
+                    child: FittedBox(fit: BoxFit.scaleDown,
+                      child: Text(tab, maxLines: 1,
+                        style: type.labelMedium?.copyWith(
+                          fontSize: 12,
+                          color: _tab == tab ? colors.onSurface
+                            : colors.onSurfaceVariant,
+                          fontWeight: FontWeight.w700))),
                   ),
                 )),
             ])),
