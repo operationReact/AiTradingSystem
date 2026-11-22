@@ -39,6 +39,13 @@ class _LiveDiscovery extends Fake implements CustomerFnoDiscoveryRepository {
 
 class _RetainedDiscovery extends _LiveDiscovery {
   @override
+  Future<CustomerFnoExpiries> expiries() async => CustomerFnoExpiries(
+        status: 'VERIFIED',
+        observedAt: DateTime.now().toUtc(),
+        expiries: [DateTime.parse('2026-11-23')],
+      );
+
+  @override
   Future<CustomerFnoMarket> market(DateTime expiry) async {
     final exchange = DateTime.now().toUtc().subtract(const Duration(days: 1));
     Map<String, Object?> leg(String side, num price) => {
