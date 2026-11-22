@@ -180,3 +180,37 @@ reproducible after-cost walk-forward/OOS outcomes and independent approval.
 The existing 0/43 real-data E2E, 0/43 PAPER ledger and 0/43 LIVE broker
 execution counters remain unchanged. Never promote routing/compilation or
 fictitious JUnit fixtures to a successfully backtested strategy.
+
+
+## Original NIFTY CE/PE historical as-of replay (STR-181/182)
+
+The original research source already contains a rights-joined PostgreSQL V106
+reader for 35+ exchange-calendar-verified NIFTY closes and genuine same-provider
+CE/PE option quotes, original exchange-time first-known timestamps, depth, OI,
+contract master, fees and capital budgets. The existing
+FnoOptionsResearchService had only a two-option evaluateAll(now) route.
+
+FnoOptionsResearchService.evaluateOne(strategyId, asOf) now invokes ONLY the
+requested original typed FnoLongCallV1 (STR-181) or FnoLongPutV1 (STR-182)
+evaluator from the V106 rights-joined source; it will not fetch the sibling
+option leg, infer rights, or invent quote/depth/fee values. Existing original
+V106 as-of SQL validates separately captured source-use rights, contract,
+index close, option quote, fees, and market calendar before returning anything.
+The original Java evaluator independently checks timestamps, same-provider
+quotes, EMA crossover, OI/depth and explicit costs.
+
+Fno181182VerifiedHistoricalReplayService binds the operator-configured source-
+listed CE/PE keys and historical time cutoff to a bounded, deterministic,
+strictly increasing <=64-window replay. Invalid keys, missing original indexed
+closes, missing quote custody or rights, future-known observations and malformed
+evaluator results block without orders. The operator GET-only
+/api/admin/research/fno-43/historical-replay route now also supports
+STR-181 and STR-182 with no-store, sanitized counts and fixed reasons only.
+
+The branch tests run synthetic/mock original-source fixtures, not a market
+replay certification. Source tables V106 may be empty on the deployed
+PostgreSQL host and have not been proven populated. The full historical
+acceptance stays **0/43** until independently original-signed input proofs,
+after-cost out-of-sample strategy results and a full evidence ledger exist.
+This adds TWO V106-backed as-of research evaluator adapters but does not
+imply that the other option and hedging strategies share their data requirements.
