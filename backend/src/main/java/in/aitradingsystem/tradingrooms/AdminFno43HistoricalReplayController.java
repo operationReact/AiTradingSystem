@@ -27,7 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/admin/research/fno-43")
-public final class AdminFno43HistoricalReplayController {
+public class AdminFno43HistoricalReplayController {
     private static final List<String> ENABLED = List.of(
         FnoFuturesPriceOiDivergenceV1.STRATEGY_ID,
         FnoFuturesMomentumV1.STRATEGY_ID,
