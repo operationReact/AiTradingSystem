@@ -1,0 +1,16 @@
+{
+  "kind": "minttick-owner-private-three-gap-independent-nse-eod-v1",
+  "operation": "read-only-exact-three-gap-independent-exchange-volume-triage",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "owner_permission_expires": "2026-11-28",
+  "max_metadata_gets": 4,
+  "max_nse_archive_gets": 3,
+  "no_orders": true,
+  "no_auth_bypass": true,
+  "no_redistribution": true,
+  "no_persistence": true,
+  "private_cache_read_only": true,
+  "no_market_price_export": true
+}
