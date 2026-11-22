@@ -122,8 +122,8 @@ jobs:
               content=Path('infra/ec2-paper',name).read_bytes()
               digest=hashlib.sha256(content).hexdigest()
               url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+commit+'/infra/ec2-paper/'+name
-              commands.append("curl --fail --silent --show-error --max-time 30 --proto '=https' --tlsv1.2 -o \\"$tmp/"+name+"\\" '"+url+"'")
-              commands.append("printf '%s  %s\\\\n' '"+digest+"' \\"$tmp/"+name+"\\" | sha256sum -c - >/dev/null")
+              commands.append('curl --fail --silent --show-error --max-time 30 --proto "=https" --tlsv1.2 -o "$tmp/'+name+'" "'+url+'"')
+              commands.append('echo "'+digest+'  $tmp/'+name+'" | sha256sum -c - >/dev/null')
           commands.append('PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$tmp" /usr/bin/python3 "$tmp/fno_private_three_gap_nse_eod.py"')
           remote="\n".join(commands)+"\n"
           req=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
