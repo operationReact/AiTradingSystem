@@ -56,6 +56,38 @@ class SourceCoverageTests(unittest.TestCase):
         self.assertEqual(month["missingWeekdayCandidates"],25)
         self.assertEqual(month["observedUniqueDays"],320)
 
+    def test_official_2026_fno_holidays_are_not_unexplained_candle_gaps(self):
+        # The actual published NSE/FAOP/71777 closure dates, not guesses from
+        # provider-empty daily candles. The fixtures are invented contract keys.
+        for expiry, closed, ordinary_gap in (
+            (date(2026,5,12),date(2026,5,1),date(2026,5,5)),
+            (date(2026,10,12),date(2026,10,2),date(2026,10,6)),
+        ):
+            first=expiry-timedelta(days=20)
+            key=f"NSE_FO|CAL001|{expiry:%d-%m-%Y}"
+            jobs=[(key,first.isoformat(),expiry.isoformat())]
+            self.assertIn(closed,c.NSE_FO_2026_PUBLISHED_HOLIDAYS)
+            rows=[]
+            for offset in range(21):
+                day=first+timedelta(days=offset)
+                if day.weekday()<5 and day not in (closed,ordinary_gap):
+                    rows.append((key,day.isoformat()+"T00:00:00+05:30"))
+            month=expiry.strftime("%Y-%m")
+            report=next(x for x in c.calendar_candidates(jobs,rows)
+                        if x["month"]==month)
+            self.assertEqual(report["missingWeekdayCandidates"],2)
+            self.assertEqual(report["nsePublishedHolidaySlots"],1)
+            self.assertEqual(report["nseHolidayMissingSlots"],1)
+            self.assertEqual(report["remainingWeekdayGapCandidates"],1)
+            # A provider candle on a scheduled closed day must not be silently
+            # counted as a reconciled exchange session or conceal ordinary gaps.
+            on_holiday=rows+[(key,closed.isoformat()+"T00:00:00+05:30")]
+            unexpected=next(x for x in c.calendar_candidates(jobs,on_holiday)
+                            if x["month"]==month)
+            self.assertEqual(unexpected["nsePublishedHolidaySlots"],1)
+            self.assertEqual(unexpected["nseHolidayMissingSlots"],0)
+            self.assertEqual(unexpected["remainingWeekdayGapCandidates"],1)
+
     def test_contract_plan_counts_one_future_eleven_strike_pairs(self):
         expiries=[date(2025,11,26),date(2025,12,30)]+[date(2026,m,28) for m in range(1,11)]
         data={}
