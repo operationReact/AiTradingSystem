@@ -26,7 +26,7 @@ The utility emits aggregate counts of reference observations, missing reference 
 
 - Obtain an executed NSE Data & Analytics F&O historical EOD subscription / approved source and contract identity reference, including private non-display commercial research rights, file access, data versioning/corrections, retention and any customer display/reuse rights.
 - Independently adjudicate the 316 price discrepancies, or keep December 2025 excluded.
-- Independently validate exchange holidays/special sessions and the three isolated weekday contract-day gaps; the Upstox recheck did not return those 3 bars.
+- **Complete for the 276-contract pilot's missing weekday candidates only:** the 207 published NSE holiday slots were exchange-calendar classified in run #45040413969, and the three May/October isolated gaps were independently matched to explicit **zero NSE F&O traded-volume** rows in protected official UDiFF EOD run #45043188940. No synthetic candles or fills should be created. Independent OHLC/price integrity and a complete official session calendar remain unverified.
 - Establish a separately licensed durable store; do not extend the seven-day private cache or 28 Nov 2026 owner permit.
 
 ## Verified operational evidence
