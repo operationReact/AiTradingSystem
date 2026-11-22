@@ -754,13 +754,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       fontWeight: FontWeight.w800, color: c.onSurfaceVariant);
     Widget priceCell(CustomerFnoLeg? leg) {
       final fresh = leg != null && _fresh(market, leg, now);
-      final change = fresh ? leg!.priceChangePct : null;
+      final change = fresh ? leg.priceChangePct : null;
       return Expanded(child: InkWell(
         onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 3),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(_price(fresh ? leg!.ltp : null),
+            Text(_price(fresh ? leg.ltp : null),
               maxLines: 1,
               style: const TextStyle(
                 fontSize: 13, fontWeight: FontWeight.w800,
