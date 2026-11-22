@@ -201,10 +201,51 @@ public final class CustomerFnoDiscoveryController {
         String status = !open ? "MARKET_CLOSED" :
             fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
         // This market board has NO execution capability and NO paper rights.
-        return CustomerPaperFnoMarketController.marketResponse(
+        var base = CustomerPaperFnoMarketController.marketResponse(
             expiry, chain.retrievedAt(), status, true, false, strikes,
             chain.strikes().isEmpty() ? null
                 : chain.strikes().getFirst().underlyingSpotPrice());
+        // Keep V2 chain indicators separate from source-verified V3 last trades.
+        // Neither this map nor its HTTP retrieval time authorizes order fills.
+        return new CustomerPaperFnoMarketController.Market(
+            base.underlyingKey(), base.expiry(), base.source(), base.status(),
+            base.snapshotAt(), base.exchangeSpotTimeVerified(),
+            base.displayRightsVerified(), base.trainingRightsVerified(),
+            base.liveOrderEnabled(), base.strikes(), base.underlyingReferenceSpot(),
+            chainSnapshotIndicators(strikes, chain));
+    }
+
+    /** Provider V2 chain values are non-executable reference observations.
+     * Only keys already confirmed by both the listed-contract and chain
+     * identity join can enter this separate UI-only map.
+     */
+    static java.util.Map<String, CustomerPaperFnoMarketController.ChainSnapshotIndicator>
+            chainSnapshotIndicators(
+            List<CustomerPaperFnoMarketController.Strike> strikes,
+            UpstoxAnalyticsSource.OptionChainSnapshot chain) {
+        var verified = strikes.stream()
+            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
+            .filter(java.util.Objects::nonNull)
+            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
+            .collect(java.util.stream.Collectors.toSet());
+        var result = new java.util.HashMap<String,
+            CustomerPaperFnoMarketController.ChainSnapshotIndicator>();
+        for (var strike : chain.strikes()) {
+            for (var quote : java.util.List.of(strike.call(), strike.put())) {
+                if (quote == null || !verified.contains(quote.instrumentKey())) continue;
+                result.put(quote.instrumentKey(), new
+                    CustomerPaperFnoMarketController.ChainSnapshotIndicator(
+                    positive(quote.ltp()), positive(quote.bidPrice()),
+                    positive(quote.askPrice()), quote.openInterest(),
+                    quote.iv(), quote.delta(), quote.theta(), quote.gamma(),
+                    quote.vega()));
+            }
+        }
+        return java.util.Map.copyOf(result);
+    }
+
+    private static java.math.BigDecimal positive(java.math.BigDecimal value) {
+        return value != null && value.signum() > 0 ? value : null;
     }
 
     private List<CustomerPaperFnoMarketController.Strike> withLastVerifiedTrades(
