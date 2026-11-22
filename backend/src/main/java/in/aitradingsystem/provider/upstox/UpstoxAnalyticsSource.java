@@ -298,7 +298,7 @@ public final class UpstoxAnalyticsSource {
     public java.util.Map<String, ListedLastTrade> listedFnoLastTrades(
             List<String> instrumentKeys) {
         if (!enabled || instrumentKeys == null || instrumentKeys.isEmpty()
-                || instrumentKeys.size() > 64
+                || instrumentKeys.size() > 500
                 || instrumentKeys.stream().anyMatch(k ->
                     k == null || !k.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}"))
                 || instrumentKeys.stream().distinct().count() != instrumentKeys.size()) {
@@ -332,8 +332,17 @@ public final class UpstoxAnalyticsSource {
                     && previous.decimalValue().signum() > 0
                     ? previous.decimalValue() : null;
                 var oiNode = quote.path("oi");
-                Long oi = oiNode.isIntegralNumber() && oiNode.canConvertToLong()
-                    && oiNode.longValue() >= 0 ? oiNode.longValue() : null;
+                // Upstox may encode integral OI as 5000.0; accept exact
+                // whole quantities but never round a fractional OI.
+                Long oi = null;
+                if (oiNode.isNumber() && oiNode.decimalValue().signum() >= 0
+                        && oiNode.decimalValue().precision() <= 20) {
+                    try {
+                        oi = oiNode.decimalValue().longValueExact();
+                    } catch (ArithmeticException fractionalOrOverflow) {
+                        // Keep the verified LTP, omit only untrustworthy OI.
+                    }
+                }
                 mapped.put(key, new ListedLastTrade(key, price, previousClose,
                     oi, traded, observed));
             } catch (RuntimeException invalidQuote) {
