@@ -89,8 +89,9 @@ class AdminFno43HistoricalReplayControllerTest {
     void allOther40StrategiesAreUnavailableUntilTypedOriginalSourceAdapterExists() {
         for(int n=170;n<=212;n++){
             if(n==174||n==176||n==177)continue;
+            int strategyNumber=n;
             var err=assertThrows(ResponseStatusException.class,
-                ()->route().inspect("strategy.STR-"+n,KEY,AS_OF));
+                ()->route().inspect("strategy.STR-"+strategyNumber,KEY,AS_OF));
             assertEquals(HttpStatus.BAD_REQUEST,err.getStatusCode());
         }
         verifyNoInteractions(s174,s176,s177);
