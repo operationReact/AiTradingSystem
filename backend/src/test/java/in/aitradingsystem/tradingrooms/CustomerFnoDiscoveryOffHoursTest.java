@@ -87,7 +87,8 @@ class CustomerFnoDiscoveryOffHoursTest {
         assertThat(call.paperEligible()).isFalse();
         assertThat(call.bid()).isNull();
         assertThat(call.ask()).isNull();
-        verifyNoInteractions(feed);
+        verify(feed).getIfAvailable();
+        verifyNoMoreInteractions(feed);
     }
 
     @Test
