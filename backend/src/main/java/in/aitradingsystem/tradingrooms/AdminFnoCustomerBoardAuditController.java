@@ -69,7 +69,10 @@ public class AdminFnoCustomerBoardAuditController {
         retryAfter = now.plus(COOLDOWN);
         try {
             var board = discovery.internalMarket(EXPIRY);
-            return noStore(summarize(cap, board, now));
+            // The provider assigns its retrieval time during this call. Use
+            // the post-fetch clock for freshness or valid snapshots appear
+            // to come from the future and every chain field is hidden.
+            return noStore(summarize(cap, board, clock.instant()));
         } catch (ResponseStatusException e) {
             return noStore(empty(cap, "MARKET_HTTP_" + e.getStatusCode().value()));
         } catch (RuntimeException e) {
