@@ -1,0 +1,77 @@
+name: MintTick F&O - original V106 STR-181/182 CE PE historical replay (NO ORDERS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno181182-original-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno181182-original-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchService.java'
+
+permissions:
+  contents: read
+
+jobs:
+  typed-original-options-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run original V106 rights/source and actual typed Long Call/Put tests
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno181182VerifiedHistoricalReplayServiceTest,FnoOptionsResearchServiceTest,FnoVerifiedNiftyLongOptionSourceStoreTest,AdminFno43HistoricalReplayControllerTest,FnoLongCallV1Test,FnoLongPutV1Test,Fno43HistoricalReplayDispatchV1Test' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno181182VerifiedHistoricalReplayServiceTest.xml
+      - name: Assert exact original historical V106 and no broker actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("backend/src/main/java/in/aitradingsystem")
+          svc=(root/"tradingrooms/Fno181182VerifiedHistoricalReplayService.java").read_text()
+          src=(root/"marketdata/FnoVerifiedNiftyLongOptionSourceStore.java").read_text()
+          route=(root/"tradingrooms/AdminFno43HistoricalReplayController.java").read_text()
+          for gate in ("evaluator.evaluateOne(strategyId,asOf)",
+                       "MAX_WINDOWS=64","independentHistoricalE2E",
+                       "SOURCE_V106_EVALUATOR_RESEARCH_ONLY"):
+              assert gate in svc,gate
+          for gate in ("MODEL_INFERENCE","rights.receipt_status = 'VERIFIED'",
+                       "tick_rights.receipt_status = 'VERIFIED'",
+                       "option_rights.receipt_status = 'VERIFIED'",
+                       "q.captured_at <= ?","q.option_first_observed_at <= ?"):
+              assert gate in src,gate
+          assert "hasAnyRole('ADMIN', 'OPERATOR')" in route
+          for forbidden in ("submitOrder","placeOrder","aws ssm","put-parameter",
+                            "broker.place","MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"):
+              assert forbidden not in svc,forbidden
+          PY
+      - name: Truthful release assessment
+        if: always()
+        shell: bash
+        run: |
+          echo 'STR-181/182 typed evaluator replay and V106 read-only historical as-of adapter tests use synthetic/mock source.'
+          echo 'Independent real-source after-cost historical E2E remains 0/43.'
+          echo 'No customer broker orders, no source permission change, no original quote export.'
