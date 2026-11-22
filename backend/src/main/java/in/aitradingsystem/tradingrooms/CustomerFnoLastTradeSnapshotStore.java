@@ -97,10 +97,7 @@ public final class CustomerFnoLastTradeSnapshotStore {
             java.util.Collection<String> instrumentKeys) {
         if (!allowed || instrumentKeys == null || instrumentKeys.isEmpty()
                 || instrumentKeys.size() > 512) return java.util.Map.of();
-        var keys = instrumentKeys.stream()
-            .filter(k -> k != null && k.matches(
-                "(NSE_FO|BSE_FO)\\\\|[A-Za-z0-9._-]{1,64}"))
-            .distinct().toList();
+        var keys = validInstrumentKeys(instrumentKeys);
         if (keys.isEmpty()) return java.util.Map.of();
         Instant now = clock.instant();
         var parameters = new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
@@ -127,6 +124,16 @@ public final class CustomerFnoLastTradeSnapshotStore {
                 }
                 return java.util.Map.copyOf(found);
             });
+    }
+
+    /** Match the literal instrument separator; never accept slash/regex alternation. */
+    static List<String> validInstrumentKeys(
+            java.util.Collection<String> instrumentKeys) {
+        if (instrumentKeys == null) return List.of();
+        return instrumentKeys.stream()
+            .filter(k -> k != null && k.matches(
+                "(NSE_FO|BSE_FO)\\|[A-Za-z0-9._-]{1,64}"))
+            .distinct().toList();
     }
 
     public Optional<LastTrade> latest(String instrumentKey) {

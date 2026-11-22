@@ -237,7 +237,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         return;
       }
       final readEnabled = capability.displayRightsVerified &&
-          capability.feedConfigured && capability.sourceReady;
+          capability.sourceReady &&
+          (capability.feedConfigured || !capability.marketOpen);
       final discoveryEnabled = (capability.displayRightsVerified ||
               capability.contractDiscoveryVerified) &&
           capability.sourceReady;

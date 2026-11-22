@@ -109,9 +109,9 @@ public final class CustomerFnoDiscoveryController {
                 ? (contractDiscoveryVerified
                     ? "CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED"
                     : "DISPLAY_RIGHTS_NOT_VERIFIED")
-            : !feedConfigured || stream == null ? "FNO_V3_FEED_UNAVAILABLE"
             : !sourceReady ? "FNO_CONTRACT_SOURCE_UNAVAILABLE"
             : !open ? "MARKET_CLOSED"
+            : !feedConfigured || stream == null ? "FNO_V3_FEED_UNAVAILABLE"
             : fresh > 0 ? "LIVE_QUOTES"
             : "CONNECTED".equals(liveStatus.state())
                  || "CONNECTED_AWAITING_TICKS".equals(liveStatus.state())
@@ -172,7 +172,10 @@ public final class CustomerFnoDiscoveryController {
                 "F&O contract source unavailable");
         }
         var stream = feed.getIfAvailable();
-        if (!feedConfigured || stream == null) {
+        boolean open = sessionCalendar.isInsideFnoSession(now);
+        // A closed-market read may use independently authorized retained/REST
+        // last trades; no live socket is needed and no order authority is granted.
+        if (open && (!feedConfigured || stream == null)) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "F&O exchange feed unavailable");
         }
@@ -188,7 +191,6 @@ public final class CustomerFnoDiscoveryController {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "F&O source provenance unavailable");
         }
-        boolean open = sessionCalendar.isInsideFnoSession(now);
         var liveStrikes = CustomerPaperFnoMarketController.selectDiscovery(
             contracts, chain, stream, open);
         boolean fresh = liveStrikes.stream().anyMatch(s ->
