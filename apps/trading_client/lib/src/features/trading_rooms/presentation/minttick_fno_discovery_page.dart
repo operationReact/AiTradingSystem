@@ -348,17 +348,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             .where((leg) => leg.tradingSymbol.toLowerCase()
                 .contains(_search.toLowerCase().trim()))
             .toList();
+    final reference = market == null ? null
+        : MintTickFnoDiscoveryFacts.atmStrike(market, now) ??
+            market.underlyingReferenceSpot;
     final ranked = [...all]..sort((a, b) {
       final ao = a.openInterest;
       final bo = b.openInterest;
-      if (ao == null && bo == null) return a.tradingSymbol.compareTo(b.tradingSymbol);
-      if (ao == null) return 1;
-      if (bo == null) return -1;
-      return bo.compareTo(ao);
+      if (ao != null && bo != null) return bo.compareTo(ao);
+      if (ao != null) return -1;
+      if (bo != null) return 1;
+      final ak = _strikeForLeg(market!, a);
+      final bk = _strikeForLeg(market, b);
+      if (reference != null && ak != null && bk != null) {
+        final distance = (ak - reference).abs()
+            .compareTo((bk - reference).abs());
+        if (distance != 0) return distance;
+      }
+      return (ak ?? 0).compareTo(bk ?? 0);
     });
     final trending = ranked.take(8).toList();
     final topSmartlist = _smartlistKind == 'Most active'
-        ? ranked.take(6).toList()
+        ? ranked.where((leg) => leg.openInterest != null).take(6).toList()
         : <CustomerFnoLeg>[];
     final freshCount = market == null ? 0
         : MintTickFnoDiscoveryFacts.freshLegs(market, now).length;
@@ -615,6 +625,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     ]);
   }
 
+  static num? _strikeForLeg(CustomerFnoMarket market, CustomerFnoLeg leg) {
+    for (final row in market.strikes) {
+      if (row.call?.instrumentKey == leg.instrumentKey ||
+          row.put?.instrumentKey == leg.instrumentKey) {
+        return row.strikePrice;
+      }
+    }
+    return null;
+  }
+
   static String _strikeBadge(CustomerFnoLeg leg, num atm) {
     final match = RegExp(r'(\d+(?:\.\d+)?)\s*(CE|PE)$').firstMatch(
       leg.tradingSymbol);
@@ -749,9 +769,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         const Text('No verified option contracts available for this expiry.'));
     }
     final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
-    final strikes = _visibleStrikes(market.strikes, atm);
+    final near = atm ?? market.underlyingReferenceSpot;
+    final strikes = _visibleStrikes(market.strikes, near);
     final hiddenCount = market.strikes.length - strikes.length;
-    if (atm != null && _centeredExpiry != market.expiry) {
+    if (near != null && _centeredExpiry != market.expiry) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_chainScroll.hasClients) return;
         final position = _chainScroll.position;
@@ -766,7 +787,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       'exchange-listed',
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(atm == null
-            ? 'ATM unavailable until CE and PE quotes are both fresh.'
+            ? (near == null
+                ? 'ATM unavailable until CE and PE quotes are both fresh.'
+                : 'Near provider reference ${_strike(near)} · not a live index quote.')
             : 'ATM ≈ ${_strike(atm)} · estimated where CE and PE last prices '
               'are closest. Not a spot price.',
           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
