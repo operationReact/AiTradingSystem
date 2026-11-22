@@ -1,0 +1,83 @@
+name: MintTick F&O - original broker-settled stock option historical research gate
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno187188-owned-option-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno187188VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno187188VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno187188HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno187188HistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-187-188-original-owned-option-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno187188-owned-option-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno187188VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno187188VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno187188HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno187188HistoricalReplayControllerTest.java'
+permissions:
+  contents: read
+
+jobs:
+  original-owned-source-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute actual owned-stock Java evaluators and historical source guards (synthetic CI)
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno187188VerifiedHistoricalReplayServiceTest,AdminFno187188HistoricalReplayControllerTest,FnoOwnedEquityOptionsResearchServiceTest,FnoVerifiedEquityOwnedOptionStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno187188VerifiedHistoricalReplayServiceTest.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno187188HistoricalReplayControllerTest.xml
+      - name: Enforce broker-neutral read-only route, no market data or LIVE promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          ctrl=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno187188HistoricalReplayController.java').read_text()
+          svc=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno187188VerifiedHistoricalReplayService.java').read_text()
+          original=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java').read_text()
+          source=Path('backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStore.java').read_text()
+          assert '@GetMapping("/owned-equity-historical-replay")' in ctrl
+          assert '@PreAuthorize("hasAnyRole(' in ctrl
+          assert 'CacheControl.noStore()' in ctrl
+          assert 'ResponseEntity.ok()' in ctrl
+          assert 'false,false,false,false' in svc.replace(' ', '')
+          assert 'original.evaluateAll(asOf)' in svc
+          assert 'FnoProtectivePutV1.evaluate(' in original
+          assert 'FnoCoveredCallV1.evaluate(' in original
+          for gate in ('nse_eq_broker_settled_holdings',
+                       'settled_shares_broker_reconciled',
+                       'ownership_pledge_lien_absent',
+                       'MODEL_INFERENCE', 'rights.receipt_status'):
+              if gate=='rights.receipt_status':continue
+              assert gate in source,gate
+          for code in (svc,ctrl):
+              for forbidden in ('@PostMapping','placeOrder','submitOrder',
+                                'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED',
+                                'with-decryption','put-parameter'):
+                  assert forbidden not in code,forbidden
+          PY
+      - name: Preserve truthful independent historical acceptance
+        if: always()
+        shell: bash
+        run: |
+          echo 'STR-187/188 original source to Java research evaluator: fictional unit tests only.'
+          echo 'Independently accepted real-market historical E2E remains 0/43.'
+          echo 'No broker mutations, real portfolio orders, retained data exports or source-rights promotion.'
