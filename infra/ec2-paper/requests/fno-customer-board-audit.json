@@ -1,12 +1,12 @@
 {
-    "application": "MintTick",
-    "aws_account": "098859530205",
-    "region": "ap-south-1",
-    "instance_id": "i-09c01b470fb39b85a",
-    "operation": "read-only-minttick-fno-customer-assembly-audit",
-    "endpoint": "/api/admin/market-data/upstox-analytics/fno/customer-board-audit",
-    "instrument": "NSE_FO|47821",
-    "expiry": "2026-12-01",
-    "orders": false,
-    "persist": false
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "read-only-minttick-fno-customer-assembly-audit",
+  "endpoint": "/api/admin/market-data/upstox-analytics/fno/customer-board-audit",
+  "instrument": "NSE_FO|47821",
+  "expiry": "2026-12-01",
+  "orders": false,
+  "persist": false
 }
