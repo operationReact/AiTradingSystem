@@ -38,9 +38,9 @@ class Fno179VerifiedHistoricalReplayServiceTest {
     }
     private static List<FnoVerifiedIntradayLiquidityStore.Snapshot> rows() {
         return List.of(
-            row(0,"UPSTOX_ANALYTICS",AS_OF.minusSeconds(34)),
-            row(15,"UPSTOX_ANALYTICS",AS_OF.minusSeconds(19)),
-            row(30,"UPSTOX_ANALYTICS",AS_OF.minusSeconds(4)));
+            row(0,"UPSTOX_V3",AS_OF.minusSeconds(34)),
+            row(15,"UPSTOX_V3",AS_OF.minusSeconds(19)),
+            row(30,"UPSTOX_V3",AS_OF.minusSeconds(4)));
     }
     private void ready(List<FnoVerifiedIntradayLiquidityStore.Snapshot> observations) {
         when(cal.isInsideFnoSession(AS_OF)).thenReturn(true);
@@ -90,7 +90,7 @@ class Fno179VerifiedHistoricalReplayServiceTest {
         assertEquals("STR179_ORIGINAL_QUOTE_OR_IDENTITY_AMBIGUOUS",
             service(true,true,true).inspect(KEY,EXPIRY,25,AS_OF).reason());
         var future=new ArrayList<>(good);
-        future.set(2,row(30,"UPSTOX_ANALYTICS",AS_OF.plusSeconds(1)));
+        future.set(2,row(30,"UPSTOX_V3",AS_OF.plusSeconds(1)));
         ready(future);
         assertEquals("STR179_ORIGINAL_QUOTE_OR_IDENTITY_AMBIGUOUS",
             service(true,true,true).inspect(KEY,EXPIRY,25,AS_OF).reason());
