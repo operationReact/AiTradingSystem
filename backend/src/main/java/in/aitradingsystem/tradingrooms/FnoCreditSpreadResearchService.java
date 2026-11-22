@@ -97,6 +97,41 @@ public final class FnoCreditSpreadResearchService {
         return List.of(one(true, now, closes), one(false, now, closes));
     }
 
+
+    /**
+     * One strictly historical V108 broker-margin / genuine option bid-ask
+     * source pass, with no sibling source query and no broker order.
+     */
+    public FnoFuturesResearchService.StrategyStatus evaluateOne(
+            String strategyId, Instant asOf) {
+        if (asOf==null) throw new IllegalArgumentException("CREDIT_SPREAD_ASOF_MISSING");
+        boolean bullish;
+        if(FnoBullPutCreditSpreadV1.STRATEGY_ID.equals(strategyId)) bullish=true;
+        else if(FnoBearCallCreditSpreadV1.STRATEGY_ID.equals(strategyId)) bullish=false;
+        else throw new IllegalArgumentException("HISTORICAL_CREDIT_STRATEGY_UNSUPPORTED");
+        if(!dailyRights || !optionRights || !contractRights || !spreadRights)
+            return blocked(bullish,asOf,"CREDIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED",true,0);
+        if(dailyStore==null || spreadStore==null || calendar==null)
+            return blocked(bullish,asOf,"CREDIT_SPREAD_TYPED_SOURCE_MISSING",false,0);
+        if(!calendar.isInsideCashSession(asOf))
+            return blocked(bullish,asOf,"CREDIT_SPREAD_CASH_EXCHANGE_SESSION_CLOSED",false,0);
+        if(!creditAccountScope.matches("[A-Za-z0-9_-]{8,80}"))
+            return blocked(bullish,asOf,"CREDIT_SPREAD_ACCOUNT_OR_MARGIN_NOT_CONFIGURED",false,0);
+        String lower=bullish?bullLower:bearLower, upper=bullish?bullUpper:bearUpper;
+        if(!validKeys(lower,upper))
+            return blocked(bullish,asOf,"CREDIT_SPREAD_REAL_TWO_LEG_KEYS_NOT_CONFIGURED",false,0);
+        final List<VerifiedClose> closes;
+        try {
+            closes=dailyStore.verifiedRecentCloses(asOf);
+        } catch(RuntimeException unavailable) {
+            return blocked(bullish,asOf,"CREDIT_SPREAD_DAILY_SOURCE_UNAVAILABLE",false,0);
+        }
+        if(!FnoOptionsResearchService.validHistory(closes,calendar,asOf))
+            return blocked(bullish,asOf,"CREDIT_SPREAD_35_COMPLETED_CLOSES_INVALID",
+                false,closes==null?0:closes.size());
+        return one(bullish,asOf,closes);
+    }
+
     private List<FnoFuturesResearchService.StrategyStatus> bothBlocked(
             Instant now, String reason, int sessions) {
         return List.of(blocked(true, now, reason, false, sessions),
