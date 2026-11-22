@@ -73,3 +73,35 @@ and independent outcome evidence. The existing rights and expiry controls
 remain unchanged, as does the ban on live orders from an audit.
 
 Tracking: https://github.com/operationReact/AiTradingSystem/issues/1658
+
+
+## First actual evaluator replay bridge (STR-173 and STR-176)
+
+FnoFuturesHistoricalReplayBridgeV1 adds bounded, deterministic,
+**actual Java evaluator calls** for STR-173 (five completed futures OI
+sessions) and STR-176 (seven completed futures OHLCV/OI sessions). It
+supports up to 64 strictly increasing historical decision windows,
+one provider and instrument per replay, independently supplied original
+first-known OI/price timestamps, session/contract identities, normalized
+underlying-unit volume/OI, original research source rights, and a
+SHA-256 receipt reference per window.
+
+The bridge uses the existing unchanged research evaluator thresholds.
+It distinguishes BLOCKED_NOT_E2E from
+EVALUATOR_REPLAY_RESEARCH_ONLY_NOT_E2E, and emits a deterministic
+digest and research-only decision reasons. The synthetic CI test
+executes the actual STR-173/176 evaluator methods and checks future
+data rejection, duplicate session/date, cross-provider data, bad OHLC,
+missing rights, rollover and determinism; it does not access SSM,
+market data, broker accounts or place trades.
+
+This is genuine **adapter implementation progress (2/43)**,
+NOT 2 independently verified historical market E2E successes.
+The owner-private pilot's 3,929 session-labeled bars do not have
+attested original first-known publication times or independent
+source-use rights, so they cannot be fed into this bridge as
+"verified" rows by inferring those timestamps from midnight labels.
+A source adapter must first obtain original custody and licensed
+rights evidence; thereafter extend to a bounded historical
+walk-forward/OOS, bid-ask and statutory-cost evaluator ledger before
+any strategy may qualify as historical E2E.
