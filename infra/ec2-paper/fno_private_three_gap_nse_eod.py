@@ -60,7 +60,7 @@ def archive_fetch(day, *, opener=None):
         return "SOURCE_REJECTED", None
     except (urllib.error.URLError, TimeoutError, OSError):
         return "TRANSPORT_UNAVAILABLE", None
-    if len(blob) > MAX_ZIP_BYTES or not blob.startswith(b"PK\\x03\\x04"):
+    if len(blob) > MAX_ZIP_BYTES or not blob.startswith(b"PK"+bytes((3,4))):
         return "INVALID_SOURCE_RESPONSE", None
     return "FETCHED", blob
 
@@ -75,7 +75,7 @@ def positive_number(value):
 
 def eod_presence(blob, day, identities):
     """Look only for exact known NIFTY contract identity and trade-date rows."""
-    if len(identities) > 3 or not blob.startswith(b"PK\\x03\\x04"):
+    if len(identities) > 3 or not blob.startswith(b"PK"+bytes((3,4))):
         raise ValueError("BAD_EXCHANGE_INPUT")
     expected_name = ("BhavCopy_NSE_FO_0_0_0_" +
                      day.strftime("%Y%m%d") + "_F_0000.csv")
