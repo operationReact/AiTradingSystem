@@ -139,3 +139,44 @@ actually present on EC2. The result always retains
 independentlyVerifiedHistoricalE2E=false, PAPER=false, LIVE=false:
 after-cost out-of-sample evaluation, real source custody proof
 inspection and broker execution need separate acceptance.
+
+
+## All 43 typed historical research evaluator dispatch paths
+
+Fno43HistoricalReplayDispatchV1 now has **43 compile-time references** to
+all 43 distinct deterministic Java research evaluator methods in
+STR-170..STR-212. The exact number and type of evaluator parameters is
+mapped per strategy and checked using reflection in dedicated JUnit tests.
+Every strategy's input domains are exact strings from the active capability
+manifest, checked per historical as-of window before invocation.
+
+The dispatcher is bounded to 64 strictly increasing historical decisions per
+call. Each required input domain has an external source-custody claim containing
+the original first-known, capture and rights-verification timestamps, source
+and rights-receipt digests. It fails closed on a missing/swapped manifest domain,
+source provenance known only later than the hypothetical decision, invalid
+digest, unknown strategy, malformed typed data or evaluator exception. It
+never logs source objects or broker positions and has no public endpoint,
+AWS access, provider downloads or trading route. The deterministic digest
+covers each research decision and custody proof; it is not a source-signed
+attestation.
+
+**This is a 43/43 _typed routing_ integration, not 43/43 historical market
+E2E.** CI invokes research evaluators with fictional typed fixtures and
+checks the actual class signatures and source guards. A caller-supplied
+proof flag is insufficient to prove data licensing or original publication;
+the independently protected source SQL/rights gates still need to provide
+the authentic data and custody. Only STR-176 is connected directly to the
+rights-attested V102 original PostgreSQL completed-futures source;
+STR-173 has its separate typed window adapter and additionally needs
+original near-close L1 quotes. The remaining 41 strategies still need
+source-specific original historical adapters (multi-leg quotes, IV/Greeks,
+underlying histories, account-signed broker position snapshots and official
+calendar events, according to their individual requiredInputs).
+
+A positive historical E2E count additionally requires actually executed
+real original-data windows, audited point-in-time provenance, independently
+reproducible after-cost walk-forward/OOS outcomes and independent approval.
+The existing 0/43 real-data E2E, 0/43 PAPER ledger and 0/43 LIVE broker
+execution counters remain unchanged. Never promote routing/compilation or
+fictitious JUnit fixtures to a successfully backtested strategy.

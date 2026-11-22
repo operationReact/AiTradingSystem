@@ -1,4 +1,4 @@
-name: MintTick F&O - bounded STR-173/176 original-as-of replay wiring
+name: MintTick F&O - all 43 typed structural historical replay coverage
 
 on:
   pull_request:
@@ -9,6 +9,8 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1Test.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1Test.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
       - 'docs/architecture/fno-43-historical-e2e-evidence.md'
@@ -20,6 +22,8 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1Test.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1Test.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
 
@@ -46,9 +50,10 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
+            '-Dtest=Fno43HistoricalReplayDispatchV1Test,FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.FnoFuturesHistoricalReplayBridgeV1Test.xml
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno176VerifiedHistoricalReplayServiceTest.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno43HistoricalReplayDispatchV1Test.xml
       - name: Assert structural proof cannot authorize trades or claim market E2E
         shell: bash
         run: |
@@ -67,10 +72,32 @@ jobs:
                             "MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"):
               assert forbidden not in x,forbidden
           PY
+      - name: Verify all 43 actual strategy entrypoints match manifest class paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          manifest=json.loads(Path('backend/src/main/resources/mind/capability-manifest.v1.json').read_text())
+          items=[x for x in manifest['items']
+                 if re.fullmatch(r'strategy\.STR-\d{3}',x.get('id',''))
+                 and 170<=int(x['id'].split('-')[-1])<=212]
+          source=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java').read_text()
+          assert len(items)==43
+          assert len(re.findall(r'case "strategy\.STR-\d{3}" ->',source))==43
+          assert len(re.findall(r'\.evaluate\(',source))==43
+          for item in items:
+              cls=Path(next(e['path'] for e in item['evidence'] if e['kind']=='SOURCE')).stem
+              assert 'case "'+item['id']+'" ->' in source,item['id']
+              assert cls+'.evaluate(' in source,item['id']
+              assert len(item['requiredInputs'])>=3
+          assert 'INDEPENDENT_ORIGINAL_SOURCE_AND_AFTER_COST_OOS_NOT_PROVEN' in source
+          PY
       - name: Report truthful fixture-only result
         if: always()
         shell: bash
         run: |
-          echo 'STR-173/176 evaluator bridge + STR-176 rights-joined V102 SQL reader: synthetic CI only.'
+          echo '43/43 typed research evaluator dispatch paths compile; synthetic CI only.'
           echo 'Independently verified historical E2E: still 0/43.'
           echo 'No broker access, licensed original source fetch, PAPER ledger or LIVE orders.'
