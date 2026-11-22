@@ -375,10 +375,11 @@ void main() {
     expect(find.byKey(const ValueKey('fno-premium-strike-picker')), findsOneWidget);
     expect(find.byKey(const ValueKey('fno-premium-candle-placeholder')), findsOneWidget);
     expect(find.text('Verified option candles unavailable'), findsOneWidget);
-    expect(find.text('Greeks'), findsOneWidget);
-    expect(find.text('Market Insight'), findsOneWidget);
-    expect(find.text('Delta'), findsOneWidget);
-    expect(find.text('PCR'), findsOneWidget);
+    // No empty Greek/Market Insight tiles when the feed lacks these fields.
+    expect(find.text('Greeks'), findsNothing);
+    expect(find.text('Market Insight'), findsNothing);
+    expect(find.text('Delta'), findsNothing);
+    expect(find.text('PCR'), findsNothing);
     expect(tester.widget<FilledButton>(
       find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed, isNotNull);
     expect(tester.widget<OutlinedButton>(
@@ -439,6 +440,8 @@ void main() {
     expect(find.text('-2.84'), findsOneWidget);
     expect(find.text('18.00%'), findsOneWidget);
     expect(find.text('0.09'), findsOneWidget);
+    expect(find.text('Greeks'), findsOneWidget);
+    expect(find.text('Market Insight'), findsNothing);
   });
 
   test('malformed broker metrics cannot produce numeric UI quotes', () {
