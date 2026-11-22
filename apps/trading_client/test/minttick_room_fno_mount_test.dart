@@ -62,6 +62,30 @@ const _liveRoom = TradingRoomDraft(id: 'room-2', name: 'Live room', focus: 'Swin
     paperBudget: 100000, riskPreference: 'MODERATE', mode: 'LIVE', marketScope: 'FNO');
 
 void main() {
+  testWidgets('F&O KPIs remain visible without sideways scrolling at 320dp',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 720);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(home: MintTickRoomProductionWorkspace(
+      room: _paperRoom,
+      onBack: () {},
+      onRefresh: () async {},
+      onFundPaper: () async {},
+      onSelectBroker: (_) async {},
+    )));
+    await tester.pumpAndSettle();
+    for (final label in ['VIRTUAL CASH', 'OPTIONS P&L', 'POSITIONS']) {
+      final finder = find.text(label);
+      expect(finder, findsOneWidget);
+      final rect = tester.getRect(finder);
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(320));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a PAPER F&O room mounts its own verified inventory without loading quotes', (tester) async {
     await pumpRoom(tester, _paperRoom, fno: _BlockedRepo());
     expect(find.byKey(const ValueKey('paper-fno-room-1')), findsOneWidget);

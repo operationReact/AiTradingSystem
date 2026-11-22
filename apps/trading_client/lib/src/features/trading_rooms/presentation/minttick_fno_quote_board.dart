@@ -50,6 +50,9 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
       'IV': iv == null ? '—' : '${(iv * 100).toStringAsFixed(2)}%',
       'Vega': decimal(metrics?.vega),
     };
+    final hasVerifiedGreeks = metrics != null &&
+        (metrics.delta != null || metrics.theta != null ||
+         metrics.iv != null || metrics.vega != null);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 8),
       Row(children: [
@@ -94,38 +97,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: _card(context, s.put, s.strikePrice, 'PE', c.error)),
       ]) else const Text('No verified CE/PE contracts for this expiry.'),
-      const SizedBox(height: 12),
-      Container(
-        key: const ValueKey('fno-premium-candle-placeholder'),
-        height: 166, padding: const EdgeInsets.all(12), decoration: _box(c),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Icon(Icons.candlestick_chart_outlined, color: c.primary, size: 18),
-            const SizedBox(width: 6),
-            Expanded(child: Text(selected?.tradingSymbol ?? 'NIFTY options',
-              maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
-            Text('5m', style: t.labelMedium),
-          ]),
-          const Spacer(),
-          Center(child: Column(children: [
-            Icon(Icons.show_chart, size: 23, color: c.onSurfaceVariant),
-            const SizedBox(height: 5),
-            Text('Verified option candles unavailable',
-              textAlign: TextAlign.center,
-              style: t.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-            Text('OHLCV history endpoint not yet connected',
-              textAlign: TextAlign.center,
-              style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-          ])),
-          const Spacer(),
-        ]),
-      ),
-      const SizedBox(height: 10),
-      _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega'], greeks),
-      const SizedBox(height: 10),
-      _strip(context, 'Market Insight', ['PCR', 'Max Pain', 'IV Rank']),
-      const SizedBox(height: 10),
+      const SizedBox(height: 8),
       Row(children: [
         Expanded(child: FilledButton(
           key: const ValueKey('fno-premium-buy-call'),
@@ -149,6 +121,30 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
       Text('Buttons select a PAPER contract; the guarded limit-price ticket '
           'below still controls all order submission.',
         style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+      const SizedBox(height: 12),
+      // Show missing data in a compact state, not an empty chart-sized box.
+      Container(
+        key: const ValueKey('fno-premium-candle-placeholder'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: _box(c),
+        child: Row(children: [
+          Icon(Icons.candlestick_chart_outlined, color: c.onSurfaceVariant,
+            size: 18),
+          const SizedBox(width: 9),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Verified option candles unavailable',
+              style: t.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+            Text('OHLCV history endpoint not yet connected',
+              style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+          ])),
+        ]),
+      ),
+      // No empty Greeks or analytics cards: the API must supply verified data.
+      if (hasVerifiedGreeks) ...[
+        const SizedBox(height: 8),
+        _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega'], greeks),
+      ],
     ]);
   }
 
@@ -165,7 +161,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
         ValueKey('paper-fno-leg-${leg.instrumentKey}'),
       onPressed: leg == null ? null : () => onLeg(leg),
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
         alignment: Alignment.topLeft,
         side: BorderSide(color: selectedLeg ? accent : c.outlineVariant),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -173,19 +169,19 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
         Text('$side ${strike.toStringAsFixed(0)}',
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: accent)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(validLtp != null ? 'LTP ${value(validLtp)}' :
              show ? 'Ask ${value(leg.ask)}' : 'LTP —',
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           maxLines: 1, overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 6),
+        const SizedBox(height: 3),
         Text(show ? 'Bid ${value(leg.bid)}' : 'Quote not fresh',
           style: t.labelSmall?.copyWith(
             color: show ? accent : c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 9),
+        const SizedBox(height: 5),
         Divider(color: c.outlineVariant, height: 1),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         if (pct != null) Text(
           '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}% vs close',
           style: t.labelSmall?.copyWith(
@@ -195,7 +191,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
              '  ·  Volume —',
           style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(leg == null ? 'Not listed' : '${leg.lotSize} units / lot',
           style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -209,7 +205,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Container(
       decoration: _box(c),
-      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 7),
       child: Row(children: [
         Expanded(flex: 3, child: Text(label, maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -292,24 +288,18 @@ class MintTickFnoUnavailableOverview extends StatelessWidget {
       ]),
       const SizedBox(height: 10),
       Container(
-        height: 140, width: double.infinity,
-        padding: const EdgeInsets.all(13), decoration: card(),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('NIFTY options · 5m', style: t.titleSmall),
-          const Spacer(),
-          Center(child: Text('No verified option candles available',
+        width: double.infinity,
+        padding: const EdgeInsets.all(10), decoration: card(),
+        child: Row(children: [
+          Icon(Icons.candlestick_chart_outlined, size: 18,
+            color: c.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(child: Text('No verified option candles available',
             style: t.bodySmall?.copyWith(color: c.onSurfaceVariant))),
-          const Spacer(),
         ]),
       ),
-      const SizedBox(height: 9),
-      Container(padding: const EdgeInsets.all(10), decoration: card(),
-        child: const Text('Greeks    Delta —    Theta —    IV —    Vega —',
-          maxLines: 1, overflow: TextOverflow.ellipsis)),
-      const SizedBox(height: 9),
-      Container(padding: const EdgeInsets.all(10), decoration: card(),
-        child: const Text('Market Insight    PCR —    Max Pain —    IV Rank —',
-          maxLines: 1, overflow: TextOverflow.ellipsis)),
+      // With no verified feed, displaying four fake-looking analytics cards
+      // adds noise and is not an actionable trading signal.
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: FilledButton(

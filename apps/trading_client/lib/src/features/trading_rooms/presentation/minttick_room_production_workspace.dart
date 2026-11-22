@@ -290,7 +290,9 @@ class _MintTickRoomProductionWorkspaceState
     final fnoReturn = fnoPnl != null && fnoBasis > 0
         ? fnoPnl * 100 / fnoBasis : null;
     final readyNote = isPaper
-      ? 'PAPER · Virtual cash · manual simulated orders only'
+      ? widget.room.marketScope == 'FNO'
+          ? 'PAPER · No real-money orders · server-verified execution only'
+          : 'PAPER · Virtual cash · manual simulated orders only'
       : 'LIVE · Broker authorization required · order execution locked';
 
     return Scaffold(
@@ -300,7 +302,8 @@ class _MintTickRoomProductionWorkspaceState
           SizedBox(height: 53, child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15),
             child: Row(children: [
-              const MintTickLockup(markWidth: 29, fontSize: 19),
+              const Flexible(fit: FlexFit.loose,
+                child: MintTickLockup(markWidth: 29, fontSize: 19)),
               const Spacer(),
               Text('ROOMS', style: type.labelSmall?.copyWith(
                 color: colors.onSurfaceVariant, fontSize: 10)),
@@ -385,42 +388,35 @@ class _MintTickRoomProductionWorkspaceState
               ),
             ]),
           )),
+          // Three essential F&O KPIs remain visible on narrow phones.
+          // Additional financial diagnostics belong in Orders / Positions.
           if (widget.room.marketScope == 'FNO' && isPaper)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
               child: Container(
-                height: 84,
+                height: 70,
                 decoration: BoxDecoration(
                   color: colors.surfaceContainerLow,
                   border: Border.all(color: colors.outlineVariant),
-                  borderRadius: BorderRadius.circular(12)),
-                child: ListView(scrollDirection: Axis.horizontal, children: [
-                  SizedBox(width: 136, child: _CompactMetric(
+                  borderRadius: BorderRadius.circular(10)),
+                child: Row(children: [
+                  Expanded(flex: 12, child: _CompactMetric(
                     key: cash != null ? const ValueKey('paper-wallet-cash') : null,
-                    label: 'VIRTUAL CASH',
+                    label: 'VIRTUAL CASH', dense: true,
                     value: cash == null ? '—' : _moneyPaise(cash))),
                   _MetricDivider(color: colors.outlineVariant),
-                  SizedBox(width: 155, child: _CompactMetric(
-                    label: 'OPTIONS P&L',
+                  Expanded(flex: 11, child: _CompactMetric(
+                    label: 'OPTIONS P&L', dense: true,
                     value: fnoPnl == null ? '—' : _moneyPaise(fnoPnl),
                     secondary: fnoReturn == null ? 'Not valued'
-                      : '${fnoReturn >= 0 ? '+' : ''}${fnoReturn.toStringAsFixed(2)}% indicative',
+                      : '${fnoReturn >= 0 ? '+' : ''}${fnoReturn.toStringAsFixed(2)}%',
                     green: fnoPnl != null && fnoPnl >= 0)),
                   _MetricDivider(color: colors.outlineVariant),
-                  SizedBox(width: 100, child: _CompactMetric(
-                    label: 'POSITIONS',
+                  Expanded(flex: 8, child: _CompactMetric(
+                    label: 'POSITIONS', dense: true,
                     value: !_fnoInventoryVerified ? '—'
                         : _fnoPositions.where((p) => p.quantity > 0)
                             .length.toString())),
-                  _MetricDivider(color: colors.outlineVariant),
-                  const SizedBox(width: 123, child: _CompactMetric(
-                    label: 'MARGIN USED', value: '—',
-                    secondary: 'Not provided')),
-                  _MetricDivider(color: colors.outlineVariant),
-                  SizedBox(width: 137, child: _CompactMetric(
-                    label: 'REALIZED P&L',
-                    value: pnl == null ? '—' : _moneyPaise(pnl),
-                    green: pnl != null && pnl >= 0)),
                 ]),
               ),
             )
@@ -467,12 +463,13 @@ class _MintTickRoomProductionWorkspaceState
                       bottom: BorderSide(
                         color: _tab == tab ? colors.primary : colors.outlineVariant,
                         width: _tab == tab ? 2 : 1))),
-                    child: Text(tab, maxLines: 1,
-                      style: type.labelMedium?.copyWith(
-                        fontSize: 12,
-                        color: _tab == tab ? colors.onSurface
-                          : colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w700)),
+                    child: FittedBox(fit: BoxFit.scaleDown,
+                      child: Text(tab, maxLines: 1,
+                        style: type.labelMedium?.copyWith(
+                          fontSize: 12,
+                          color: _tab == tab ? colors.onSurface
+                            : colors.onSurfaceVariant,
+                          fontWeight: FontWeight.w700))),
                   ),
                 )),
             ])),
@@ -808,8 +805,8 @@ class _MintTickRoomProductionWorkspaceState
       _PageTitle('MintTick Mind', trailing: 'READ ONLY',
         onRefresh: widget.onRefresh),
       const _DataLine(primary: 'Room engine',
-        secondary: 'Model-controlled settings',
-        middle: '', right: 'NOT RUNNING'),
+        secondary: 'No verified engine telemetry',
+        middle: '', right: 'NOT VERIFIED'),
       _DataLine(primary: 'Execution state',
         secondary: 'Backend broker and policy readiness',
         middle: '', right: read == null ? 'UNKNOWN'
@@ -841,10 +838,11 @@ class _MintTickRoomProductionWorkspaceState
             onPressed: widget.onBrokers,
             child: const Text('Manage broker connection'))),
       ],
-      const SizedBox(height: 16),
-      const _FlatNotice(
-        'No manual risk configuration. Signals, sizes and limits must '
-        'come from authorized server decisions; nothing is inferred here.'),
+      const SizedBox(height: 10),
+      Align(alignment: Alignment.centerLeft,
+        child: Text('Risk and position sizes are controlled by the server.',
+          style: type.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant))),
       Text('Preflight blockers: ${read?.blockers.length ?? 'not verified'}',
         style: type.labelSmall),
       // The server already provides the exact reasons. Never show only a
@@ -897,10 +895,11 @@ class _MintTickRoomProductionWorkspaceState
             child: Text('No verified activity in this room.',
               textAlign: TextAlign.center,
               style: type.bodySmall)),
+        const SizedBox(height: 12),
+        Text('Virtual allocations are not real-money deposits.',
+          style: type.labelSmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ])),
-      const _FlatNotice(
-        'Account events are owner-scoped. Virtual allocation is not '
-        'a real-money deposit or brokerage balance.'),
     ]);
   }
 
@@ -924,17 +923,18 @@ String _moneyPaise(int paise) {
 
 class _CompactMetric extends StatelessWidget {
   const _CompactMetric({required this.label, required this.value,
-    this.secondary, this.green = false, super.key});
+    this.secondary, this.green = false, this.dense = false, super.key});
   final String label, value;
   final String? secondary;
   final bool green;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: dense ? 6 : 10, vertical: 6),
       child: Column(mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -943,7 +943,7 @@ class _CompactMetric extends StatelessWidget {
         const SizedBox(height: 3),
         Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
           style: type.titleMedium?.copyWith(
-            fontSize: 17, fontWeight: FontWeight.w800,
+            fontSize: dense ? 14 : 17, fontWeight: FontWeight.w800,
             color: green ? scheme.primary : scheme.onSurface)),
         if (secondary != null) Text(secondary!, maxLines: 1,
           overflow: TextOverflow.ellipsis,

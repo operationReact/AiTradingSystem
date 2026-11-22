@@ -100,7 +100,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('room-tab-mind')));
     await tester.pumpAndSettle();
     expect(find.text('Room engine'), findsOneWidget);
-    expect(find.text('NOT RUNNING'), findsOneWidget);
+    expect(find.text('NOT VERIFIED'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

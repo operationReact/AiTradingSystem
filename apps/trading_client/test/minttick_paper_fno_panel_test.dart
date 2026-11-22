@@ -375,10 +375,11 @@ void main() {
     expect(find.byKey(const ValueKey('fno-premium-strike-picker')), findsOneWidget);
     expect(find.byKey(const ValueKey('fno-premium-candle-placeholder')), findsOneWidget);
     expect(find.text('Verified option candles unavailable'), findsOneWidget);
-    expect(find.text('Greeks'), findsOneWidget);
-    expect(find.text('Market Insight'), findsOneWidget);
-    expect(find.text('Delta'), findsOneWidget);
-    expect(find.text('PCR'), findsOneWidget);
+    // No empty Greek/Market Insight tiles when the feed lacks these fields.
+    expect(find.text('Greeks'), findsNothing);
+    expect(find.text('Market Insight'), findsNothing);
+    expect(find.text('Delta'), findsNothing);
+    expect(find.text('PCR'), findsNothing);
     expect(tester.widget<FilledButton>(
       find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed, isNotNull);
     expect(tester.widget<OutlinedButton>(
@@ -439,6 +440,8 @@ void main() {
     expect(find.text('-2.84'), findsOneWidget);
     expect(find.text('18.00%'), findsOneWidget);
     expect(find.text('0.09'), findsOneWidget);
+    expect(find.text('Greeks'), findsOneWidget);
+    expect(find.text('Market Insight'), findsNothing);
   });
 
   test('malformed broker metrics cannot produce numeric UI quotes', () {
@@ -677,8 +680,8 @@ void main() {
     await pump(tester, repo, withExpiry: false);
     await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-dropdown')));
     await tester.pumpAndSettle();
-    expect(find.text('2026-11-27'), findsOneWidget);
-    await tester.tap(find.text('2026-11-20').last);
+    expect(find.text('Fri, 27 Nov 2026'), findsOneWidget);
+    await tester.tap(find.text('Fri, 20 Nov 2026').last);
     await tester.pumpAndSettle();
     expect(find.text('Fresh quotes'), findsOneWidget);
   });
@@ -736,8 +739,20 @@ void main() {
     expect(find.textContaining('BUY 75 filled'), findsOneWidget);
   });
 
-  testWidgets('a reconciled ledger is shown as bookkeeping only, never as trading approval', (tester) async {
+  testWidgets('the main F&O desk collapses ledger diagnostics until requested', (tester) async {
     await pump(tester, _FakeRepo(marketResult: market(), receiptResult: receiptFixture()));
+    expect(find.byKey(const ValueKey('paper-fno-readiness-details')), findsOneWidget);
+    expect(find.text('Trading not approved'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-receipt')), findsNothing);
+    await tester.tap(find.text('Trading & ledger checks'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('paper-fno-receipt')), findsOneWidget);
+    expect(find.textContaining('Approved for trading: no'), findsOneWidget);
+  });
+
+  testWidgets('a reconciled ledger is shown as bookkeeping only, never as trading approval', (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market(), receiptResult: receiptFixture()),
+        view: 'orders');
     expect(find.byKey(const ValueKey('paper-fno-receipt')), findsOneWidget);
     expect(find.textContaining('Ledger reconciled'), findsOneWidget);
     expect(find.textContaining('Approved for trading: no'), findsOneWidget);
@@ -746,7 +761,8 @@ void main() {
   });
 
   testWidgets('a failed bookkeeping read shows unknown readiness and keeps orders visible', (tester) async {
-    await pump(tester, _FakeRepo(marketResult: market(), receiptFails: true, ordersResult: [buyFill()]));
+    await pump(tester, _FakeRepo(marketResult: market(), receiptFails: true, ordersResult: [buyFill()]),
+        view: 'orders');
     expect(find.byKey(const ValueKey('paper-fno-receipt-unknown')), findsOneWidget);
     expect(find.textContaining('Trading readiness is unknown'), findsOneWidget);
     expect(find.byKey(const ValueKey('paper-fno-orders')), findsOneWidget);
