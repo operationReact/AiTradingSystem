@@ -53,12 +53,36 @@ https://nsearchives.nseindia.com/content/circulars/FAOP65588.pdf
 The November/December 2025 private pilot was previously outside the 2026
 calendar lookup. **December 25, 2025** is explicitly an NSE F&O closure,
 so a missing candle for that exchange-closed date is not an unexplained
-missing trading session. The 2025 circular also lists **November 5**, but
-the selected November contract window starts later, so November gaps are
-not automatically reclassified. **October 21, 2025** is excluded from
+missing trading session. The 2025 circular also lists **November 5**, which the real host
+now confirms falls inside the selected November expiry lookback: all 23
+original November weekday gap candidates are scheduled holiday slots. **October 21, 2025** is excluded from
 all-day closure classification because the same circular announces a
 special Muhurat trading session on that day.
 
 This source adjustment does NOT reconcile the December duplicate provider
 OHLCV/OI observations, nor does it supply the missing original first-known
 publication receipts, verify dataset rights or authorize historical replay.
+
+## Verified exact-host post-merge acceptance (22 November 2026 IST)
+
+GitHub Actions source-coverage run
+https://github.com/operationReact/AiTradingSystem/actions/runs/45039350868
+completed its protected original AWS/SSM run successfully: 25 metadata GETs,
+276/276 selected historical instrument identities matched, 12 expiry months,
+12 FUT / 132 CE / 132 PE, no missing or unexpected selected instruments.
+
+Across the **210 original weekday-without-candle slots**, **184** slots
+coincide with published 2025/2026 NSE F&O trading holidays and are no longer
+**unexplained session-gap candidates**. **26** remain: January 2026 (23
+contract-date slots in one common-empty weekday), May 2026 (one isolated
+contract-date slot), October 2026 (two isolated contract-date slots).
+None of the 26 is proven to be a missing market trade without independent
+session/instrument liquidity evidence; do not fabricate OHLCV/OI. The three
+May/October partial gaps were also absent on the previously verified bounded
+Upstox source re-fetch.
+
+Source-rights verification, independent price comparison, official complete
+session-by-session calendar proof, original-first-known and 43-strategy real
+historical after-cost E2E are **still not accepted**. The original December
+2025 321 duplicate keys (316 conflicting payloads) remain preserved under
+quarantine. No paper/live trading authorization or backtest acceptance changes.
