@@ -619,8 +619,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Expanded(child: Text('NIFTY options · PAPER', style: type.titleSmall)),
-            Text('VIRTUAL · NO LIVE ORDERS',
+            Expanded(child: Text('Options desk',
+              style: type.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+            Text('PAPER · NO LIVE ORDERS',
               style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
           ]),
           if (_capability?.paperConfigured == false) ...[
@@ -637,12 +638,15 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
             DropdownButton<DateTime>(
               key: const ValueKey('paper-fno-expiry-dropdown'),
               isExpanded: true,
+              isDense: true,
+              menuMaxHeight: 250,
+              itemHeight: 48,
               hint: Text(_expiriesLoading
                   ? 'Loading verified expiries…' : 'Select a verified expiry'),
               value: _expiries.contains(_expiry) ? _expiry : null,
               items: [
                 for (final d in _expiries)
-                  DropdownMenuItem<DateTime>(value: d, child: Text(_ymd(d))),
+                  DropdownMenuItem<DateTime>(value: d, child: Text(_displayExpiry(d))),
               ],
               onChanged: _expiriesLoading || _expiries.isEmpty
                   ? null
@@ -677,12 +681,33 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
             Text(_message!, key: const ValueKey('paper-fno-message'),
               style: type.bodySmall),
           ],
-          const SizedBox(height: 12),
-          _positionsView(colors, type),
-          const SizedBox(height: 12),
-          _ordersView(colors, type),
-          const SizedBox(height: 12),
-          _bookkeepingView(colors, type),
+          // Do not repeat empty Orders and Positions tabs on the main desk.
+          if (!_positionsLoading && _positions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _positionsView(colors, type),
+          ],
+          if (!_positionsLoading && _positionsError != null) ...[
+            const SizedBox(height: 10),
+            _positionsView(colors, type),
+          ],
+          if (!_positionsLoading && _positionsError == null &&
+              _orders.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _ordersView(colors, type),
+          ],
+          const SizedBox(height: 8),
+          ExpansionTile(
+            key: const ValueKey('paper-fno-readiness-details'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: Text('Trading & ledger checks', style: type.titleSmall),
+            subtitle: Text(
+              _receipt == null ? 'Verification unavailable'
+                : _receipt!.tradingApproved ? 'Server approved'
+                : 'Trading not approved',
+              style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+            children: [_bookkeepingView(colors, type)],
+          ),
         ],
       ),
     );
@@ -936,6 +961,13 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
           ),
       ],
     );
+  }
+
+  static String _displayExpiry(DateTime d) {
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${weekdays[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
   static String _ymd(DateTime d) =>
