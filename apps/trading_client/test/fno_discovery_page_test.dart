@@ -79,6 +79,22 @@ class _RetainedDiscovery extends _LiveDiscovery {
   }
 }
 
+class _RetainedNoSocketDiscovery extends _RetainedDiscovery {
+  @override
+  Future<CustomerFnoDiscoveryCapability> capability() async =>
+      CustomerFnoDiscoveryCapability.decode({
+        'displayRightsVerified': true,
+        'contractDiscoveryVerified': true,
+        'feedConfigured': false,
+        'sourceReady': true,
+        'marketOpen': false,
+        'status': 'MARKET_CLOSED',
+        'streamState': 'UNAVAILABLE',
+        'freshExchangeTimedQuotes': 0,
+        'latestFreshExchangeTradeAt': null,
+      });
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -260,6 +276,25 @@ void main() {
         child: MintTickFnoDiscoveryPage(
           rooms: rooms,
           discovery: _RetainedDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('110.00'), findsWidgets);
+    expect(find.textContaining('Last ·'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('closed Options without socket still renders authorized last trades',
+      (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _RetainedNoSocketDiscovery(),
         ),
       )),
     ));
