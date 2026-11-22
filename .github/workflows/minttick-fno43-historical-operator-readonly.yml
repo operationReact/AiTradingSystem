@@ -9,6 +9,8 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno185186VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno185186VerifiedHistoricalReplayServiceTest.java'
       - 'docs/architecture/fno-43-historical-operator-probe.md'
   push:
     branches: [dev]
@@ -18,6 +20,8 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno185186VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno185186VerifiedHistoricalReplayServiceTest.java'
 permissions:
   contents: read
 jobs:
@@ -40,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=AdminFno43HistoricalReplayControllerTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest,Fno181182VerifiedHistoricalReplayServiceTest,Fno183184VerifiedHistoricalReplayServiceTest' test
+            '-Dtest=AdminFno43HistoricalReplayControllerTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest,Fno181182VerifiedHistoricalReplayServiceTest,Fno183184VerifiedHistoricalReplayServiceTest,Fno185186VerifiedHistoricalReplayServiceTest' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno43HistoricalReplayControllerTest.xml
       - name: Enforce GET with role only and no market-data or broker route
         shell: bash
@@ -56,7 +60,9 @@ jobs:
                             'Fno176VerifiedHistoricalReplayService',
                             'Fno177VerifiedHistoricalReplayService',
                             'Fno181182VerifiedHistoricalReplayService',
-                            'Fno183184VerifiedHistoricalReplayService'):
+                            'Fno183184VerifiedHistoricalReplayService',
+                            '@GetMapping("/historical-credit-spread")',
+                            'Fno185186VerifiedHistoricalReplayService'):
               assert mandatory in src,mandatory
           for forbidden in ('@PostMapping','submitOrder','placeOrder',
                             'return ResponseEntity.status(HttpStatus.ACCEPTED)',
@@ -64,9 +70,9 @@ jobs:
               assert forbidden not in src,forbidden
           # Both original one-contract and two-contract routes must keep
           # their four separate historical/PAPER/LIVE/order outcomes false.
-          assert src.count('false,false,false,false') == 2
-          assert src.count('ResponseEntity.ok().cacheControl(CacheControl.noStore())') == 2
-          assert src.count('@PreAuthorize("hasAnyRole(\'ADMIN\', \'OPERATOR\')")') == 2
+          assert src.count('false,false,false,false') == 3
+          assert src.count('ResponseEntity.ok().cacheControl(CacheControl.noStore())') == 3
+          assert src.count('@PreAuthorize("hasAnyRole(\'ADMIN\', \'OPERATOR\')")') == 3
           PY
       - name: Print honest read-only historical source evidence tier
         if: always()
