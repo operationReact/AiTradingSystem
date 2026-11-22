@@ -27,7 +27,7 @@ REFERENCE_HEADER = {
     "BizDt","TckrSymb","FinInstrmTp","XpryDt","StrkPric","OptnTp",
     "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst",
 }
-CATALOGUE_HEADER = {"contract_key","underlying","expiry","kind","strike"}
+CATALOGUE_HEADER = {"contract_key","underlying","expiry","kind","strike","lot_size"}
 RIGHTS_HEADER = {
     "licence_reference","permitted_private_reconciliation",
     "may_read_eod_on_host","may_retain_reference_data",
@@ -47,6 +47,14 @@ def decimal(value, *, zero_ok=True):
         return n
     except (InvalidOperation,TypeError):
         raise ValueError("INVALID_EOD_NUMBER") from None
+
+
+def validated_lot(value):
+    """Contract lots must be independently matched to the historic instrument."""
+    n=decimal(value,zero_ok=False)
+    if n!=n.to_integral_value() or n>10000:
+        raise ValueError("PRIVATE_CONTRACT_LOT_SIZE_INVALID")
+    return n
 
 
 def safe_file(path, max_bytes):
@@ -78,9 +86,10 @@ def load_catalogue(path):
             if row["kind"]=="FUT" and row["strike"] not in ("","0","0.0"):
                 raise ValueError("PRIVATE_CONTRACT_CATALOGUE_STRIKE")
             identity=(expiry,row["kind"],strike)
+            lot=validated_lot(row["lot_size"])
             if key in mapping or identity in identities:
                 raise ValueError("PRIVATE_CONTRACT_CATALOGUE_AMBIGUOUS")
-            mapping[key]=identity
+            mapping[key]=(expiry,row["kind"],strike,lot)
             identities.add(identity)
             if len(mapping)>23:
                 raise ValueError("PRIVATE_CONTRACT_CATALOGUE_BOUNDED")
@@ -143,8 +152,15 @@ def ro_cache(path):
 
 def reconcile(cache, catalogue, reference):
     """Aggregate only. No individual source datum or instrument ID escapes."""
-    if len(catalogue)!=23 or len(set(catalogue.values()))!=23:
+    if (len(catalogue)!=23
+            or any(not isinstance(item,tuple) or len(item)!=4
+                   for item in catalogue.values())
+            or len({item[:3] for item in catalogue.values()})!=23):
         raise ValueError("PRIVATE_CATALOGUE_INCOMPLETE")
+    # Revalidate a direct programmatic catalogue; file validation is not the
+    # sole trust boundary. Never normalize by an invented lot size.
+    for item in catalogue.values():
+        validated_lot(item[3])
     found=defaultdict(list)
     rows=cache.execute("""SELECT contract_key,candle_ts,open_price,high_price,
                      low_price,close_price,volume,open_interest
@@ -171,7 +187,7 @@ def reconcile(cache, catalogue, reference):
 
     totals=Counter()
     for (key,day),candles in found.items():
-        expiry,kind,strike=catalogue[key]
+        expiry,kind,strike,lot=catalogue[key]
         eod=reference.get((expiry,kind,strike,day))
         if len(candles)==2:
             totals["duplicateDays"]+=1
@@ -181,12 +197,25 @@ def reconcile(cache, catalogue, reference):
             totals["missingIndependentEod"]+=1
             continue
         totals["independentRowsFound"]+=1
+        # NSE F&O UDiFF TtlTradgVol is contract count. The Upstox daily
+        # historical volume is units of underlying in the verified December
+        # pilot (NSE contracts × authenticated instrument lot size).
+        # Keep NSE raw reference and original Upstox cache untouched.
+        eod_normalized=(*eod[:4],eod[4]*lot,eod[5])
         midnight=[values for stamp,values in candles if stamp=="00:00"]
         opening=[values for stamp,values in candles if stamp=="09:15"]
         if len(midnight)!=1 or len(opening)>1:
             raise ValueError("PRIVATE_EOD_UNEXPECTED_TIMESTAMP")
-        a=midnight[0]==eod
-        b=len(opening)==1 and opening[0]==eod
+        a=midnight[0]==eod_normalized
+        b=len(opening)==1 and opening[0]==eod_normalized
+        if midnight[0][4]==eod[4]:
+            totals["midnightUnscaledVolumeMatches"]+=1
+        if midnight[0][4]==eod_normalized[4]:
+            totals["midnightScaledVolumeMatches"]+=1
+        if opening and opening[0][4]==eod[4]:
+            totals["openingUnscaledVolumeMatches"]+=1
+        if opening and opening[0][4]==eod_normalized[4]:
+            totals["openingScaledVolumeMatches"]+=1
         if a:
             totals["midnightExactMatches"]+=1
         if b:
@@ -212,6 +241,8 @@ def reconcile(cache, catalogue, reference):
         "midnightExactMatches","openingExactMatches","bothExactMatches",
         "midnightOnlyExactMatches","openingOnlyExactMatches","neitherExactMatch",
         "singleCandleDisagrees",
+        "midnightUnscaledVolumeMatches","openingUnscaledVolumeMatches",
+        "midnightScaledVolumeMatches","openingScaledVolumeMatches",
     ]
     totals["totalCandles"]=count
     totals["contractDates"]=len(found)
@@ -220,6 +251,7 @@ def reconcile(cache, catalogue, reference):
             "commercialRightsVerified":False,
             "mutatedRawCache":False,
             "referenceFormat":"NSE_FO_UDIFF_LOCAL_FILE",
+            "volumeNormalization":"NSE_CONTRACTS_TIMES_AUTHENTICATED_HISTORICAL_LOT",
             "counts":{k:totals[k] for k in keys}}
 
 
