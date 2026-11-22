@@ -100,6 +100,31 @@ class MintTickFnoDiscoveryFacts {
     }
     return best;
   }
+  /// Computes an OI put/call ratio only for the exact returned expiry chain
+  /// when every listed strike has fresh, time-attested CE and PE open interest.
+  /// A sampled/partial/stale chain must never be labelled market-wide PCR.
+  static ({int calls, int puts, double pcr})? verifiedOiTotals(
+      CustomerFnoMarket market, DateTime now) {
+    if (!market.displayRightsVerified || !market.hasFreshQuotes ||
+        market.strikes.isEmpty) return null;
+    var calls = 0;
+    var puts = 0;
+    for (final strike in market.strikes) {
+      final ce = strike.call;
+      final pe = strike.put;
+      if (ce == null || pe == null ||
+          !recentTick(ce, now) || !recentTick(pe, now) ||
+          ce.openInterest == null || pe.openInterest == null ||
+          ce.openInterest! < 0 || pe.openInterest! < 0) {
+        return null;
+      }
+      calls += ce.openInterest!;
+      puts += pe.openInterest!;
+    }
+    if (calls == 0) return null; // no valid denominator
+    return (calls: calls, puts: puts, pcr: puts / calls);
+  }
+
   /// Previous-close changes are not an intraday momentum/volume ranking.
   static List<CustomerFnoLeg> previousCloseMovers(CustomerFnoMarket market) {
     final all = [
@@ -389,6 +414,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         _chain(context, market, now),
         const SizedBox(height: 14),
         _notConnected(context),
+      ] else if (_section == 'Insights') ...[
+        _insights(context, market, now),
       ] else if (_section == 'Movers') ...[
         _movers(context, market, now),
       ] else ...[
@@ -440,7 +467,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       DateTime now, int freshCount) {
     final c = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
-    final listed = market == null ? '—' : '${market.strikes.length * 2}';
+    final listed = market == null ? '—' :
+        '${MintTickFnoDiscoveryFacts.optionLegs(market, 'ALL').length}';
     final items = [
       ('Listed', listed),
       ('Fresh', market == null ? '—' : '$freshCount'),
@@ -499,7 +527,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final c = Theme.of(context).colorScheme;
     return SizedBox(height: 43,
       child: Row(children: [
-        for (final name in const ['Chain', 'Movers', 'Trade'])
+        for (final name in const ['Chain', 'Insights', 'Movers', 'Trade'])
           Expanded(child: InkWell(
             key: ValueKey('fno-discovery-tab-${name.toLowerCase()}'),
             onTap: () => setState(() => _section = name),
@@ -770,6 +798,52 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               fontWeight: FontWeight.w700, fontSize: 13)),
         ]),
       );
+
+  Widget _insights(BuildContext context, CustomerFnoMarket? market,
+      DateTime now) {
+    final type = Theme.of(context).textTheme;
+    final c = Theme.of(context).colorScheme;
+    if (market == null) {
+      return _panel(context, 'Options positioning', 'Verified quotes only',
+        const Text('Insights unavailable until a listed expiry and '
+            'source-authorized option chain are loaded.'));
+    }
+    final totals = MintTickFnoDiscoveryFacts.verifiedOiTotals(market, now);
+    Widget statistic(String label, String value) => Expanded(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        const SizedBox(height: 5),
+        Text(value, style: type.titleMedium?.copyWith(
+          fontWeight: FontWeight.w800, fontFeatures: const [
+            FontFeature.tabularFigures(),
+          ])),
+      ]));
+    return _panel(context, 'Options positioning',
+        '${_ymd(market.expiry)} · returned strikes only',
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (totals == null)
+          Text('Open-interest comparison unavailable. All returned CE and '
+              'PE legs require fresh exchange timestamps and verified OI.',
+              style: type.bodySmall)
+        else ...[
+          Row(children: [
+            statistic('CALL OI', _count(totals.calls)),
+            statistic('PUT OI', _count(totals.puts)),
+            statistic('OI PCR', totals.pcr.toStringAsFixed(2)),
+          ]),
+          const SizedBox(height: 12),
+          Text('OI PCR = put open interest / call open interest for this '
+              'returned chain. Not a market-wide PCR or trade signal.',
+              style: type.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+        ],
+        const Divider(height: 22),
+        Text('IV, Greeks, OI change, market depth and Max Pain are shown '
+            'only when the source supplies independently verified values. '
+            'A closed or stale session never produces an actionable signal.',
+            style: type.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+      ]));
+  }
 
   Widget _movers(BuildContext context, CustomerFnoMarket? market,
       DateTime now) {
