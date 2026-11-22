@@ -195,9 +195,12 @@ def triage(gaps, crosswalk, fetch):
     return count
 
 def main():
+    # This helper is fetched alongside this script at the exact pinned commit.
+    # Import before the host module path so a stale installed helper cannot
+    # shadow the reviewed read-only gap cohort definition.
+    from fno_private_partial_gaps import ROOT, SOURCE, read_only, identify_partial_gaps
     sys.path.insert(0, "/opt/aitradingsystem-paper/infra/ec2-paper")
     from fno_private_bulk_worker import Discovery, UNDERLYING, grant, ssm_token, today
-    from fno_private_partial_gaps import ROOT, SOURCE, read_only, identify_partial_gaps
     approval = grant()
     approval.require("day", today())
     journal = read_only(ROOT / "checkpoints.sqlite")
