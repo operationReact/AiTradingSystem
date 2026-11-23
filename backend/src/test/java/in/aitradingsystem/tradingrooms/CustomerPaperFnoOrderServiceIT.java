@@ -262,6 +262,16 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
                         NOW.plusSeconds(3),NOW)));
         assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_future_tick",CONTRACT,
                 EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .hasMessageContaining("quote identity, spread or chronology invalid");
+
+        // This separate future-timestamp fixture has valid exchange-to-receipt
+        // chronology, proving the original time/session guard still applies.
+        when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(
+                new UpstoxFnoV3LiveFeedService.PaperQuote(CONTRACT,
+                        new BigDecimal("99"),new BigDecimal("100"),
+                        NOW.plusSeconds(3),NOW.plusSeconds(3))));
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_future_tick2",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101"))))
                 .hasMessageContaining("stale or outside session");
 
         // Saturday cannot become a PAPER session just because the fixture has quotes.
