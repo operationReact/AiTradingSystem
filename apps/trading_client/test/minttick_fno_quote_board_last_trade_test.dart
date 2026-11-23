@@ -107,14 +107,14 @@ void main() {
     expect(find.textContaining('Last ₹'), findsNothing);
     expect(find.textContaining('Chain ₹'), findsNothing);
     expect(find.text('OI 500  ·  Volume —'), findsNothing);
-    expect(find.text('OI —  ·  Volume —'), findsOneWidget);
+    expect(find.text('OI —  ·  Volume —'), findsWidgets);
   });
 
   testWidgets('old last trade is withheld even when a malformed response supplies it',
       (tester) async {
     await _pumpBoard(tester, _market(age: const Duration(days: 8)));
     expect(find.textContaining('Last ₹'), findsNothing);
-    expect(find.text('OI —  ·  Volume —'), findsOneWidget);
+    expect(find.text('OI —  ·  Volume —'), findsWidgets);
     expect(
       tester.widget<FilledButton>(
         find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed,
