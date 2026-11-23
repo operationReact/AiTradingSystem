@@ -235,15 +235,20 @@ public class UpstoxApiClient {
             case "shareholding" -> base + "share-holdings";
             default -> throw new UpstoxProviderException("UPSTOX_FUNDAMENTAL_SECTION_INVALID");
         };
-        return get(token, path);
+        // Keep a fundamental read within the private API Gateway's 7s limit.
+        return get(token, path, true);
     }
 
     private JsonNode get(String token, String fixedPath) {
+        return get(token, fixedPath, false);
+    }
+
+    private JsonNode get(String token, String fixedPath, boolean bounded) {
         if (token == null || token.isBlank()) {
             throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
         }
         try {
-            String payload = http.get()
+            String payload = (bounded ? tokenHttp : http).get()
                 .uri(fixedPath)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)
