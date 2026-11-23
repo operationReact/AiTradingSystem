@@ -117,7 +117,12 @@ public class CustomerMindFnoPaperCycleService {
                 decision.exchangeAt()==null || decision.observedAt()==null ||
                 decision.latestCompletedCloseAt()==null || decision.ask()==null ||
                 decision.lotSize()==null || decision.lotSize()<1 || decision.lotSize()>10000 ||
-                decision.instrumentKey()==null || decision.expiry()==null) {
+                decision.instrumentKey()==null || decision.expiry()==null ||
+                // Independently reject forward-known or stale crossover bars,
+                // even if a future research adapter accidentally emits CANDIDATE.
+                decision.latestCompletedCloseAt().isAfter(now) ||
+                java.time.Duration.between(decision.latestCompletedCloseAt(),now)
+                    .compareTo(java.time.Duration.ofDays(4))>0) {
             return abstain(now,room,"NO_TRADE",
                 "RESEARCH_CANDIDATE".equals(decision.status()) ?
                     "FNO_SIGNAL_PROVENANCE_INVALID" : decision.reasonCode(),
@@ -127,6 +132,8 @@ public class CustomerMindFnoPaperCycleService {
             ? "BUY_CALL_RESEARCH" : "BUY_PUT_RESEARCH";
         if (!expectedSide.equals(decision.signal())
                 || decision.exchangeAt().isAfter(now) || decision.observedAt().isAfter(now)
+                // Provider observations cannot predate their exchange ticks.
+                || decision.observedAt().isBefore(decision.exchangeAt())
                 || java.time.Duration.between(decision.exchangeAt(),now).toSeconds()>15
                 || java.time.Duration.between(decision.observedAt(),now).toSeconds()>15) {
             return abstain(now,room,"BLOCKED","FNO_RESEARCH_QUOTE_STALE",
