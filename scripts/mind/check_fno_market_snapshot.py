@@ -69,7 +69,7 @@ def select_expiry(raw, now=None):
     return min(parsed).isoformat() if parsed else None
 
 
-def classify(status, raw):
+def classify(status, raw, now=None):
     if status in (401,403):
         return MARKER + "status=AUTH_DENIED;orders=false", False
     if status == 404:
@@ -127,6 +127,33 @@ def classify(status, raw):
                 raise ValueError("INDICATOR_NOT_LISTED")
             if _price(quote.get("ltp")):
                 v2_reference += 1
+        # The Flutter UI intentionally hides V2 reference values if the
+        # server's provider-snapshot timestamp is >5 minutes old. Report this
+        # as a separate count; it may explain blank fields even when the
+        # server delivers authentic provider snapshots for nearly every leg.
+        age_label = "MISSING_OR_INVALID"
+        flutter_visible = 0
+        timestamp = data.get("snapshotAt")
+        current = now or dt.datetime.now(dt.timezone.utc)
+        if current.tzinfo is None:
+            raise ValueError("NAIVE_CLOCK")
+        if isinstance(timestamp, str) and len(timestamp) <= 64:
+            try:
+                stamp = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                if stamp.tzinfo is not None:
+                    age = (current.astimezone(dt.timezone.utc) -
+                           stamp.astimezone(dt.timezone.utc)).total_seconds()
+                    if age < 0:
+                        age_label = "FUTURE"
+                    elif age <= 300:
+                        age_label = "WITHIN_5_MIN"
+                        flutter_visible = v2_reference
+                    elif age <= 86400:
+                        age_label = "OLDER_5_MIN_UNDER_24H"
+                    else:
+                        age_label = "OLDER_24H"
+            except ValueError:
+                pass
         status_label = data["status"]
         if status_label == "MARKET_CLOSED" and fresh:
             raise ValueError("FRESH_TICKS_OUTSIDE_SESSION")
@@ -141,6 +168,8 @@ def classify(status, raw):
             ";exchangeTimedLastTrades=" + str(trades) +
             ";previousCloseLegs=" + str(last_closes) +
             ";v2ChainLtpIndicators=" + str(v2_reference) +
+            ";flutterVisibleV2Indicators=" + str(flutter_visible) +
+            ";snapshotAge=" + age_label +
             ";freshV3Legs=" + str(fresh) +
             ";orders=false;execution=false;independentE2E=false"
         ), True
