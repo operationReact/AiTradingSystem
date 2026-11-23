@@ -400,11 +400,16 @@ class CustomerFnoStrike {
 class CustomerFnoChainSnapshotIndicator {
   const CustomerFnoChainSnapshotIndicator({
     this.ltp, this.bid, this.ask, this.openInterest,
+    this.volume, this.previousOpenInterest,
     this.iv, this.delta, this.theta, this.gamma, this.vega,
   });
 
   final num? ltp, bid, ask, iv, delta, theta, gamma, vega;
-  final int? openInterest;
+  /// Read-only Upstox V2 chain counts (HTTP observation time, not a live tick).
+  final int? openInterest, volume, previousOpenInterest;
+  int? get openInterestChange =>
+      openInterest != null && previousOpenInterest != null
+          ? openInterest! - previousOpenInterest! : null;
 
   static CustomerFnoChainSnapshotIndicator decode(Object? raw) {
     if (raw is! Map<String, dynamic>) {
@@ -420,14 +425,20 @@ class CustomerFnoChainSnapshotIndicator {
       return v;
     }
     final oi = raw['openInterest'];
-    if (oi != null && (oi is! int || oi < 0)) {
-      throw const FormatException('Invalid option-chain OI');
+    final volume = raw['volume'];
+    final previousOi = raw['previousOpenInterest'];
+    for (final count in [oi, volume, previousOi]) {
+      if (count != null && (count is! int || count < 0)) {
+        throw const FormatException('Invalid option-chain count');
+      }
     }
     return CustomerFnoChainSnapshotIndicator(
       ltp: metric('ltp', positive: true),
       bid: metric('bid', positive: true),
       ask: metric('ask', positive: true),
       openInterest: oi as int?,
+      volume: volume as int?,
+      previousOpenInterest: previousOi as int?,
       iv: metric('iv', nonnegative: true),
       delta: metric('delta'), theta: metric('theta'),
       gamma: metric('gamma'), vega: metric('vega'),
