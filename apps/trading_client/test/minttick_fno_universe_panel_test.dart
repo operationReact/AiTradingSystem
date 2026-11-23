@@ -58,6 +58,25 @@ class _Repository extends Fake implements CustomerFnoUniverseRepository {
       CustomerFnoUniverseStatus.decode(_status(rights: rights));
 
   @override
+  Future<CustomerFnoRealtimeCoverage> realtimeCoverage() async =>
+      CustomerFnoRealtimeCoverage.decode({
+        'catalogState': rights ? 'LOADED' : 'DISCOVERY_NOT_VERIFIED',
+        'catalogSha': rights ? 'actual-source-sha' : null,
+        'catalogContracts': rights ? 2 : 0,
+        'realtimeState': rights ? 'CONNECTED'
+            : 'DISPLAY_RIGHTS_NOT_VERIFIED',
+        'subscribedNseFno': rights ? 1 : 0,
+        'freshExchangeLtp': rights ? 1 : 0,
+        'freshTwoSidedDepth': 0,
+        'subscribedWithoutFreshLtp': 0,
+        'freshWithOi': rights ? 1 : 0,
+        'freshWithVolume': rights ? 1 : 0,
+        'freshWithGreeks': 0,
+        'checkedAt': '2026-11-23T08:04:00Z',
+        'liveOrdersAuthorized': false,
+      });
+
+  @override
   Future<CustomerFnoUniversePage> contracts({
     String? type, int page = 0,
   }) async {
@@ -106,11 +125,49 @@ void main() {
     expect(find.text('FUT 1'), findsOneWidget);
     expect(find.text('NIFTY 26000 CE'), findsOneWidget);
     expect(find.text('RELIANCE FUT DEC'), findsOneWidget);
+    expect(find.text('V3 sub 1'), findsOneWidget);
+    expect(find.text('Fresh LTP 1'), findsOneWidget);
+    expect(find.text('Depth 0'), findsOneWidget);
+    expect(find.textContaining('1 / 2 subscribed'), findsOneWidget);
     expect(find.byKey(const ValueKey('fno-universe-result-count')),
         findsOneWidget);
     expect(find.textContaining('no live quote implied'), findsOneWidget);
     expect(find.text('Buy'), findsNothing);
     expect(find.text('Sell'), findsNothing);
+  });
+
+  test('realtime model rejects fake quotes, inconsistent counts and LIVE orders', () {
+    Map<String, Object?> receipt() => {
+      'catalogState': 'LOADED',
+      'catalogSha': 'verified-master-sha',
+      'catalogContracts': 45451,
+      'realtimeState': 'CONNECTED',
+      'subscribedNseFno': 256,
+      'freshExchangeLtp': 38,
+      'freshTwoSidedDepth': 31,
+      'subscribedWithoutFreshLtp': 218,
+      'freshWithOi': 37,
+      'freshWithVolume': 36,
+      'freshWithGreeks': 29,
+      'checkedAt': '2026-11-23T08:04:00Z',
+      'liveOrdersAuthorized': false,
+    };
+    final parsed = CustomerFnoRealtimeCoverage.decode(receipt());
+    expect(parsed.subscribedNseFno, 256);
+    expect(parsed.freshExchangeLtp, 38);
+    expect(parsed.connected, isTrue);
+    expect(() => CustomerFnoRealtimeCoverage.decode(
+        receipt()..['liveOrdersAuthorized'] = true), throwsFormatException);
+    expect(() => CustomerFnoRealtimeCoverage.decode(
+        receipt()..['freshTwoSidedDepth'] = 39), throwsFormatException);
+    expect(() => CustomerFnoRealtimeCoverage.decode(
+        receipt()..['subscribedWithoutFreshLtp'] = 0), throwsFormatException);
+    expect(() => CustomerFnoRealtimeCoverage.decode(
+        receipt()..['realtimeState'] = 'STOPPED'), throwsFormatException);
+    expect(() => CustomerFnoRealtimeCoverage.decode(
+        receipt()..['catalogState'] = 'STALE_SNAPSHOT'), throwsFormatException);
+    expect(() => CustomerFnoRealtimeCoverage.decode(
+        receipt()..['subscribedNseFno'] = 45000), throwsFormatException);
   });
 
   testWidgets('search and type filter uses local catalog only',
