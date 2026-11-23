@@ -1,0 +1,118 @@
+package in.aitradingsystem.news;
+
+import in.aitradingsystem.news.analysis.AiErrorCode;
+import in.aitradingsystem.news.analysis.AiProviderException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+/**
+ * Schedules the existing NewsAnalysisService over articles that have no analysis yet, or whose latest
+ * analysis failed and is eligible for a bounded retry. It adds no provider logic of its own.
+ *
+ * <p>Retry policy: a FAILED analysis is retried only after {@link #RETRY_BACKOFF}, and an article is
+ * attempted at most {@link #MAX_FAILED_ATTEMPTS} times in total. With no server-side credential the
+ * run stops at the first call and reports CONFIGURATION_BLOCKED; nothing is fabricated.
+ */
+@Component
+@ConditionalOnProperty(name = "app.news.analysis-scheduler.enabled", havingValue = "true")
+public class NewsAnalysisScheduler {
+    private static final Logger log = LoggerFactory.getLogger(NewsAnalysisScheduler.class);
+    static final Duration RETRY_BACKOFF = Duration.ofHours(1);
+    static final int MAX_FAILED_ATTEMPTS = 3;
+    static final Duration LOOKBACK = Duration.ofDays(30);
+    static final int MAX_PER_RUN = 20;
+
+    public enum Outcome { ANALYZED, FAILED, CONFIGURATION_BLOCKED, NOTHING_ELIGIBLE }
+
+    private final JdbcClient jdbc;
+    private final NewsAnalysisService analysis;
+    private final Clock clock;
+    private final int maxPerRun;
+
+    public NewsAnalysisScheduler(JdbcClient jdbc, NewsAnalysisService analysis, Clock clock,
+                                 @Value("${app.news.analysis-scheduler.max-per-run:20}") int maxPerRun) {
+        this.jdbc = jdbc;
+        this.analysis = analysis;
+        this.clock = clock;
+        this.maxPerRun = Math.max(1, Math.min(maxPerRun, MAX_PER_RUN));
+    }
+
+    /** Articles needing analysis now, oldest-published first within the freshness window. */
+    List<UUID> eligibleArticles(Instant now) {
+        return jdbc.sql("""
+                SELECT a.id
+                  FROM news_articles a
+                 WHERE a.published_at > :lookbackStart
+                   AND (
+                         NOT EXISTS (SELECT 1 FROM news_analyses x WHERE x.article_id = a.id)
+                      OR (
+                           (SELECT x.status FROM news_analyses x WHERE x.article_id = a.id
+                             ORDER BY x.created_at DESC, x.id DESC LIMIT 1) = 'FAILED'
+                       AND (SELECT max(x.created_at) FROM news_analyses x WHERE x.article_id = a.id) < :retryBefore
+                       AND (SELECT count(*) FROM news_analyses x WHERE x.article_id = a.id AND x.status = 'FAILED') < :maxFailed
+                      )
+                   )
+                 ORDER BY a.published_at DESC
+                 LIMIT :limit
+                """)
+            .param("lookbackStart", OffsetDateTime.ofInstant(now.minus(LOOKBACK), ZoneOffset.UTC))
+            .param("retryBefore", OffsetDateTime.ofInstant(now.minus(RETRY_BACKOFF), ZoneOffset.UTC))
+            .param("maxFailed", MAX_FAILED_ATTEMPTS)
+            .param("limit", maxPerRun)
+            .query(UUID.class)
+            .list();
+    }
+
+    /** One bounded pass. Stops immediately when no provider is configured. */
+    public Map<Outcome, Integer> runOnce() {
+        Instant now = clock.instant();
+        Map<Outcome, Integer> counts = new EnumMap<>(Outcome.class);
+        List<UUID> ids = eligibleArticles(now);
+        if (ids.isEmpty()) {
+            counts.put(Outcome.NOTHING_ELIGIBLE, 1);
+            return counts;
+        }
+        for (UUID id : ids) {
+            try {
+                NewsService.AnalysisView view = analysis.analyze(id, false);
+                counts.merge("ANALYZED".equals(view.status()) ? Outcome.ANALYZED : Outcome.FAILED, 1, Integer::sum);
+            } catch (AiProviderException e) {
+                if (e.code() == AiErrorCode.UNCONFIGURED) {
+                    counts.merge(Outcome.CONFIGURATION_BLOCKED, 1, Integer::sum);
+                    log.warn("News analysis not configured; scheduled analysis stopped without calls");
+                    break;
+                }
+                counts.merge(Outcome.FAILED, 1, Integer::sum);
+            } catch (NewsAnalysisService.AnalysisInProgressException e) {
+                // Another request is analyzing this article; skip without counting a failure.
+            } catch (RuntimeException e) {
+                counts.merge(Outcome.FAILED, 1, Integer::sum);
+                log.warn("News analysis failed unexpectedly for one article");
+            }
+        }
+        return counts;
+    }
+
+    @Scheduled(fixedDelayString = "#{T(java.lang.Math).min(86400000, T(java.lang.Math).max(60000, ${app.news.analysis-scheduler.interval-ms:900000}))}")
+    public void scheduledRun() {
+        try {
+            runOnce();
+        } catch (RuntimeException e) {
+            log.warn("News analysis scheduler run failed");
+        }
+    }
+}
