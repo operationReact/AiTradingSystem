@@ -721,9 +721,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: _tabular.copyWith(fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      color: market != null && _fresh(market, leg, now)
-                          ? (leg.priceChangePct ?? 0) < 0
-                              ? scheme.error : scheme.primary
+                      color: market != null &&
+                              _fresh(market, leg, now) &&
+                              leg.priceChangePct != null
+                          ? leg.priceChangePct! < 0 ? scheme.error
+                              : leg.priceChangePct! > 0
+                                  ? scheme.primary : scheme.onSurface
                           : scheme.onSurface)),
                   if (market != null &&
                       (_displayQuote(market, leg, now) ||
@@ -983,8 +986,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       bool strong = false, bool itm = false}) {
     final c = Theme.of(context).colorScheme;
     final fresh = leg != null && _fresh(market, leg, now);
-    final color = strong && fresh
-        ? (leg.priceChangePct ?? 0) < 0 ? c.error : c.primary
+    final pct = fresh ? leg?.priceChangePct : null;
+    final color = strong && pct != null
+        ? pct < 0 ? c.error : pct > 0 ? c.primary : c.onSurface
         : strong ? c.onSurface : c.onSurfaceVariant;
     return InkWell(
       onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
