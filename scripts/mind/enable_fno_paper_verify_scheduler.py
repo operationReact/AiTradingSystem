@@ -30,9 +30,18 @@ def arm(token, read=room.request, post=None, now=None):
     t=(now or dt.datetime.now(room.IST)).astimezone(room.IST)
     if 9<=t.hour<16:
         raise Blocked("SCHEDULER_OPTIN_MARKET_HOURS_DENIED")
-    identifier, created=room.ensure_room(token,read)
-    if created:
-        raise Blocked("NEW_ROOM_REQUIRES_SEPARATE_ACCEPTANCE")
+    # Opt-in must be read-only until the explicit automation control POST.
+    # ensure_room() creates a room when missing, so it is unsafe here.
+    inventory=read(ROOT,token)
+    if (not isinstance(inventory,list) or len(inventory)>100 or
+            any(not isinstance(item,dict) for item in inventory)):
+        raise Blocked("VERIFICATION_ROOM_INVENTORY_INVALID")
+    matches=[item for item in inventory if item.get("name")==room.ROOM_NAME]
+    if len(matches)!=1:
+        raise Blocked("VERIFICATION_ROOM_MISSING_OR_AMBIGUOUS")
+    if not room._valid_room(matches[0]):
+        raise Blocked("VERIFICATION_ROOM_SCOPE_MISMATCH")
+    identifier=matches[0]["id"]
     prefix=ROOT+"/"+identifier
     capability=read(prefix+"/paper/fno/capability",token)
     if (not isinstance(capability,dict) or
@@ -82,8 +91,11 @@ def arm(token, read=room.request, post=None, now=None):
 
 
 def post_control(path,token,payload):
-    if not isinstance(path,str) or not path.startswith(ROOT+"/") or not path.endswith(
-            "/mind/fno/paper-automation/control"):
+    suffix="/mind/fno/paper-automation/control"
+    prefix=ROOT+"/"
+    if (not isinstance(path,str) or not path.startswith(prefix) or
+            not path.endswith(suffix) or
+            not room.UUID.fullmatch(path[len(prefix):-len(suffix)])):
         raise Blocked("UNAPPROVED_WRITE_ROUTE")
     if payload not in ({"enabled":True},{"enabled":False}):
         raise Blocked("UNAPPROVED_CONTROL_PAYLOAD")
