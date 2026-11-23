@@ -4,13 +4,17 @@ on:
     branches: [dev]
     paths:
       - 'scripts/minttick_mind_upstox_sandbox_bridge.py'
+      - 'scripts/minttick_mind_sandbox_authenticated.py'
       - 'scripts/tests/test_minttick_mind_upstox_sandbox_bridge.py'
+      - 'scripts/tests/test_minttick_mind_sandbox_authenticated.py'
       - '.github/workflows/minttick-mind-upstox-sandbox-bridge-contract.yml'
   push:
     branches: [dev]
     paths:
       - 'scripts/minttick_mind_upstox_sandbox_bridge.py'
+      - 'scripts/minttick_mind_sandbox_authenticated.py'
       - 'scripts/tests/test_minttick_mind_upstox_sandbox_bridge.py'
+      - 'scripts/tests/test_minttick_mind_sandbox_authenticated.py'
       - '.github/workflows/minttick-mind-upstox-sandbox-bridge-contract.yml'
 permissions:
   contents: read
@@ -26,6 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/minttick_mind_upstox_sandbox_bridge.py
+          python3 -m py_compile scripts/minttick_mind_upstox_sandbox_bridge.py scripts/minttick_mind_sandbox_authenticated.py
           python3 -m unittest discover -s scripts/tests -p 'test_minttick_mind_upstox_sandbox_bridge.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_minttick_mind_sandbox_authenticated.py' -v
           python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
