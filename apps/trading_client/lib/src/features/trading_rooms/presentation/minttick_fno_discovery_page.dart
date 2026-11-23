@@ -142,6 +142,40 @@ class MintTickFnoDiscoveryFacts {
     return List.unmodifiable(legs);
   }
 
+  /// V2 snapshot rankings require independent display permission and a
+  /// recent HTTP observation. They are NOT timestamped trades or order data.
+  /// VOLUME uses actual source volume; OI_GAIN uses current minus previous OI.
+  static List<CustomerFnoLeg> snapshotLeaders(
+      CustomerFnoMarket market, DateTime now, String side,
+      {required String metric}) {
+    if (!market.displayRightsVerified ||
+        (metric != 'VOLUME' && metric != 'OI_GAIN')) return const [];
+    final utc = now.toUtc();
+    final at = market.snapshotAt?.toUtc();
+    if (at == null || at.isAfter(utc) ||
+        utc.difference(at) > const Duration(minutes: 5)) {
+      return const [];
+    }
+    int? score(CustomerFnoLeg leg) {
+      final chain = market.chainSnapshotIndicators[leg.instrumentKey];
+      if (chain == null) return null;
+      if (metric == 'VOLUME') {
+        final volume = chain.volume;
+        return volume != null && volume > 0 ? volume : null;
+      }
+      final change = chain.openInterestChange;
+      return change != null && change > 0 ? change : null;
+    }
+    final legs = optionLegs(market, side)
+        .where((leg) => score(leg) != null).toList();
+    legs.sort((a, b) {
+      final difference = score(b)!.compareTo(score(a)!);
+      return difference != 0
+          ? difference : a.instrumentKey.compareTo(b.instrumentKey);
+    });
+    return List.unmodifiable(legs);
+  }
+
   /// No underlying spot/reference is NOT permission to render hundreds of
   /// rows or invent an ATM. Start at the middle of the listed strike range
   /// until the user explicitly selects Show all.
@@ -415,12 +449,18 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     });
     final listed = ranked.take(8).toList();
     final searchKeys = all.map((leg) => leg.instrumentKey).toSet();
-    final topSmartlist = _smartlistKind == 'Highest OI' && market != null
-        ? MintTickFnoDiscoveryFacts.highestOpenInterest(
-              market, now, _optionSide)
-            .where((leg) => searchKeys.contains(leg.instrumentKey))
-            .take(6).toList()
-        : <CustomerFnoLeg>[];
+    final List<CustomerFnoLeg> smartlistPool = market == null
+        ? const []
+        : _smartlistKind == 'Highest OI'
+            ? MintTickFnoDiscoveryFacts.highestOpenInterest(
+                market, now, _optionSide)
+            : MintTickFnoDiscoveryFacts.snapshotLeaders(
+                market, now, _optionSide,
+                metric: _smartlistKind == 'Top traded'
+                    ? 'VOLUME' : 'OI_GAIN');
+    final topSmartlist = smartlistPool
+        .where((leg) => searchKeys.contains(leg.instrumentKey))
+        .take(6).toList();
     final freshCount = market == null ? 0
         : MintTickFnoDiscoveryFacts.freshLegs(market, now).length;
 
@@ -522,17 +562,17 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             )),
       ])),
       const SizedBox(height: 8),
-      if (_smartlistKind == 'Highest OI' && topSmartlist.isNotEmpty)
+      if (topSmartlist.isNotEmpty)
         Padding(padding: const EdgeInsets.only(bottom: 5),
-          child: Text('Source-backed OI · reference only, not traded volume',
+          child: Text('Provider snapshot · read only, not an executable quote',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant))),
       _optionsList(context, market, topSmartlist, now,
           emptyText: _smartlistKind == 'Highest OI'
               ? 'No source-backed open-interest counts for this expiry.'
               : _smartlistKind == 'Top traded'
-                  ? 'Trading volume not available from the option feed.'
-                  : 'Open-interest change not available from the option feed.',
+                  ? 'No recent provider-traded volume for this expiry.'
+                  : 'No positive OI changes in the recent provider chain.',
           compact: true),
       const SizedBox(height: 18),
       // Retain the full exchange-listed chain and its navigation for traders.
@@ -614,11 +654,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final atm = market == null ? null
         : MintTickFnoDiscoveryFacts.atmStrike(market, now);
     return Column(children: [
-      if (!compact) Padding(
+      Padding(
         padding: const EdgeInsets.only(bottom: 2),
         child: Row(children: [
           const Expanded(flex: 5, child: Text('Option')),
-          Expanded(flex: 3, child: Text('OI', textAlign: TextAlign.right,
+          Expanded(flex: 3, child: Text(
+            compact && _smartlistKind == 'Top traded' ? 'Volume'
+              : compact && _smartlistKind == 'OI gainers' ? 'ΔOI' : 'OI',
+            textAlign: TextAlign.right,
             style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
           Expanded(flex: 3, child: Text('LTP', textAlign: TextAlign.right,
             style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
@@ -656,7 +699,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               )),
               Expanded(flex: 3, child: Text(
                 market != null && market.displayRightsVerified
-                    ? _count(_displayOpenInterest(market, leg, now))
+                    ? compact && _smartlistKind == 'Top traded'
+                        ? _count(_chainSnapshot(market, leg, now)?.volume)
+                        : compact && _smartlistKind == 'OI gainers'
+                            ? _count(_chainSnapshot(market, leg, now)
+                                ?.openInterestChange)
+                            : _count(_displayOpenInterest(market, leg, now))
                     : '—',
                 textAlign: TextAlign.right,
                 style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
