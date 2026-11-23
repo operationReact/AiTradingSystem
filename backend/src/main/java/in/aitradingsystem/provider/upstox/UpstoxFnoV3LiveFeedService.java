@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -57,6 +58,18 @@ public class UpstoxFnoV3LiveFeedService {
 
     private final UpstoxAnalyticsSource source;
     private final int subscriptionLimit;
+    private volatile ObjectProvider<UpstoxFnoPlusMultiSocketPool> supplementaryPoolProvider;
+
+    @Autowired(required = false)
+    public void setSupplementaryPoolProvider(
+            ObjectProvider<UpstoxFnoPlusMultiSocketPool> provider) {
+        this.supplementaryPoolProvider = provider;
+    }
+
+    private UpstoxFnoPlusMultiSocketPool supplementaryPool() {
+        var provider = supplementaryPoolProvider;
+        return provider == null ? null : provider.getIfAvailable();
+    }
     private final Clock clock;
     private final Dialer dialer;
     private final ScheduledExecutorService reconnects;
@@ -336,6 +349,11 @@ public class UpstoxFnoV3LiveFeedService {
         if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)) {
             return java.util.Optional.empty();
         }
+        if (!subscribed.contains(key)) {
+            var pool = supplementaryPool();
+            return pool == null ? java.util.Optional.empty()
+                : pool.eligibleSupplementaryPaperQuote(key);
+        }
         return freshQuote(key);
     }
 
@@ -415,8 +433,15 @@ public class UpstoxFnoV3LiveFeedService {
      */
     public java.util.Optional<DisplayQuote> eligibleDisplayQuote(String key) {
         if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)
-                || !wanted || destroyed || !"CONNECTED".equals(state)
                 || !regularNseSession(clock.instant())) {
+            return java.util.Optional.empty();
+        }
+        if (!subscribed.contains(key)) {
+            var pool = supplementaryPool();
+            return pool == null ? java.util.Optional.empty()
+                : pool.eligibleSupplementaryQuote(key);
+        }
+        if (!wanted || destroyed || !"CONNECTED".equals(state)) {
             return java.util.Optional.empty();
         }
         Observation observation = latest.get(key);
@@ -454,9 +479,12 @@ public class UpstoxFnoV3LiveFeedService {
      * A subscription is NOT a fresh quote, source entitlement or order grant.
      */
     public boolean hasActiveFnoSubscription(String key) {
-        return UpstoxFnoV3FeedCodec.validKey(key) &&
-            wanted && !destroyed && "CONNECTED".equals(state) &&
-            subscribed.contains(key);
+        if (!UpstoxFnoV3FeedCodec.validKey(key)) return false;
+        if (wanted && !destroyed && "CONNECTED".equals(state) &&
+                subscribed.contains(key)) return true;
+        if (subscribed.contains(key)) return false;
+        var pool = supplementaryPool();
+        return pool != null && pool.hasSupplementarySubscription(key);
     }
 
     /**
@@ -472,6 +500,22 @@ public class UpstoxFnoV3LiveFeedService {
             Instant checkedAt, boolean liveOrderAuthorized) {}
 
     public StreamingCounts streamingCoverage() {
+        var local = localStreamingCoverage();
+        var pool = supplementaryPool();
+        if (pool == null) return local;
+        var plus = pool.supplementaryCoverage();
+        return new StreamingCounts(local.socketState(),
+            local.subscribedNseFno() + plus.subscribedNseFno(),
+            local.freshExchangeLtp() + plus.freshExchangeLtp(),
+            local.freshTwoSidedDepth() + plus.freshTwoSidedDepth(),
+            local.withoutFreshLtp() + plus.withoutFreshLtp(),
+            local.withOi() + plus.withOi(),
+            local.withVolume() + plus.withVolume(),
+            local.withGreeks() + plus.withGreeks(),
+            local.checkedAt(), false);
+    }
+
+    StreamingCounts localStreamingCoverage() {
         Instant now = clock.instant();
         String socketState = state;
         if (!wanted || destroyed || !"CONNECTED".equals(socketState)
@@ -500,13 +544,19 @@ public class UpstoxFnoV3LiveFeedService {
     }
 
     public List<DisplayQuote> eligibleDisplaySnapshot() {
-        if (!wanted || destroyed || !"CONNECTED".equals(state)
-                || !regularNseSession(clock.instant())) return List.of();
-        return subscribed.stream()
-            .filter(UpstoxFnoV3FeedCodec::validKey)
-            .limit(subscriptionLimit)
-            .map(this::eligibleDisplayQuote)
-            .flatMap(java.util.Optional::stream)
+        if (!regularNseSession(clock.instant())) return List.of();
+        List<DisplayQuote> local = (!wanted || destroyed || !"CONNECTED".equals(state))
+            ? List.of() : subscribed.stream()
+                .filter(UpstoxFnoV3FeedCodec::validKey)
+                .limit(subscriptionLimit)
+                .map(this::eligibleDisplayQuote)
+                .flatMap(java.util.Optional::stream)
+                .toList();
+        var pool = supplementaryPool();
+        if (pool == null) return local;
+        var merged = new java.util.ArrayList<>(local);
+        merged.addAll(pool.supplementarySnapshot());
+        return merged.stream().limit(UpstoxFnoPlusMultiSocketPool.MAX_LOCAL_FULL_SUBSCRIPTIONS)
             .toList();
     }
 
