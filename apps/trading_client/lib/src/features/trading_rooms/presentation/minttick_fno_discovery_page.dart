@@ -207,7 +207,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     with WidgetsBindingObserver {
   String? _roomId;
   String _section = 'Chain';
-  String _optionSide = 'CE';
+  String _optionSide = 'ALL';
   String _smartlistKind = 'Highest OI';
   String _search = '';
   bool _showAllStrikes = false;
@@ -511,6 +511,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         ),
         const SizedBox(height: 8),
         Row(children: [
+          _sideToggle('ALL', 'All'),
+          const SizedBox(width: 8),
           _sideToggle('CE', 'Calls'),
           const SizedBox(width: 8),
           _sideToggle('PE', 'Puts'),
@@ -800,34 +802,23 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   }
 
   Widget _roomPicker(BuildContext context, TradingRoomDraft? room) {
-    final type = Theme.of(context).textTheme;
-    return MintTickSurface(
-      padding: const EdgeInsets.all(12),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('TRADING TERMINAL · OPTIONAL', style: type.labelSmall),
-        const SizedBox(height: 7),
-        if (_availableRooms.isEmpty)
-          Row(children: [
-            const Expanded(child: Text('Market discovery works without a room.')),
-            TextButton(onPressed: widget.onCreateRoom,
-              child: const Text('Create F&O room')),
-          ])
-        else
-          DropdownButtonHideUnderline(child: DropdownButton<String>(
-            key: const ValueKey('fno-discovery-room'),
-            value: room?.id,
-            isExpanded: true,
-            items: [for (final r in _availableRooms)
-              DropdownMenuItem(value: r.id,
-                child: Text('${r.name} · ${r.mode} · ${r.marketScope}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis))],
-            onChanged: _loading ? null : _selectRoom,
-          )),
-        if (room != null)
-          Text('Open your ${room.mode} terminal for order entry. '
-              'This market feed does not require a broker connection.',
-            style: type.bodySmall),
-      ]),
+    if (_availableRooms.isEmpty) return const SizedBox.shrink();
+    return DropdownButtonFormField<String>(
+      key: const ValueKey('fno-discovery-room'),
+      initialValue: room?.id,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Trading room',
+        border: OutlineInputBorder(),
+        isDense: true),
+      items: [
+        for (final r in _availableRooms)
+          DropdownMenuItem<String>(
+            value: r.id,
+            child: Text('${r.name} · ${r.mode}',
+              maxLines: 1, overflow: TextOverflow.ellipsis))
+      ],
+      onChanged: _loading ? null : _selectRoom,
     );
   }
 
@@ -1223,18 +1214,20 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   Widget _trade(BuildContext context, TradingRoomDraft? room) =>
       MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _heading('Trade in your F&O room', 'PAPER and LIVE are independent'),
-        const SizedBox(height: 10),
-        const Text('Choose a listed contract in Chain, then open the room '
-            'terminal to review fresh bid/ask, eligible quantity, risk and '
-            'broker confirmation. Browsing never sends an order.'),
-        const SizedBox(height: 14),
+        Text('Trade', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Text(room == null
+            ? 'Create an F&O room to review and place orders.'
+            : '${room.mode} · Orders require fresh quotes and confirmation.',
+          style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 12),
         FilledButton.icon(
           key: const ValueKey('fno-discovery-open-terminal'),
           onPressed: room == null ? widget.onCreateRoom
               : widget.onOpenRoom == null ? null
               : () => widget.onOpenRoom?.call(room),
-          icon: const Icon(Icons.candlestick_chart_rounded),
+          icon: const Icon(Icons.candlestick_chart_rounded, size: 18),
           label: Text(room == null ? 'Create F&O room' : 'Open trading terminal'),
         ),
       ]));
