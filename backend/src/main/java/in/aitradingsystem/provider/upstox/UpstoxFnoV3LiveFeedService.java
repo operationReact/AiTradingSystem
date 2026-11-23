@@ -30,7 +30,11 @@ import org.springframework.stereotype.Service;
 @Service
 @ConditionalOnProperty(name = "minttick.upstox-fno.v3-feed-enabled", havingValue = "true")
 public class UpstoxFnoV3LiveFeedService {
-    static final int MAX_SUBSCRIPTIONS = 64; // pilot cap, below standard Upstox V3 full limits
+    // Conservative same-connection cap. Provider's standard Full limit is
+    // higher, but account-level quotas must be verified before further scaling.
+    static final int MAX_SUBSCRIPTIONS = 256;
+    static final int MAX_INITIAL_SUBSCRIPTIONS = 64;
+    static final int MAX_INCREMENTAL_KEYS = 64;
     static final int MAX_FRAGMENT_BYTES = 1024 * 1024;
     private static final int MAX_RECONNECTS = 5;
 
@@ -110,7 +114,7 @@ public class UpstoxFnoV3LiveFeedService {
                 || keys == null || keys.isEmpty()
                 || keys.stream().anyMatch(k -> !UpstoxFnoV3FeedCodec.validKey(k))
                 || spot.stream().anyMatch(k -> !UpstoxFnoV3FeedCodec.validSpotKey(k))
-                || keys.size() + spot.size() > MAX_SUBSCRIPTIONS
+                || keys.size() + spot.size() > MAX_INITIAL_SUBSCRIPTIONS
                 || java.util.stream.Stream.concat(keys.stream(), spot.stream()).distinct().count()
                         != keys.size() + spot.size()) {
             throw new IllegalArgumentException("UPSTOX_FNO_STREAM_INVALID_START");
@@ -131,6 +135,58 @@ public class UpstoxFnoV3LiveFeedService {
         state = "CONNECTING";
         retryScheduled = false;
         connectOnce();
+        return status();
+    }
+
+    /**
+     * Append only provider-listed, caller-verified derivative keys to this
+     * EXISTING socket using Upstox V3's binary "sub" command. This method
+     * does not stop/reconnect, remove existing contracts, authorize a quote,
+     * enable a broker order, or make the new keys fresh until ticks arrive.
+     * The operator MUST verify each input against the fresh Upstox BOD master
+     * before invoking this method. No arbitrary customer key reaches here.
+     */
+    public synchronized Status subscribeAdditionalListed(List<String> verifiedKeys) {
+        if (verifiedKeys == null || verifiedKeys.isEmpty()
+                || verifiedKeys.size() > MAX_INCREMENTAL_KEYS
+                || verifiedKeys.stream().anyMatch(
+                    k -> k == null || !k.matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}"))
+                || verifiedKeys.stream().distinct().count() != verifiedKeys.size()) {
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_LISTED_SUBSCRIPTIONS");
+        }
+        if (!wanted || destroyed || !"CONNECTED".equals(state) ||
+                socket == null || !regularNseSession(clock.instant())) {
+            throw new IllegalStateException("UPSTOX_FNO_SOCKET_NOT_READY_FOR_ADD");
+        }
+        var newKeys = verifiedKeys.stream()
+            .filter(k -> !subscribed.contains(k)).toList();
+        if (newKeys.isEmpty()) return status();
+        if (subscribed.size() + newKeys.size() > MAX_SUBSCRIPTIONS) {
+            throw new IllegalStateException("UPSTOX_FNO_SUBSCRIPTION_CAP_REACHED");
+        }
+        WebSocket current = socket;
+        final long attempt = connectionAttemptId;
+        try {
+            // A completed send does not mean exchange-time ticks are present.
+            // Our independent eligibleDisplayQuote() must still prove freshness.
+            current.sendBinary(ByteBuffer.wrap(UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", newKeys)), true)
+                .get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("UPSTOX_FNO_SUBSCRIBE_SEND_UNVERIFIED");
+        } catch (java.util.concurrent.ExecutionException |
+                 java.util.concurrent.TimeoutException failure) {
+            throw new IllegalStateException("UPSTOX_FNO_SUBSCRIBE_SEND_UNVERIFIED");
+        }
+        if (!wanted || destroyed || socket != current ||
+                connectionAttemptId != attempt || !"CONNECTED".equals(state)) {
+            // The old session vanished; don't publish a new active key.
+            throw new IllegalStateException("UPSTOX_FNO_SESSION_CHANGED_DURING_ADD");
+        }
+        var merged = new java.util.HashSet<>(subscribed);
+        merged.addAll(newKeys);
+        subscribed = Set.copyOf(merged);
         return status();
     }
 
