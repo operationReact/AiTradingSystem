@@ -327,6 +327,45 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void wrongContractQuoteCannotSellHeldPaperOptionButValidQuoteCanClose() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var engine=engine(true,true);
+        var opened=tx(()->engine.submit(owner,paper,"quote_guard_buy_01",
+            CONTRACT,EXPIRY,"BUY",1,new BigDecimal("101")));
+        assertThat(opened.side()).isEqualTo("BUY");
+        long cashHolding=wallets.get(owner,paper).availableCashPaise();
+        assertThat(engine.positions(owner,paper)).hasSize(1);
+
+        when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(
+            new UpstoxFnoV3LiveFeedService.PaperQuote("NSE_FO|SOME_OTHER_OPTION",
+                new BigDecimal("110"),new BigDecimal("111"),
+                NOW.minusSeconds(2),NOW.minusSeconds(1))));
+        assertThatThrownBy(()->tx(()->engine.submit(owner,paper,"quote_guard_sell1",
+            CONTRACT,EXPIRY,"SELL",1,new BigDecimal("109"))))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("quote identity, spread or chronology invalid");
+        assertThat(engine.orders(owner,paper)).hasSize(1);
+        assertThat(engine.positions(owner,paper)).hasSize(1);
+        assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(cashHolding);
+
+        prepareMarket("110.00","111.00");
+        var sold=tx(()->engine.submit(owner,paper,"quote_guard_sell2",
+            CONTRACT,EXPIRY,"SELL",1,new BigDecimal("109")));
+        assertThat(sold.side()).isEqualTo("SELL");
+        assertThat(sold.realizedPnlDeltaPaise()).isPositive();
+        assertThat(engine.positions(owner,paper)).isEmpty();
+        assertThat(engine.orders(owner,paper)).hasSize(2);
+        assertThat(new CustomerPaperFnoReconciliationService(jdbc)
+            .inspect(owner,paper).status()).isEqualTo("BOOKKEEPING_MATCHED");
+        assertThat(new CustomerPaperSharedWalletAuditService(jdbc)
+            .inspect(owner,paper).cashAndRealizedPnlReconciled()).isTrue();
+    }
+
+    @Test
     void boundedPaperReconciliationProvesOneLotBuyCloseWithoutMarketOrWalletSideEffects() {
         UUID owner=customer(), stranger=customer();
         UUID paper=room(owner,"PAPER");
