@@ -197,12 +197,12 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     final chain = leg == null ? null :
         recentChainSnapshot(market, leg, DateTime.now().toUtc());
     final selectedLeg = leg != null && selected?.instrumentKey == leg.instrumentKey;
-    final displayedLtp = live || retained ? leg?.ltp : null;
+    final displayedLtp = live || retained ? leg.ltp : null;
     final chainLtp = displayedLtp == null ? chain?.ltp : null;
     final oi = market.displayRightsVerified
-        ? ((live || retained ? leg?.openInterest : null) ?? chain?.openInterest)
+        ? ((live || retained ? leg.openInterest : null) ?? chain?.openInterest)
         : null;
-    final pct = live ? leg?.priceChangePct : null;
+    final pct = live ? leg.priceChangePct : null;
     return OutlinedButton(
       key: leg == null ? ValueKey('fno-premium-$side-unlisted') :
         ValueKey('paper-fno-leg-${leg.instrumentKey}'),
@@ -220,12 +220,12 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
         Text(displayedLtp != null
             ? '${live ? 'LTP' : 'Last'} ${value(displayedLtp)}'
             : chainLtp != null ? 'Chain ${value(chainLtp)}'
-            : live ? 'Ask ${value(leg?.ask)}' : 'LTP —',
+            : live ? 'Ask ${value(leg.ask)}' : 'LTP —',
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 3),
-        Text(live ? 'Bid ${value(leg?.bid)}'
-            : retained ? 'Last trade · ${lastTime(leg?.exchangeAt)}'
+        Text(live ? 'Bid ${value(leg.bid)}'
+            : retained ? 'Last trade · ${lastTime(leg.exchangeAt)}'
             : chain != null ? 'Chain snapshot · read only'
             : 'Quote not fresh',
           style: t.labelSmall?.copyWith(
