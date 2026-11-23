@@ -165,7 +165,8 @@ def run(token: str, get=get_json):
             cap = get(prefix + "/paper/fno/capability", token)
             book = get(prefix + "/paper/fno/reconciliation", token)
             wallet = get(prefix + "/paper/fno/wallet-reconciliation", token)
-            if not isinstance(cap, dict) or type(cap.get("paperConfigured")) is not bool:
+            if (not isinstance(cap, dict) or type(cap.get("paperConfigured")) is not bool
+                    or cap.get("liveExecutionAuthorized") is not False):
                 raise ReadOnlyProbeFailure("PAPER_CAPABILITY_INVALID")
             if not cap["paperConfigured"]:
                 # Both scheduler and PAPER routes can be conditionally absent
@@ -177,7 +178,7 @@ def run(token: str, get=get_json):
                 codes = cap.get("blockerCodes")
                 if not isinstance(codes, list) or len(codes) > 20:
                     raise ReadOnlyProbeFailure("PAPER_BLOCKERS_INVALID")
-                reason = ",".join(sorted(set(x for x in codes if x in safe))) or "UNCLASSIFIED"
+                reason = ",".join(sorted(set(x for x in codes if isinstance(x,str) and x in safe))) or "UNCLASSIFIED"
                 if not isinstance(book, dict) or book.get("status") not in (
                         "NO_FILLS","BOOKKEEPING_MATCHED","INCONSISTENT","INCOMPLETE"):
                     raise ReadOnlyProbeFailure("PAPER_BOOK_STATUS_INVALID")
