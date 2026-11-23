@@ -211,8 +211,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   String _smartlistKind = 'Highest OI';
   String _search = '';
   bool _showAllStrikes = false;
-  DateTime? _centeredExpiry;
-  final ScrollController _chainScroll = ScrollController();
   bool _loading = false;
   String? _error;
   int _generation = 0;
@@ -275,7 +273,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   void dispose() {
     _generation++;
     _quoteTimer?.cancel();
-    _chainScroll.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.rooms?.removeListener(_onRoomsChanged);
     super.dispose();
@@ -317,7 +314,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       _expiry = null;
       _expiries = const [];
       _readOnlyConfigured = false;
-      _centeredExpiry = null;
     });
     try {
       final capability = await widget.discovery.capability();
@@ -420,11 +416,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     }
   }
 
-  static const int _windowRadius = 12;
-  static const double _cellWidth = 66;
-  static const double _strikeWidth = 84;
-  static const double _tableWidth = _cellWidth * 6 + _strikeWidth;
-  static const double _strikeCentreX = _cellWidth * 3 + _strikeWidth / 2;
+  static const int _windowRadius = 7;
   static const TextStyle _tabular =
       TextStyle(fontFeatures: [FontFeature.tabularFigures()]);
 
@@ -452,10 +444,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       }
       return (ak ?? 0).compareTo(bk ?? 0);
     });
-    final listed = ranked.take(8).toList();
+    final listed = ranked.take(5).toList();
     final searchKeys = all.map((leg) => leg.instrumentKey).toSet();
-    final List<CustomerFnoLeg> smartlistPool = market == null
-        ? const []
+    final smartlistPool = market == null
+        ? <CustomerFnoLeg>[]
         : _smartlistKind == 'Highest OI'
             ? MintTickFnoDiscoveryFacts.highestOpenInterest(
                 market, now, _optionSide)
@@ -463,14 +455,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 market, now, _optionSide,
                 metric: _smartlistKind == 'Top traded'
                     ? 'VOLUME' : 'OI_GAIN');
-    final topSmartlist = smartlistPool
+    final smartlist = smartlistPool
         .where((leg) => searchKeys.contains(leg.instrumentKey))
-        .take(6).toList();
+        .take(5).toList();
     final freshCount = market == null ? 0
         : MintTickFnoDiscoveryFacts.freshLegs(market, now).length;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const SizedBox(height: 6),
       Row(children: [
         const Expanded(child: Text('Options',
           key: ValueKey('minttick-options-title'),
@@ -480,113 +471,88 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           key: const ValueKey('fno-discovery-refresh'),
           tooltip: 'Refresh options',
           onPressed: _loading ? null : _refresh,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const Icon(Icons.refresh_rounded, size: 21),
         ),
       ]),
-      const SizedBox(height: 10),
-      TextField(
-        key: const ValueKey('minttick-options-search'),
-        onChanged: (value) => setState(() => _search = value),
-        decoration: InputDecoration(
-          isDense: true,
-          prefixIcon: const Icon(Icons.search_rounded),
-          hintText: 'Search F&O',
-          filled: true,
-          fillColor: scheme.surfaceContainerLow,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        ),
-      ),
-      const SizedBox(height: 12),
-      Text('Listed Options', style: Theme.of(context).textTheme.titleLarge
-          ?.copyWith(fontWeight: FontWeight.w800)),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(flex: 4, child: OutlinedButton(
-          key: const ValueKey('minttick-options-index-picker'),
-          onPressed: () => showModalBottomSheet<void>(
-            context: context,
-            builder: (ctx) => SafeArea(child: ListTile(
-              title: const Text('Choose index'),
-              subtitle: const Text('NIFTY 50'),
-              trailing: const Icon(Icons.check_circle_outline),
-              onTap: () => Navigator.pop(ctx),
-            )),
-          ),
-          child: const Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(child: Text('NIFTY 50', overflow: TextOverflow.ellipsis)),
-              Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-            ]),
-        )),
-        const SizedBox(width: 7),
-        Expanded(flex: 4, child: OutlinedButton(
-          key: const ValueKey('minttick-options-expiry-picker'),
-          onPressed: _expiries.isEmpty ? null : () => _showExpirySheet(),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(child: Text(_expiry == null ? 'Expiry' : _ymd(_expiry!),
-                overflow: TextOverflow.ellipsis)),
-              const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-            ]),
-        )),
-        const SizedBox(width: 7),
-        _sideToggle('CE', 'Call'),
-        const SizedBox(width: 5),
-        _sideToggle('PE', 'Put'),
-      ]),
-      if (_loading) const Padding(
-        padding: EdgeInsets.only(top: 5),
-        child: LinearProgressIndicator(minHeight: 2)),
-      if (_error != null) Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(_error!, style: TextStyle(color: scheme.error))),
+      const SizedBox(height: 4),
+      _navigation(context),
+      if (_loading) const LinearProgressIndicator(minHeight: 2),
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Text(_error!,
+            style: TextStyle(fontSize: 12, color: scheme.error))),
       if (!_readOnlyConfigured && _rightsStatus != null)
-        Text(_rightsStatus!.replaceAll('_', ' '),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 10),
-      _optionsList(context, market, listed, now),
-      const SizedBox(height: 24),
-      Row(children: [
-        Icon(Icons.candlestick_chart_rounded, size: 20, color: scheme.primary),
-        const SizedBox(width: 8),
-        Expanded(child: Text('Options Smartlists',
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w800))),
-      ]),
-      const SizedBox(height: 10),
-      SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-        for (final kind in const ['Highest OI', 'Top traded', 'OI gainers'])
-          Padding(padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              key: ValueKey('minttick-options-smartlist-${kind.toLowerCase().replaceAll(' ', '-')}'),
-              label: Text(kind),
-              selected: _smartlistKind == kind,
-              onSelected: (_) => setState(() => _smartlistKind = kind),
-            )),
-      ])),
-      const SizedBox(height: 8),
-      if (topSmartlist.isNotEmpty)
-        Padding(padding: const EdgeInsets.only(bottom: 5),
-          child: Text('Provider snapshot · read only, not an executable quote',
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(_rightsStatus!.replaceAll('_', ' '),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant))),
-      _optionsList(context, market, topSmartlist, now,
-          emptyText: _smartlistKind == 'Highest OI'
-              ? 'No source-backed open-interest counts for this expiry.'
-              : _smartlistKind == 'Top traded'
-                  ? 'No recent provider-traded volume for this expiry.'
-                  : 'No positive OI changes in the recent provider chain.',
-          compact: true),
-      const SizedBox(height: 18),
-      // Retain the full exchange-listed chain and its navigation for traders.
-      _navigation(context),
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
       if (_section == 'Chain') ...[
-        if (_expiries.isNotEmpty) _expiryRow(context),
+        _chainFilters(context),
+        const SizedBox(height: 8),
         _chain(context, market, now),
       ] else if (_section == 'Movers') ...[
+        TextField(
+          key: const ValueKey('minttick-options-search'),
+          onChanged: (value) => setState(() => _search = value),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            hintText: 'Search contracts',
+            filled: true,
+            fillColor: scheme.surfaceContainerLow,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 9),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          _sideToggle('CE', 'Calls'),
+          const SizedBox(width: 8),
+          _sideToggle('PE', 'Puts'),
+        ]),
+        const SizedBox(height: 12),
+        Text('Listed Options',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        _optionsList(context, market, listed, now),
+        const SizedBox(height: 16),
+        Text('Options Smartlists',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final kind in const ['Highest OI', 'Top traded', 'OI gainers'])
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  key: ValueKey('minttick-options-smartlist-${kind.toLowerCase().replaceAll(' ', '-')}'),
+                  label: Text(kind),
+                  selected: _smartlistKind == kind,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) => setState(() => _smartlistKind = kind),
+                )),
+          ])),
+        if (smartlist.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('Provider snapshot · read only',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant))),
+        _optionsList(context, market, smartlist, now,
+          emptyText: _smartlistKind == 'Highest OI'
+              ? 'Verified open-interest counts unavailable.'
+              : _smartlistKind == 'Top traded'
+                  ? 'Verified traded volume unavailable.'
+                  : 'Verified OI changes unavailable.',
+          compact: true),
+        const SizedBox(height: 14),
         _movers(context, market, now),
       ] else if (_section == 'Universe') ...[
         MintTickFnoUniversePanel(
@@ -596,19 +562,41 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         const SizedBox(height: 8),
         _trade(context, _room),
       ],
-      if (_availableRooms.isNotEmpty && widget.onOpenRoom != null)
-        Align(alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: () => widget.onOpenRoom?.call(_room ?? _availableRooms.first),
-            child: const Text('Open trading room'),
-          )),
-      if (_availableRooms.isEmpty && widget.onCreateRoom != null)
-        Align(alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: widget.onCreateRoom,
-            child: const Text('Create F&O room'),
-          )),
       const SizedBox(height: 12),
+    ]);
+  }
+
+  Widget _chainFilters(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Row(children: [
+      // The current verified chain endpoint supports NIFTY 50 only.
+      // Do not render a selector that pretends other indices are available.
+      Expanded(child: Container(
+        key: const ValueKey('minttick-options-index-picker'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: c.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: c.outlineVariant)),
+        child: const Text('NIFTY 50', maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+      )),
+      const SizedBox(width: 8),
+      Expanded(child: OutlinedButton(
+        key: const ValueKey('minttick-options-expiry-picker'),
+        onPressed: _expiries.isEmpty ? null : _showExpirySheet,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          minimumSize: const Size(0, 43)),
+        child: Row(children: [
+          Expanded(child: Text(
+            _expiry == null ? 'Select expiry' : _ymd(_expiry!),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12))),
+          const Icon(Icons.keyboard_arrow_down_rounded, size: 17),
+        ]),
+      )),
     ]);
   }
 
