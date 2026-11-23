@@ -1097,7 +1097,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   Widget _chainHeader(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final secondary = switch (_chainView) {
-      'OI' => 'OI / ΔOI',
+      'OI' => 'OI / ΔOI · ref',
       'Greeks' => 'Δ / IV',
       'Depth' => 'BID / ASK',
       _ => 'LTP / CHANGE',
@@ -1187,7 +1187,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final changePct = hasTradeComparison
         ? (change! * 100 / leg.previousClose!)
         : chain?.referencePriceChangePct;
-    final oi = _displayOpenInterest(market, leg, now);
+    // For an OI/ΔOI pair, both figures must belong to the same V2
+    // observation. A newer V3 OI cannot be combined with an older V2 ΔOI
+    // without misleading traders about the implied change.
+    final oi = chain?.openInterest ?? _displayOpenInterest(market, leg, now);
     final oiDiff = chain?.openInterestChange;
     final delta = fresh && leg.delta != null ? leg.delta : chain?.delta;
     final iv = fresh && leg.iv != null ? leg.iv : chain?.iv;
