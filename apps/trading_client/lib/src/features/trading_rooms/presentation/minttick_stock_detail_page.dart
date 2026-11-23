@@ -8,7 +8,6 @@ import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
 import 'minttick_interactive_candle_chart.dart';
-import 'minttick_stock_detail_mock_sections.dart';
 
 const _quotePoll = Duration(seconds: 2);
 const _verifiedCandlePoll = Duration(seconds: 30);
@@ -285,7 +284,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           Row(children: [
-            MintTickEquityAvatar(tradingSymbol: stock.tradingSymbol, companyName: stock.name, size: 52),
+            MintTickEquityAvatar(tradingSymbol: stock.tradingSymbol, companyName: stock.name, size: 44),
             const SizedBox(width: 12),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,7 +334,9 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           ],
           const SizedBox(height: 12),
           _chartBlock(theme),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          _companyBlock(theme),
+          const SizedBox(height: 12),
           _statsBlock(theme),
           const SizedBox(height: 16),
           _depthBlock(theme),
@@ -349,12 +350,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               key: const ValueKey('stock-detail-watchlist-error'),
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.error)),
           ],
-          const SizedBox(height: 16),
-          MintTickStockDetailMockSections(symbol: stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')),
-          const SizedBox(height: 16),
-          Text('Prices are shown only when verified LIVE by MintTick’s backend. Chart bars are '
-              'stored historical candles, not live ticks. Information only, not investment advice.',
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+
         ],
       )),
     );
@@ -467,6 +463,51 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         ],
       ))),
     );
+  }
+
+  Widget _companyBlock(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final stock = widget.stock;
+    final facts = <(String, String)>[
+      ('Symbol', stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')),
+      if (stock.exchange.trim().isNotEmpty) ('Exchange', stock.exchange),
+      if (stock.exchangeSegment.trim().isNotEmpty) ('Segment', stock.exchangeSegment),
+      if (stock.instrumentType.trim().isNotEmpty)
+        ('Security', stock.instrumentType == 'EQ' ? 'Equity' : stock.instrumentType),
+      if (stock.lotSize > 0) ('Lot size', '${stock.lotSize}'),
+      if (stock.tickSize != null && stock.tickSize! > 0)
+        ('Tick size', '₹${stock.tickSize}'),
+    ];
+    return MintTickSurface(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Company information', key: const ValueKey('stock-detail-company-info'),
+          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        if (stock.name.trim().isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(stock.name, style: theme.textTheme.bodyMedium
+              ?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+        const SizedBox(height: 12),
+        LayoutBuilder(builder: (context, constraints) => Wrap(
+          spacing: 12, runSpacing: 12,
+          children: [
+            for (final (label, value) in facts)
+              SizedBox(width: (constraints.maxWidth - 12) / 2,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 2),
+                    Text(value, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+          ],
+        )),
+      ],
+    ));
   }
 
   Widget _chartBlock(ThemeData theme) {
