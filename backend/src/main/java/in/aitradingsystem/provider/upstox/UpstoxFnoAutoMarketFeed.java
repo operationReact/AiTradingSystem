@@ -7,7 +7,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
@@ -21,7 +23,9 @@ import org.springframework.stereotype.Service;
  *
  * Uses the existing SSM Upstox source and SAME in-memory market feed as the
  * operator, paper and customer discovery APIs. Starts at most one 64-key
- * connection after market open and stops on session close. No order, persistence,
+ * connection after market open. Splits that fixed budget across the three
+ * nearest listed expiries so other upcoming weeks do not remain all-dash.
+ * Stops only its own socket on session close. No order, persistence,
  * redistribution, training or automatic flag activation is performed.
  *
  * Explicit opt-in and independently reviewed display rights are BOTH required.
@@ -156,10 +160,11 @@ public final class UpstoxFnoAutoMarketFeed {
                 state = "NO_LISTED_EXPIRIES";
                 return;
             }
-            // Validates actual Upstox contract identities, CE/PE pairs, lot
-            // metadata and near-ATM ordering before allocating subscription.
-            var keys = UpstoxFnoV3LiveOperatorController
-                .listedNearAtmKeys(source, expiry);
+            // Each selected expiry is independently cross-checked against real
+            // Upstox listed CE/PE identities and the provider chain. The total
+            // budget remains 64 keys / one AUTO-owned socket; no dynamic
+            // takeover or subscription modification of an active connection.
+            var keys = planUpcomingExpiryKeys(source, listing.expiries(), today);
             if (keys.isEmpty() || keys.size() > UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS) {
                 state = "NO_MATCHING_CONTRACTS";
                 return;
@@ -174,6 +179,46 @@ public final class UpstoxFnoAutoMarketFeed {
             log.warn("Upstox F&O auto feed start failed: {}", failure.getClass().getSimpleName());
             state = "SOURCE_OR_SOCKET_UNAVAILABLE";
         }
+    }
+
+    /**
+     * The bounded AUTO feed previously spent all 64 slots on only the first
+     * weekly expiry. The customer can select later expiries, but their V3
+     * premiums then remain empty despite a healthy CONNECTED feed.
+     *
+     * Reserve complete CE/PE pairs for each of up to three currently listed
+     * expiries. Future expiries are best-effort: an unavailable later chain
+     * does not destroy a verified nearest-expiry subscription. A missing
+     * nearest source still fails closed. There is NO socket side effect here.
+     */
+    static List<String> planUpcomingExpiryKeys(UpstoxAnalyticsSource source,
+            List<LocalDate> listed, LocalDate today) {
+        if (listed == null || today == null) return List.of();
+        var expiries = listed.stream()
+            .filter(d -> d != null && !d.isBefore(today)
+                && !d.isAfter(today.plusDays(90)))
+            .distinct().sorted().limit(3).toList();
+        if (expiries.isEmpty()) return List.of();
+        final int limit = UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS;
+        final int evenPerExpiry = (limit / expiries.size() / 2) * 2;
+        final int leftoverPairs = (limit - evenPerExpiry * expiries.size()) / 2;
+        var selected = new ArrayList<String>();
+        for (int i = 0; i < expiries.size(); i++) {
+            final int quota = evenPerExpiry + (i < leftoverPairs ? 2 : 0);
+            try {
+                selected.addAll(UpstoxFnoV3LiveOperatorController
+                    .listedNearAtmKeys(source, expiries.get(i), quota));
+            } catch (RuntimeException missingLaterSource) {
+                if (i == 0) throw missingLaterSource;
+                // A later-week source gap cannot authorize made-up keys.
+                // The nearer verified contracts retain the source budget.
+            }
+        }
+        if (selected.isEmpty() || selected.size() > limit ||
+                Set.copyOf(selected).size() != selected.size()) {
+            return List.of();
+        }
+        return List.copyOf(selected);
     }
 
     private void stopOwned() {
