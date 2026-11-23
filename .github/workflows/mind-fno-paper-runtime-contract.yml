@@ -4,14 +4,18 @@ on:
     branches: [dev]
     paths:
       - 'scripts/mind/audit_fno_paper_runtime.py'
+      - 'infra/ec2-paper/fno_virtual_paper_enable.py'
       - 'scripts/mind/test_audit_fno_paper_runtime.py'
+      - 'scripts/tests/test_fno_virtual_paper_enable.py'
       - '.github/workflows/mind-fno-paper-runtime-contract.yml'
       - '.github/workflows/mind-live-verify.yml'
   push:
     branches: [dev]
     paths:
       - 'scripts/mind/audit_fno_paper_runtime.py'
+      - 'infra/ec2-paper/fno_virtual_paper_enable.py'
       - 'scripts/mind/test_audit_fno_paper_runtime.py'
+      - 'scripts/tests/test_fno_virtual_paper_enable.py'
       - '.github/workflows/mind-fno-paper-runtime-contract.yml'
 permissions:
   contents: read
@@ -29,3 +33,5 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mind/audit_fno_paper_runtime.py
           python3 -m unittest discover -s scripts/mind -p test_audit_fno_paper_runtime.py -v
+          python3 -m py_compile infra/ec2-paper/fno_virtual_paper_enable.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_virtual_paper_enable.py -v
