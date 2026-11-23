@@ -223,7 +223,9 @@ class CustomerMindFnoPaperCycleLedgerIT extends AbstractPostgresIT {
         assertThat(exit.liveMoney()).isFalse();
         assertThat(orderEngine.positions(owner,room)).isEmpty();
         assertThat(orderEngine.orders(owner,room)).hasSize(2);
-        assertThat(orderEngine.orders(owner,room).getLast().side()).isEqualTo("SELL");
+        assertThat(orderEngine.orders(owner,room).stream()
+            .filter(fill->"SELL".equals(fill.side()) && "PE".equals(fill.optionType()))
+            .count()).isEqualTo(1L);
         assertThat(recon.inspect(owner,room).completedRoundTrips()).isEqualTo(1);
         assertThat(recon.inspect(owner,room).status()).isEqualTo("BOOKKEEPING_MATCHED");
         assertThat(walletAudit.inspect(owner,room).cashAndRealizedPnlReconciled()).isTrue();
