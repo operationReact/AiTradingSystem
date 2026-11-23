@@ -55,6 +55,7 @@ public class FnoFuturesContractRegistry {
     private volatile String lastFailure;
     private volatile UniverseSnapshot universeSnapshot;
     private volatile String universeFailure;
+    private volatile Instant lastRefreshAttempt = Instant.EPOCH;
 
     @Autowired
     public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
@@ -74,6 +75,28 @@ public class FnoFuturesContractRegistry {
         refresh();
     }
 
+    /**
+     * A post-close deploy must not wait until the next 08:30 BOD job before
+     * the universe exists. Bootstrap once on startup, with a 30-minute retry
+     * floor if the public file is temporarily unavailable. Never fetch data
+     * without the existing independently authorized discovery feature flag.
+     * Does not touch, start or stop the live WebSocket.
+     */
+    @Scheduled(
+        initialDelayString = "${minttick.fno-research.master-bootstrap-delay-ms:15000}",
+        fixedDelayString = "${minttick.fno-research.master-bootstrap-check-ms:1800000}")
+    public synchronized void bootstrapIfNeeded() {
+        if (!discoveryVerified) return;
+        Instant now = clock.instant();
+        var current = universeSnapshot;
+        boolean freshToday = current != null && universeFailure == null &&
+            current.fetchedAt().atZone(IST).toLocalDate()
+                .equals(now.atZone(IST).toLocalDate());
+        if (freshToday || now.isBefore(lastRefreshAttempt.plus(
+                java.time.Duration.ofMinutes(30)))) return;
+        refresh();
+    }
+
     public synchronized void refresh() {
         if (!discoveryVerified) {
             lastFailure = "CONTRACT_DISCOVERY_NOT_VERIFIED";
@@ -81,6 +104,7 @@ public class FnoFuturesContractRegistry {
             return;
         }
         Instant now = clock.instant();
+        lastRefreshAttempt = now;
         try {
             var fetched = fetcher.fetch();
             LocalDate today = now.atZone(IST).toLocalDate();
