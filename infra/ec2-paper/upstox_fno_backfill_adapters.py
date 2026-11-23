@@ -198,7 +198,11 @@ class SQLiteHistoricalCandleSink:
             raise ValueError("INVALID_FNO_SINK_ROWS")
         # Stable normalized OHLCV+OI order. This proves what was actually
         # downloaded and persisted, NOT a cryptographic provider signature.
-        canonical = sorted(verified, key=lambda x:x[0])
+        # SQLite stores OHLC as REAL, so hash their exact stored numeric
+        # representation, not Python's int-versus-float input differences.
+        canonical = sorted(
+            ((r[0],float(r[1]),float(r[2]),float(r[3]),float(r[4]),
+              int(r[5]),int(r[6])) for r in verified), key=lambda x:x[0])
         normalized = hashlib.sha256(json.dumps(
             canonical, separators=(",",":"), ensure_ascii=True,
             allow_nan=False).encode("utf-8")).hexdigest()
