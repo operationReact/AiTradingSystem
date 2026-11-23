@@ -44,3 +44,26 @@ and inspect the `MIND_FNO_RESEARCH_RUNTIME:` marker.
 
 This probe never changes live order permissions, provisions AWS resources,
 places orders, or changes the broker credential configuration.
+
+## After-hours capability and expiry diagnosis (23 November follow-up)
+
+The research endpoint returns `NO_TRADE / MARKET_CLOSED` before reading
+historical candles or live quotes; that result cannot diagnose the feed.
+The protected customer-only, read-only endpoints are now tested alongside it:
+
+- `GET /api/customer/markets/fno/capability`: source-ready, V3 configured,
+  discovery/display flags, market session, stream state and bounded counts.
+- `GET /api/customer/markets/fno/expiries`: listed expiry status/count only,
+  with HTTP 409 classified as configuration blocked. No expiry or instrument
+  identities are exported into CI logs.
+
+The same verification account obtains a new short-lived Cognito access token.
+A deliberate 409, market-closed status, missing source or display gate is an
+**observed blocker**, never proof of licensing or automatically a trading
+permission. The user's stated personal-use permission does not mutate backend
+configuration and no technical source-data or strategy-E2E claims are promoted
+without observed original provenance and independent account/trade checks.
+
+Output markers: `MIND_FNO_CAPABILITY_RUNTIME:` and
+`MIND_FNO_EXPIRIES_RUNTIME:` followed by fixed status flags and aggregates.
+No orders are submitted or position, user, quote or provider secrets logged.
