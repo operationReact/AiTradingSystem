@@ -193,7 +193,9 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     try {
       final profile = await repo.companyProfile(widget.stock.id);
       if (!mounted || profile.tradingSymbol != widget.stock.tradingSymbol ||
-          profile.exchange != widget.stock.exchange) return;
+          profile.exchange != widget.stock.exchange) {
+        return;
+      }
       setState(() => _company = profile);
     } catch (_) {
       // Keep trustworthy catalogue identity visible while classified sources
