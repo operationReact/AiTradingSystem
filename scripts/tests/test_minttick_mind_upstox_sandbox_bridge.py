@@ -150,9 +150,9 @@ class MindToSandboxTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             p = Path(directory) / "mind.json"
             p.write_text(json.dumps(data))
-            with patch.object(bridge, "current_nse_master", return_value=master) as bod, \\
-                 patch.object(bridge.ssm, "load_sandbox_token") as token, \\
-                 patch.object(bridge.broker, "run_cycle") as orders, \\
+            with patch.object(bridge, "current_nse_master", return_value=master) as bod, \
+                 patch.object(bridge.ssm, "load_sandbox_token") as token, \
+                 patch.object(bridge.broker, "run_cycle") as orders, \
                  contextlib.redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(bridge.main(["--research-json", str(p),
                     "--execute-sandbox", "--confirmation", "SANDBOX_ONLY"]), 2)
