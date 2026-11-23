@@ -57,7 +57,10 @@ jobs:
     needs: local-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: broker-sandbox
+    # No job environment override: the dedicated IAM role is locked to the
+    # customized dev-ref GitHub OIDC subject (verified in run 45198291007).
+    # Manual dispatch still requires SANDBOX_ONLY, the dev branch, sandbox
+    # token IAM role, and the separate local-contract prerequisite.
     permissions:
       contents: read
       id-token: write
