@@ -78,14 +78,22 @@ public class CustomerPaperFnoMarketController {
     public record ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
             BigDecimal ask, Long openInterest, Long volume,
             Long previousOpenInterest, BigDecimal iv, BigDecimal delta,
-            BigDecimal theta, BigDecimal gamma, BigDecimal vega) {
-        /** Older Java construction sites do not invent missing provider counts. */
+            BigDecimal theta, BigDecimal gamma, BigDecimal vega,
+            BigDecimal closePrice) {
+        // Preserve older test/source construction without fabricating close.
+        public ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
+                BigDecimal ask, Long openInterest, Long volume,
+                Long previousOpenInterest, BigDecimal iv, BigDecimal delta,
+                BigDecimal theta, BigDecimal gamma, BigDecimal vega) {
+            this(ltp, bid, ask, openInterest, volume, previousOpenInterest,
+                    iv, delta, theta, gamma, vega, null);
+        }
         public ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
                 BigDecimal ask, Long openInterest, BigDecimal iv,
                 BigDecimal delta, BigDecimal theta,
                 BigDecimal gamma, BigDecimal vega) {
             this(ltp, bid, ask, openInterest, null, null,
-                    iv, delta, theta, gamma, vega);
+                    iv, delta, theta, gamma, vega, null);
         }
     }
     public record Market(String underlyingKey, LocalDate expiry, String source,
