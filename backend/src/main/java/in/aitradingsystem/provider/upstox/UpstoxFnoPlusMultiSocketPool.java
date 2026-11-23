@@ -85,7 +85,7 @@ public final class UpstoxFnoPlusMultiSocketPool {
     public synchronized PoolStatus status() {
         var shards = new ArrayList<Shard>();
         var primaryStatus = primary.status();
-        var primaryQuotes = primary.streamingCoverage();
+        var primaryQuotes = primary.localStreamingCoverage();
         shards.add(new Shard(0, primaryStatus.state(),
             primaryStatus.subscriptions(),
             primaryQuotes.freshExchangeLtp(),
