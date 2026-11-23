@@ -59,7 +59,19 @@ public class FnoFuturesContractRegistry {
 
     @Autowired
     public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
-            @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean discoveryVerified) {
+            @Value("${minttick.fno-research.contract-discovery-verified:false}")
+            boolean discoveryVerified,
+            @Value("${minttick.upstox-fno.display-rights-verified:false}")
+            boolean displayRightsVerified) {
+        // Mirror customer F&O discovery: independently verified display rights
+        // INCLUDE listed identity discovery. This does not confer retention,
+        // training, subscription, broker or LIVE order rights.
+        this(fetcher, Clock.systemUTC(),
+            discoveryVerified || displayRightsVerified);
+    }
+
+    public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
+            boolean discoveryVerified) {
         this(fetcher, Clock.systemUTC(), discoveryVerified);
     }
 
