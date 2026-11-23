@@ -198,7 +198,10 @@ def probe(token, today=None):
     key, contracts = future_key(get_json(url, token, "CONTRACTS"), last)
     if not key:
         return "NO_MATCHING_FUTURES", len(listed), 0, 0
-    first = last - timedelta(days=7)
+    # STR-176 requires seven COMPLETED trading sessions; seven calendar
+    # days can yield only five bars. Read 21 calendar days with the same
+    # single bounded Upstox GET, without storing candles or orders.
+    first = last - timedelta(days=21)
     url = (BASE + "/historical-candle/" + urllib.parse.quote(key, safe="")
            + "/day/" + last.isoformat() + "/" + first.isoformat())
     candles = count_candles(get_json(url, token, "CANDLES"), first, last)
