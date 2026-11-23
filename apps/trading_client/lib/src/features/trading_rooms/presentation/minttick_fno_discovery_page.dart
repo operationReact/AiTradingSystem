@@ -236,9 +236,11 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       if (!mounted || request != _generation) {
         return;
       }
+      // Listed-contract/V2 reference browsing does not require an AUTO V3
+      // socket. The backend enforces independent display rights, and returns
+      // NO_FRESH_QUOTES while V3 is unavailable; never unlock order entry.
       final readEnabled = capability.displayRightsVerified &&
-          capability.sourceReady &&
-          (capability.feedConfigured || !capability.marketOpen);
+          capability.sourceReady;
       final discoveryEnabled = (capability.displayRightsVerified ||
               capability.contractDiscoveryVerified) &&
           capability.sourceReady;
