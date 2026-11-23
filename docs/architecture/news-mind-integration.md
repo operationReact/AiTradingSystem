@@ -91,3 +91,30 @@ Produced by `news/feature/NewsFeaturePolicy` (PR 1) and `news/feature/NewsFeatur
 
 - Policy unit tests: `NewsFeaturePolicyTest` (15 tests) — TESTED (Maven, surefire).
 - Flutter, real-news, Android/iOS and live evidence: not part of PR 1. See each PR's description for its status.
+
+## 7. Status after PRs 2–7 (current)
+
+Labels: **IMPLEMENTED** (code on `dev`) · **TESTED** (automated test passes) · **DEPLOYED** (running in an environment) · **RUNTIME VERIFIED** (observed on real data) · **GAP** · **BLOCKED** (external dependency, named below). Sections 1–6 are the historical record and are not rewritten.
+
+| Area | Status | Evidence / PR |
+|---|---|---|
+| G1 RSS → analyzer bridge (approved sources only, default-deny) | IMPLEMENTED, TESTED; not DEPLOYED | PR #1820 (`1834bd4`); bridge, gate and health tests |
+| G1 scheduled analysis with bounded retries and backoff | IMPLEMENTED, TESTED; not DEPLOYED | PR #1820; `NewsAnalysisSchedulerIT` |
+| G2 scan candidates carry as-of news context (write-once) | IMPLEMENTED, TESTED (flag default off) | PR #1815 (`8ddd5b1`) |
+| G2 decision history exposes `news` (null = not recorded) | IMPLEMENTED, TESTED | PR #1815 |
+| G3 availability is analysis `created_at` | IMPLEMENTED, TESTED | PR #1813 policy; `NewsMindContextIT` |
+| G4 historical shadow annotation and leakage audit | IMPLEMENTED, TESTED | PR #1816 (`c11783a`); `NewsBacktestAnnotatorIT` |
+| G4 news inside walk-forward / replay evaluators | GAP | Evaluators return aggregate metrics only; not wired by design |
+| G4 incremental value versus no-news baseline | BLOCKED | No verified historical news corpus; no out-of-time validation |
+| G5 verified instrument mapping and score guards | IMPLEMENTED, TESTED | PR #1815; PR #1819 (`ccb5c5f`) |
+| G6 as-of latest analysis per article | IMPLEMENTED, TESTED | PR #1815 |
+| G7 real news observed | BLOCKED | Ingestion and provider default off; no rights-approved feed; no provider credential in this environment |
+| G8 Flutter News Impact in decision history | IMPLEMENTED, TESTED (Flutter 3.47.0), CI green | PR #1818 (`b9cb944`); 24 decode and widget tests |
+| G9 source rights, licence and retention | BLOCKED | No rights data exists on any source row; the approved list is the gate and asserts no licence |
+| Event class, blackout, freshness | IMPLEMENTED, TESTED | PR #1821 (CI pending at time of writing) |
+| F&O underlying resolution (UNKNOWN_CATALOG when absent) | IMPLEMENTED, TESTED; not wired to the scanner | PR #1821; catalogue source (Upstox FUT contracts) not yet injected |
+| Shadow strategy evaluation (promotion ineligible) | IMPLEMENTED, TESTED on FIXTURE_LABELLED data only | PR #1821; no real outcomes exist to evaluate |
+| Survivorship control | GAP | Caller must supply as-of universe membership; not implemented |
+| End-to-end wiring (RSS → bridge → analyzer → features → decision history) | TESTED on labelled fixtures | Wiring test in the PR that follows #1821; proves attribution, not real-news evidence |
+| Deployed backend revision and real API responses | BLOCKED | No deployment access from this environment |
+| LIVE execution | Unchanged, out of scope | No change to LIVE permissions or order paths |
