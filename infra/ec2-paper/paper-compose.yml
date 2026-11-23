@@ -84,6 +84,14 @@ services:
       # Optional bounded market-hours V3 subscribe; server requires source and
       # verified customer display rights before any automatic connection.
       MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED: ${MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED:-false}
+      # Documented Upstox Plus V3 5-connection tier is an account-level
+      # entitlement; these switches are independently reviewed and OFF by
+      # default. No automatic extra sockets, rights or real orders on deploy.
+      MINTTICK_UPSTOX_FNO_PLUS_FULL_CAPACITY_VERIFIED: ${MINTTICK_UPSTOX_FNO_PLUS_FULL_CAPACITY_VERIFIED:-false}
+      MINTTICK_UPSTOX_FNO_PLUS_MULTI_SOCKET_ENABLED: ${MINTTICK_UPSTOX_FNO_PLUS_MULTI_SOCKET_ENABLED:-false}
+      # Operator source-verified read-only watchlist; no unreviewed keys.
+      MINTTICK_UPSTOX_FNO_AUTO_EXPAND_WATCHLIST_ENABLED: ${MINTTICK_UPSTOX_FNO_AUTO_EXPAND_WATCHLIST_ENABLED:-false}
+      MINTTICK_UPSTOX_FNO_AUTO_EXPAND_UNDERLYINGS: ${MINTTICK_UPSTOX_FNO_AUTO_EXPAND_UNDERLYINGS:-}
       MINTTICK_UPSTOX_FNO_PAPER_ENABLED: ${MINTTICK_UPSTOX_FNO_PAPER_ENABLED:-false}
       # Separate real-money execution switch. No merge/deploy ever grants LIVE
       # trading implicitly; each order additionally requires broker and owner gates.
