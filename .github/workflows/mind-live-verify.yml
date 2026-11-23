@@ -68,10 +68,11 @@ jobs:
       - name: Validate read-only F&O runtime evidence parser with no network
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py scripts/mind/check_fno_market_snapshot.py
+          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py scripts/mind/check_fno_market_snapshot.py scripts/mind/check_fno_flutter_market_contract.py
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_research_runtime.py' -v
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_capability_runtime.py' -v
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_market_snapshot.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_flutter_market_contract.py' -v
 
       - name: Authenticated Mind reads and denials (per-run token, never printed)
         # The token is minted for this run only (Cognito access/ID tokens last 15 minutes). No long-lived
@@ -199,6 +200,11 @@ jobs:
                 "https://api.minttick.com/api/customer/markets/fno/market?expiry=$fno_nearest_expiry")"; then
               if ! python3 scripts/mind/check_fno_market_snapshot.py market "$market_code" "$market_file"; then
                 echo "FAIL authenticated F&O market snapshot contract"; fail=1
+              fi
+              if [ "$market_code" = 200 ]; then
+                if ! python3 scripts/mind/check_fno_flutter_market_contract.py "$market_file"; then
+                  echo "FAIL Flutter market payload structural parity"; fail=1
+                fi
               fi
             else
               echo "MIND_FNO_MARKET_SNAPSHOT:status=TRANSPORT_UNAVAILABLE;orders=false"
