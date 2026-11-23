@@ -39,7 +39,7 @@ public final class UpstoxFnoInstrumentUniverse {
             LocalDate expiry, BigDecimal strikePrice, int lotSize,
             BigDecimal tickSizePaise, BigDecimal freezeQuantity, boolean weekly) {
         public BigDecimal tickSizeRupees() {
-            return tickSizePaise.movePointLeft(2);
+            return tickSizePaise.movePointLeft(2).stripTrailingZeros();
         }
     }
 
