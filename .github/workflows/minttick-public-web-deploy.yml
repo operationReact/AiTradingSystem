@@ -34,6 +34,18 @@ jobs:
           for required in ("Z007211128LFW2NUELIKC", "minttick.com", "www.minttick.com", "AWS::CloudFront::Distribution", "OriginAccessControlId", "PublicAccessBlockConfiguration"):
               assert required in s, "Missing required DNS/security contract"
           assert "api.minttick.com." not in s, "Do not route the API until the private account edge is ready"
+          # Only these two exact dev subjects may publish web/APK assets.
+          for subject in (
+              "repo:operationReact/AiTradingSystem:ref:refs/heads/dev",
+              "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+          ):
+              assert "'" + subject + "'" in s, "Missing exact GitHub OIDC trust: " + subject
+          role = s.split("  GithubWebPublishRole:", 1)[1].split("Outputs:", 1)[0]
+          trust = role.split("      Policies:", 1)[0]
+          assert "StringEquals:" in trust
+          assert "StringLike:" not in trust and "*" not in trust
+          assert "token.actions.githubusercontent.com:aud" in trust
+          assert "sts.amazonaws.com" in trust
           PY
   publish:
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
