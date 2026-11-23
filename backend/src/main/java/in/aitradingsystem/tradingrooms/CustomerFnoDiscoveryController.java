@@ -51,7 +51,12 @@ public final class CustomerFnoDiscoveryController {
     private record RestPriceCache(LocalDate expiry, Instant obtainedAt,
         java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> values) {}
     private static final Duration CONTRACT_CACHE_TTL = Duration.ofSeconds(60);
-    private volatile ContractMetadata cachedMetadata;
+    private static final int MAX_CACHED_EXPIRIES = 8;
+    // Each selected expiry gets its own 60-second bounded cache entry.
+    // A single shared entry causes repeated V2 provider GETs when customers
+    // switch expiries or when the same expiry is polled by several clients.
+    private final java.util.LinkedHashMap<LocalDate, ContractMetadata> metadataByExpiry =
+        new java.util.LinkedHashMap<>(MAX_CACHED_EXPIRIES, 0.75f, true);
     private volatile CustomerFnoLastTradeSnapshotStore lastTrades;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -346,18 +351,21 @@ public final class CustomerFnoDiscoveryController {
     }
 
     /**
-     * Provider REST identity cache prevents unbounded option-contract API
-     * calls under customer polling. Immutable metadata only, no quote/rights
-     * cache and never any return of stale verified market prices.
+     * Per-expiry LRU of bounded read-only V2 chain reference snapshots and
+     * listed identities. The original provider retrievedAt is preserved;
+     * these are never V3 exchange ticks or order quotes. Source rights are
+     * enforced on every request BEFORE this cache is consulted.
+     *
+     * MAX_CACHED_EXPIRIES bounds memory independently of client concurrency
+     * and avoids re-fetching each expiry on every change of tab.
      */
     private synchronized ContractMetadata metadataFor(LocalDate expiry, Instant now) {
-        var existing = cachedMetadata;
-        if (existing != null && existing.expiry().equals(expiry) &&
-                !now.isBefore(existing.receivedAt()) &&
+        var existing = metadataByExpiry.get(expiry);
+        if (existing != null && !now.isBefore(existing.receivedAt()) &&
                 now.isBefore(existing.receivedAt().plus(CONTRACT_CACHE_TTL))) {
             return existing;
         }
-        cachedMetadata = null;
+        metadataByExpiry.remove(expiry);
         var contracts = CustomerPaperFnoMarketController.providerRead(
             () -> source.currentFnoOptionContracts(UNDERLYING, expiry));
         var chain = CustomerPaperFnoMarketController.providerRead(
@@ -371,7 +379,10 @@ public final class CustomerFnoDiscoveryController {
         }
         var result = new ContractMetadata(expiry, now,
             List.copyOf(contracts), chain);
-        cachedMetadata = result;
+        metadataByExpiry.put(expiry, result);
+        if (metadataByExpiry.size() > MAX_CACHED_EXPIRIES) {
+            metadataByExpiry.remove(metadataByExpiry.keySet().iterator().next());
+        }
         return result;
     }
 
