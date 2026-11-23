@@ -254,12 +254,23 @@ public final class CustomerUpstoxFnoLiveOrderService {
         // Explicitly checked broker order book: do not overlay a previous
         // pending order on the same NFO contract, including external clients.
         JsonNode book = broker.orders(owner).data();
-        if (hasOpenOrder(book, request.instrumentKey())) {
+        JsonNode brokerPositions = broker.positions(owner).data();
+        // Initial one-lot LIVE pilot cannot layer on ANY unsettled external
+        // broker order or existing NFO exposure. An external app may already
+        // have placed a different contract or hedge that our DB cannot see.
+        // SELL-to-close remains available for an independently verified long.
+        if ("BUY".equals(request.side()) &&
+                (hasUnsettledBrokerOrders(book) || hasExistingNfoExposure(brokerPositions))) {
+            throw error(HttpStatus.CONFLICT,
+                "Broker orders or F&O exposure require reconciliation before LIVE BUY");
+        }
+        if ("SELL".equals(request.side())
+                && hasOpenOrder(book, request.instrumentKey())) {
             throw error(HttpStatus.CONFLICT, "Existing broker order requires reconciliation");
         }
         int owned = 0;
         if ("SELL".equals(request.side())) {
-            owned = availableLongUnits(broker.positions(owner).data(),
+            owned = availableLongUnits(brokerPositions,
                     request.instrumentKey(), product);
             if (owned < quantity) {
                 throw error(HttpStatus.CONFLICT, "Broker has no sufficient long option units");
@@ -584,6 +595,35 @@ public final class CustomerUpstoxFnoLiveOrderService {
             throw error(HttpStatus.CONFLICT, "LIVE idempotency payload mismatch");
         }
         return existing;
+    }
+
+    /** All outstanding external orders block new LIVE exposure, across instruments. */
+    static boolean hasUnsettledBrokerOrders(JsonNode book) {
+        if (book == null || !book.isArray() || book.size() > 2000) return true;
+        for (JsonNode row : book) {
+            if (row == null || !row.isObject()) return true;
+            String state = row.path("status").asText("").toLowerCase(Locale.ROOT);
+            if (!List.of("complete", "cancelled", "canceled", "rejected")
+                    .contains(state)) return true;
+        }
+        return false;
+    }
+
+    /** Unreconciled derivatives exposure, including a short, blocks new BUY. */
+    static boolean hasExistingNfoExposure(JsonNode positions) {
+        if (positions == null || !positions.isArray() || positions.size() > 2000)
+            return true;
+        for (JsonNode row : positions) {
+            if (row == null || !row.isObject()) return true;
+            String exchange = row.path("exchange").asText("");
+            if (exchange.isBlank()) return true;
+            if ("NFO".equalsIgnoreCase(exchange)) {
+                JsonNode quantity = row.path("quantity");
+                if (!quantity.canConvertToInt() || quantity.asInt() != 0)
+                    return true;
+            }
+        }
+        return false;
     }
 
     static boolean hasOpenOrder(JsonNode book, String instrument) {
