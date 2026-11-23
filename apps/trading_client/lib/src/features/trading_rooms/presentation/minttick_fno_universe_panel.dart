@@ -26,6 +26,7 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
   int _generation = 0;
   bool _loading = false;
   bool _failed = false;
+  bool _invalidResponse = false;
   Timer? _searchDebounce;
   CustomerFnoUniversePage? _result;
   CustomerFnoUniverseStatus? _status;
@@ -52,6 +53,7 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
     setState(() {
       _loading = true;
       _failed = false;
+      _invalidResponse = false;
     });
     try {
       final status = await widget.repository.status();
@@ -87,10 +89,11 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
         _result = page;
         _coverage = live;
       });
-    } catch (_) {
+    } catch (error) {
       if (mounted && generation == _generation) {
         setState(() {
           _failed = true;
+          _invalidResponse = error is FormatException;
           _result = null;
         });
       }
@@ -219,9 +222,24 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
         const Padding(padding: EdgeInsets.symmetric(vertical: 15),
           child: LinearProgressIndicator(minHeight: 2)),
       if (_failed)
-        Padding(padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text('Instrument catalogue request failed. Refresh to retry.',
-            style: text.bodySmall?.copyWith(color: scheme.error))),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_invalidResponse
+                  ? 'Catalogue response could not be verified.'
+                  : 'Instrument catalogue is unavailable.',
+                style: text.bodySmall?.copyWith(color: scheme.error)),
+              TextButton.icon(
+                key: const ValueKey('fno-universe-retry'),
+                onPressed: () => unawaited(_load(refreshCoverage: true)),
+                icon: const Icon(Icons.refresh_rounded, size: 17),
+                label: const Text('Retry catalogue'),
+              ),
+            ],
+          )),
+
       if (!_loading && !_failed && status != null && !status.usable)
         Padding(padding: const EdgeInsets.symmetric(vertical: 12),
           child: Text('No verified current instrument master is loaded.',
