@@ -73,6 +73,8 @@ jobs:
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_capability_runtime.py' -v
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_market_snapshot.py' -v
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_flutter_market_contract.py' -v
+          python3 -m py_compile scripts/mind/audit_fno_paper_runtime.py
+          python3 -m unittest discover -s scripts/mind -p 'test_audit_fno_paper_runtime.py' -v
 
       - name: Authenticated Mind reads and denials (per-run token, never printed)
         # The token is minted for this run only (Cognito access/ID tokens last 15 minutes). No long-lived
@@ -214,6 +216,16 @@ jobs:
           else
             echo "MIND_FNO_MARKET_SNAPSHOT:status=NO_VERIFIED_EXPIRY;orders=false"
           fi
+          # PAPER runtime evidence for the existing verification customer only.
+          # GET-only. Never create/fund rooms, enable workers, place simulated
+          # orders, or treat this account's results as another owner's E2E.
+          umask 077
+          printf '%s' "$token" > "$RUNNER_TEMP/mind_fno_paper_verify_token"
+          if ! python3 scripts/mind/audit_fno_paper_runtime.py "$RUNNER_TEMP/mind_fno_paper_verify_token"; then
+            echo "FAIL protected read-only F&O PAPER runtime audit"
+            fail=1
+          fi
+          rm -f "$RUNNER_TEMP/mind_fno_paper_verify_token"
           for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
             if [ "$code" = 404 ]; then echo "PASS authenticated $path -> 404"; else echo "FAIL authenticated $path -> $code"; fail=1; fi
