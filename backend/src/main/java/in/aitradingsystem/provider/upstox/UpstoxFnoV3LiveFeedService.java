@@ -603,9 +603,36 @@ public class UpstoxFnoV3LiveFeedService {
                 socket = ws;
                 state = "SUBSCRIBING";
             }
-            ws.sendBinary(ByteBuffer.wrap(UpstoxFnoV3FeedCodec.subscription(
-                    "sub", "full", List.copyOf(subscribed), spotSubscribed)), true)
-                    .whenComplete((ignored, err) -> {
+            // The one-socket AUTO start is <=64, but source-verified additions
+            // can expand to 256. The V3 command builder deliberately enforces
+            // <=64 keys per command. Replaying all 256 as one command on
+            // reconnect would throw and silently lose *every* quote.
+            //
+            // Replay one bounded batch at a time with per-batch spot scope,
+            // preserving the original socket, key set and exchange-time gates.
+            var replay = new java.util.ArrayList<>(subscribed);
+            java.util.Collections.sort(replay);
+            CompletableFuture<WebSocket> replayed =
+                CompletableFuture.completedFuture(ws);
+            for (int i = 0; i < replay.size(); i += MAX_INITIAL_SUBSCRIPTIONS) {
+                var keys = List.copyOf(replay.subList(i,
+                    Math.min(i + MAX_INITIAL_SUBSCRIPTIONS, replay.size())));
+                var allowedSpot = spotSubscribed.stream().filter(keys::contains)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                byte[] command = UpstoxFnoV3FeedCodec.subscription(
+                    "sub", "full", keys, allowedSpot);
+                replayed = replayed.thenCompose(ignored -> {
+                    synchronized (UpstoxFnoV3LiveFeedService.this) {
+                        if (!wanted || destroyed || retryScheduled ||
+                                attempt != connectionAttemptId || socket != ws) {
+                            return CompletableFuture.failedFuture(
+                                new IllegalStateException("FNO_REPLAY_SESSION_CHANGED"));
+                        }
+                    }
+                    return ws.sendBinary(ByteBuffer.wrap(command), true);
+                });
+            }
+            replayed.whenComplete((ignored, err) -> {
                         if (err != null) {
                             scheduleReconnect(attempt);
                             ws.abort();
