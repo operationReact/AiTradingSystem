@@ -637,13 +637,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
 
   Widget _optionsList(BuildContext context, CustomerFnoMarket? market,
       List<CustomerFnoLeg> legs, DateTime now,
-      {String emptyText = 'No verified option contracts available.', bool compact = false}) {
+      {String emptyText = 'No verified option contracts available.',
+      bool compact = false}) {
     final scheme = Theme.of(context).colorScheme;
     final style = Theme.of(context).textTheme;
     if (legs.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text(emptyText, style: style.bodyMedium?.copyWith(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Text(emptyText, style: style.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant)),
       );
     }
@@ -651,16 +652,18 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         : MintTickFnoDiscoveryFacts.atmStrike(market, now);
     return Column(children: [
       Padding(
-        padding: const EdgeInsets.only(bottom: 2),
+        padding: const EdgeInsets.only(bottom: 3),
         child: Row(children: [
-          const Expanded(flex: 5, child: Text('Option')),
+          Expanded(flex: 6, child: Text('CONTRACT',
+            style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
           Expanded(flex: 3, child: Text(
-            compact && _smartlistKind == 'Top traded' ? 'Volume'
-              : compact && _smartlistKind == 'OI gainers' ? 'ΔOI' : 'OI',
+            compact && _smartlistKind == 'Top traded' ? 'VOLUME'
+                : compact && _smartlistKind == 'OI gainers' ? 'ΔOI' : 'OI',
             textAlign: TextAlign.right,
-            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
-          Expanded(flex: 3, child: Text('LTP', textAlign: TextAlign.right,
-            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
+            style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
+          Expanded(flex: 3, child: Text('LTP',
+            textAlign: TextAlign.right,
+            style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
         ]),
       ),
       for (final leg in legs)
@@ -668,42 +671,43 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           key: ValueKey(compact
               ? 'minttick-options-smartlist-contract-${leg.instrumentKey}'
               : 'minttick-options-contract-${leg.instrumentKey}'),
-          onTap: market == null ? null : () => _showLeg(context, market, leg, now),
+          onTap: market == null ? null
+              : () => _showLeg(context, market, leg, now),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 9),
             decoration: BoxDecoration(border: Border(bottom: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: .52)))),
+                color: scheme.outlineVariant.withValues(alpha: .42)))),
             child: Row(children: [
-              Expanded(flex: 5, child: Column(
+              Expanded(flex: 6, child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(leg.tradingSymbol, maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Text('NFO', style: style.labelSmall?.copyWith(
+                  Text(market == null || _strikeForLeg(market, leg) == null
+                      ? leg.tradingSymbol
+                      : '${_strike(_strikeForLeg(market, leg)!)} ${leg.side}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: style.bodyMedium?.copyWith(
+                      fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(market == null ? 'NFO' :
+                      'NIFTY · ${_ymd(market.expiry)}'
+                      '${atm == null ? '' : ' · ${_strikeBadge(leg, atm)}'}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: style.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant)),
-                    if (atm != null) ...[
-                      const SizedBox(width: 5),
-                      Text(_strikeBadge(leg, atm),
-                        style: style.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant)),
-                    ],
-                  ]),
                 ],
               )),
               Expanded(flex: 3, child: Text(
                 market != null && market.displayRightsVerified
                     ? compact && _smartlistKind == 'Top traded'
-                        ? _count(_chainSnapshot(market, leg, now)?.volume)
+                        ? _shortCount(_chainSnapshot(market, leg, now)?.volume)
                         : compact && _smartlistKind == 'OI gainers'
-                            ? _count(_chainSnapshot(market, leg, now)
+                            ? _shortCount(_chainSnapshot(market, leg, now)
                                 ?.openInterestChange)
-                            : _count(_displayOpenInterest(market, leg, now))
+                            : _shortCount(_displayOpenInterest(market, leg, now))
                     : '—',
-                textAlign: TextAlign.right,
-                style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                textAlign: TextAlign.right, maxLines: 1,
+                style: _tabular.copyWith(fontSize: 12,
+                  fontWeight: FontWeight.w600),
               )),
               Expanded(flex: 3, child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -712,18 +716,20 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                     market == null ? '—' : _displayQuote(market, leg, now)
                         ? _amount(leg.ltp)
                         : _amount(_chainSnapshot(market, leg, now)?.ltp),
-                    style: style.bodyLarge?.copyWith(fontWeight: FontWeight.w800,
-                      color: _fresh(market!, leg, now)
-                          ? (leg.priceChangePct ?? 0) < 0 ? scheme.error : scheme.primary
-                          : scheme.onSurfaceVariant)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: _tabular.copyWith(fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: market != null && _fresh(market, leg, now)
+                          ? (leg.priceChangePct ?? 0) < 0
+                              ? scheme.error : scheme.primary
+                          : scheme.onSurface)),
                   if (market != null &&
                       (_displayQuote(market, leg, now) ||
                        _chainSnapshot(market, leg, now) != null))
                     Text(_fresh(market, leg, now)
                         ? _changeText(leg.priceChangePct)
-                        : _displayQuote(market, leg, now)
-                          ? 'Last · ${_shortTime(leg.exchangeAt)}'
-                          : 'Chain · ${_shortTime(market.snapshotAt)}',
+                        : _displayQuote(market, leg, now) ? 'Last' : 'Snapshot',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: style.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
                 ],
@@ -1158,31 +1164,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       ..sort((a, b) => _pct(b).compareTo(_pct(a)));
     final losers = all.where((l) => _pct(l) < 0).toList()
       ..sort((a, b) => _pct(a).compareTo(_pct(b)));
-    final c = Theme.of(context).colorScheme;
-    Widget list(List<CustomerFnoLeg> legs) => legs.isEmpty
-        ? Text('None verified yet.',
-            style: Theme.of(context).textTheme.bodySmall)
-        : Column(children: [
-            for (final leg in legs.take(5))
-              _moverRow(context, market!, leg, now),
-          ]);
+    final t = Theme.of(context).textTheme;
+    if (all.isEmpty) {
+      return Text('Gainers and losers appear only with fresh exchange quotes '
+          'and verified previous closes.',
+        style: t.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant));
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _panel(context, 'Top gainers', 'Since previous close · fresh only',
-        gainers.isEmpty
-            ? Text('Change data unavailable until fresh V3 LTP and '
-                'previous-close quotes are verified.',
-                style: Theme.of(context).textTheme.bodySmall)
-            : list(gainers)),
-      const SizedBox(height: 14),
-      _panel(context, 'Top losers', 'Since previous close · fresh only',
-        list(losers)),
-      const SizedBox(height: 14),
-      _panel(context, 'Momentum and volume rankings',
-        'Not connected yet',
-        Text('5-min, 15-min, 1-hour momentum and most-traded rankings need '
-            'validated time-series and trading-volume inputs.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: c.onSurfaceVariant))),
+      if (gainers.isNotEmpty) ...[
+        Text('Top gainers', style: t.titleSmall?.copyWith(
+          fontWeight: FontWeight.w800)),
+        for (final leg in gainers.take(5))
+          _moverRow(context, market!, leg, now),
+        const SizedBox(height: 8),
+      ],
+      if (losers.isNotEmpty) ...[
+        Text('Top losers', style: t.titleSmall?.copyWith(
+          fontWeight: FontWeight.w800)),
+        for (final leg in losers.take(5))
+          _moverRow(context, market!, leg, now),
+      ],
     ]);
   }
 
@@ -1318,6 +1320,15 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   static String _count(num? n) => n == null || !n.isFinite || n < 0
       ? '—'
       : n.toInt().toString();
+
+  // Abbreviate only in dense tables; contract details retain exact values.
+  static String _shortCount(num? n) {
+    if (n == null || !n.isFinite || n < 0) return '—';
+    if (n >= 10000000) return '${(n / 10000000).toStringAsFixed(1)}Cr';
+    if (n >= 100000) return '${(n / 100000).toStringAsFixed(1)}L';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return n.toInt().toString();
+  }
 
   static String _amount(num? n) =>
       n == null || !n.isFinite || n <= 0 ? '—' : n.toStringAsFixed(2);
