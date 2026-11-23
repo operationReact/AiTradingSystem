@@ -447,7 +447,7 @@ public final class UpstoxAnalyticsSource {
         }
     }
 
-    private static FnoOptionQuote fnoQuote(JsonNode option) {
+    static FnoOptionQuote fnoQuote(JsonNode option) {
         if (!option.isObject()) throw new IllegalArgumentException();
         JsonNode market = option.path("market_data");
         if (!market.isObject()) throw new IllegalArgumentException();
