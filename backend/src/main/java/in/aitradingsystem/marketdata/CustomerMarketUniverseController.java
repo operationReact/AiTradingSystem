@@ -50,6 +50,85 @@ public final class CustomerMarketUniverseController {
                          List<IndexFacet> verifiedMemberships,
                          List<ClassificationState> classificationStates) {}
 
+    /** Catalogue identity and dated NSE index membership, not inferred financial fundamentals. */
+    public record CompanyMembership(String indexCode, String source, LocalDate sourceAsOf) {}
+    public record CompanyIdentity(long instrumentId, String tradingSymbol, String companyName,
+                                  String exchange, String instrumentType) {}
+    public record CompanyProfile(String contractVersion, long instrumentId, String tradingSymbol,
+                                 String companyName, String exchange, String securityType,
+                                 String industry, String sizeSegment,
+                                 List<CompanyMembership> indexMemberships) {}
+    private record IndustryProof(String indexCode, String industry, String source, LocalDate asOf) {}
+
+    @GetMapping("/company-profile")
+    public ResponseEntity<CompanyProfile> companyProfile(Authentication authentication,
+            @RequestParam long instrumentId) {
+        requireCustomer(authentication);
+        if (instrumentId < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid instrument ID");
+        }
+        List<CompanyIdentity> listings = jdbc.query("""
+            SELECT i.instrument_id, i.trading_symbol, i.instrument_name,
+                   i.exchange, i.instrument_type
+              FROM instrument_master i
+              JOIN instrument_catalogue_state s
+                ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+             WHERE i.active = TRUE AND i.instrument_id = ?
+               AND i.exchange IN ('NSE','BSE')
+            """ + InstrumentMasterRepository.CASH_EQUITY_PREDICATE + """
+             LIMIT 1
+            """, (rs, row) -> new CompanyIdentity(
+                rs.getLong("instrument_id"), rs.getString("trading_symbol"),
+                rs.getString("instrument_name"), rs.getString("exchange"),
+                rs.getString("instrument_type")), instrumentId);
+        if (listings.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Active equity not found");
+        }
+        CompanyIdentity listing = listings.get(0);
+        List<IndustryProof> proofs = "NSE".equals(listing.exchange()) ? jdbc.query("""
+            SELECT universe_code, sector, source, as_of
+              FROM market_universe_member
+             WHERE trading_symbol = ?
+               AND source IS NOT NULL AND TRIM(source) <> ''
+               AND as_of IS NOT NULL
+             ORDER BY universe_code
+            """, (rs, row) -> new IndustryProof(
+                rs.getString("universe_code"), rs.getString("sector"),
+                rs.getString("source"), rs.getObject("as_of", LocalDate.class)),
+                listing.tradingSymbol()) : List.of();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(profileFromProofs(listing, proofs));
+    }
+
+    /** Conflicting industry classifications remain absent rather than silently choosing a source. */
+    private static CompanyProfile profileFromProofs(CompanyIdentity listing, List<IndustryProof> proofs) {
+        List<IndustryProof> eligible = proofs.stream()
+            .filter(p -> p.indexCode() != null && !p.indexCode().isBlank()
+                && p.source() != null && !p.source().isBlank()
+                && p.asOf() != null && !p.asOf().isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"))))
+            .toList();
+        java.util.Set<String> industryValues = eligible.stream()
+            .map(IndustryProof::industry)
+            .filter(v -> v != null && !v.isBlank())
+            .map(v -> v.trim().toUpperCase(java.util.Locale.ROOT))
+            .collect(java.util.stream.Collectors.toSet());
+        String industry = industryValues.size() == 1
+            ? eligible.stream().map(IndustryProof::industry)
+                .filter(v -> v != null && !v.isBlank()).findFirst().orElse(null)
+            : null;
+        java.util.Set<String> codes = eligible.stream()
+            .map(IndustryProof::indexCode).collect(java.util.stream.Collectors.toSet());
+        String size = codes.contains("NIFTY100") || codes.contains("NIFTY50") ? "LARGE"
+            : codes.contains("MIDCAP150") ? "MID"
+            : codes.contains("SMALLCAP250") ? "SMALL"
+            : codes.contains("MICROCAP250") ? "MICRO" : null;
+        return new CompanyProfile("customer.market.company-profile.v1", listing.instrumentId(),
+            listing.tradingSymbol(), listing.companyName(), listing.exchange(),
+            listing.instrumentType(), industry, size,
+            eligible.stream().map(p -> new CompanyMembership(
+                p.indexCode(), p.source(), p.asOf())).toList());
+    }
+
     public record ExchangeQuoteCoverage(String exchange, long activeListings,
                                         long storedFullQuotes, long withProviderPreviousClose,
                                         Instant newestExchangeAt) {}
