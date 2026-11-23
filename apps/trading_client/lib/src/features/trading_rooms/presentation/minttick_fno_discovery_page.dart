@@ -288,6 +288,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   String _section = 'Chain';
   String _optionSide = 'ALL';
   String _smartlistKind = 'Highest OI';
+  String _chainView = 'Price';
   String _search = '';
   bool _showAllStrikes = false;
   bool _loading = false;
@@ -930,84 +931,158 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   Widget _chain(BuildContext context, CustomerFnoMarket? market,
       DateTime now) {
     final c = Theme.of(context).colorScheme;
-    final type = Theme.of(context).textTheme;
     if (market == null) {
       return _panel(context, 'NIFTY option chain', 'Exchange-listed contracts',
         const Text('No verified option contracts available for this expiry.'));
     }
-    final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
-    final near = atm ?? market.underlyingReferenceSpot;
+    final freshAtm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
+    final reference = freshAtm ?? market.underlyingReferenceSpot;
+    final displayAtm = MintTickFnoTerminalAnalytics.nearestStrike(market, reference);
     final strikes = MintTickFnoDiscoveryFacts.visibleStrikes(
-      market.strikes, near, showAll: _showAllStrikes,
+      market.strikes, reference, showAll: _showAllStrikes,
       radius: _windowRadius);
-    final hiddenCount = market.strikes.length - strikes.length;
-
+    final hidden = market.strikes.length - strikes.length;
+    final retrieved = market.snapshotAt;
+    final snapshotRecent = market.displayRightsVerified &&
+        retrieved != null && !retrieved.isAfter(now) &&
+        now.difference(retrieved) <= const Duration(minutes: 5);
+    final pcr = snapshotRecent ? MintTickFnoTerminalAnalytics.pcr(market) : null;
+    final pain = snapshotRecent
+        ? MintTickFnoTerminalAnalytics.estimatedMaxPain(market) : null;
+    final iv = snapshotRecent
+        ? MintTickFnoTerminalAnalytics.atmIv(market, reference) : null;
     return _panel(context, 'NIFTY option chain',
-      '${_ymd(market.expiry)} · ${market.strikes.length} listed strikes',
+      '${_ymd(market.expiry)} · ${market.strikes.length} strikes',
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (near != null)
-          Text(atm == null
-              ? 'Near ${_strike(near)} · provider reference'
-              : 'ATM ≈ ${_strike(atm)} · estimated from fresh option prices',
-            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-        Padding(
-          padding: const EdgeInsets.only(top: 3, bottom: 10),
-          child: Text(
-            market.status == 'MARKET_CLOSED'
-                ? 'Market closed · displayed prices are not live'
-                : market.hasFreshQuotes
-                    ? 'Fresh prices marked by color; other values may be snapshots'
-                    : 'Reference prices · not executable quotes',
-            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant),
-          ),
+        Row(children: [
+          Expanded(child: Text(reference == null
+              ? 'Spot reference unavailable'
+              : '${freshAtm != null ? 'Estimated ATM' : 'Near reference'} '
+                  '${_strike(reference)}',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+              color: c.onSurfaceVariant))),
+          Text(market.hasFreshQuotes
+              ? 'V3 / V2' : 'V2 reference',
+            style: TextStyle(fontSize: 10,
+              fontWeight: FontWeight.w700, color: c.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: Text(market.status == 'MARKET_CLOSED'
+              ? 'Market closed · prices are not live'
+              : market.hasFreshQuotes
+                  ? 'Exchange-timed LTP where verified'
+                  : 'Not executable · snapshot only',
+            style: TextStyle(fontSize: 10.5, color: c.onSurfaceVariant))),
+          if (retrieved != null)
+            Text('Fetched ${_shortTime(retrieved)}',
+              style: TextStyle(fontSize: 10, color: c.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          _metricTile(context, 'PCR · OI', pcr == null
+              ? '—' : pcr.toStringAsFixed(2)),
+          const SizedBox(width: 7),
+          _metricTile(context, 'Max pain · est.',
+              pain == null ? '—' : _strike(pain)),
+          const SizedBox(width: 7),
+          _metricTile(context, 'ATM IV · ref',
+              iv == null ? '—' : _decimal(iv)),
+        ]),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final metric in const ['Price', 'OI', 'Greeks', 'Depth'])
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  key: ValueKey('fno-chain-mode-${metric.toLowerCase()}'),
+                  selected: _chainView == metric,
+                  visualDensity: VisualDensity.compact,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  label: Text(metric, style: const TextStyle(fontSize: 11)),
+                  onSelected: (_) => setState(() => _chainView = metric),
+                ),
+              ),
+          ]),
         ),
-        // All five columns fit the available phone width. More metrics
-        // belong in the contract details sheet, not off-screen columns.
+        const SizedBox(height: 8),
         _chainHeader(context),
         for (final strike in strikes)
-          _chainRow(context, market, strike, atm, now),
+          _chainRow(context, market, strike, displayAtm, now),
         if (market.strikes.length > strikes.length || _showAllStrikes)
           Align(alignment: Alignment.centerRight,
-            child: TextButton(
+            child: TextButton.icon(
               key: const ValueKey('fno-chain-expand-strikes'),
               onPressed: () => setState(() => _showAllStrikes = !_showAllStrikes),
-              child: Text(_showAllStrikes
-                  ? 'Show near ATM'
-                  : 'Show all ${market.strikes.length} strikes ($hiddenCount more)'),
+              icon: Icon(_showAllStrikes ? Icons.center_focus_strong
+                  : Icons.unfold_more, size: 16),
+              label: Text(_showAllStrikes
+                  ? 'Near ATM'
+                  : 'All ${market.strikes.length} strikes (+hidden more)'),
             )),
+        const SizedBox(height: 2),
+        Text('Tap a premium to inspect quote source, IV, OI, spread and Greeks. '
+            'Calculated PCR and Max Pain require complete V2 OI coverage.',
+          style: TextStyle(fontSize: 10, color: c.onSurfaceVariant)),
       ]));
+  }
+
+  Widget _metricTile(BuildContext context, String label, String value) {
+    final c = Theme.of(context).colorScheme;
+    return Expanded(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+      decoration: BoxDecoration(
+        color: c.surfaceContainerLow,
+        border: Border.all(color: c.outlineVariant.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 9.5, color: c.onSurfaceVariant)),
+        const SizedBox(height: 2),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: _tabular.copyWith(fontSize: 13,
+            fontWeight: FontWeight.w800)),
+      ]),
+    ));
   }
 
   Widget _chainHeader(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: c.onSurfaceVariant, fontWeight: FontWeight.w700, fontSize: 10);
-    Widget heading(String label, int flex, {bool center = false}) =>
-        Expanded(flex: flex, child: Text(label,
-          textAlign: center ? TextAlign.center : TextAlign.right,
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: style));
+    final secondary = switch (_chainView) {
+      'OI' => 'OI / ΔOI',
+      'Greeks' => 'Δ / IV',
+      'Depth' => 'BID / ASK',
+      _ => 'LTP / CHANGE',
+    };
     return Column(children: [
+      Row(children: [
+        Expanded(flex: 5, child: Text('CALL · CE',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+            color: c.onSurfaceVariant))),
+        Expanded(flex: 3, child: Text('STRIKE',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11,
+            fontWeight: FontWeight.w800, color: c.onSurface))),
+        Expanded(flex: 5, child: Text('PUT · PE',
+          textAlign: TextAlign.right,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+            color: c.onSurfaceVariant))),
+      ]),
       Padding(
-        padding: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
-          Expanded(flex: 5, child: Text('CALL · CE',
-            textAlign: TextAlign.center, style: style)),
-          Expanded(flex: 3, child: Text('STRIKE',
-            textAlign: TextAlign.center,
-            style: style?.copyWith(color: c.onSurface))),
-          Expanded(flex: 5, child: Text('PUT · PE',
-            textAlign: TextAlign.center, style: style)),
+          Expanded(flex: 5, child: Text(secondary,
+            style: TextStyle(fontSize: 9, color: c.onSurfaceVariant))),
+          const Spacer(flex: 3),
+          Expanded(flex: 5, child: Text(secondary,
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 9, color: c.onSurfaceVariant))),
         ]),
       ),
-      Row(children: [
-        heading('OI', 2),
-        heading('LTP', 3),
-        heading('STRIKE', 3, center: true),
-        heading('LTP', 3),
-        heading('OI', 2),
-      ]),
-      Divider(color: c.outlineVariant, height: 11),
+      Divider(color: c.outlineVariant, height: 8),
     ]);
   }
 
@@ -1017,72 +1092,116 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final isAtm = atm != null && strike.strikePrice == atm;
     final callItm = atm != null && strike.strikePrice < atm;
     final putItm = atm != null && strike.strikePrice > atm;
-    final call = strike.call;
-    final put = strike.put;
     return Container(
       decoration: BoxDecoration(
         color: isAtm ? c.primary.withValues(alpha: .10) : null,
         border: Border(bottom: BorderSide(
-          color: c.outlineVariant.withValues(alpha: .42), width: .5))),
+          color: c.outlineVariant.withValues(alpha: .45), width: .5))),
       child: Row(children: [
-        Expanded(flex: 2, child: _chainCell(context, market, call, now,
-          text: call == null ? '—' : _shortCount(
-            _displayOpenInterest(market, call, now)), itm: callItm)),
-        Expanded(flex: 3, child: _chainCell(context, market, call, now,
-          text: _chainLtp(market, call, now),
-          strong: true, itm: callItm)),
+        Expanded(flex: 5, child: _chainLegCell(
+          context, market, strike.call, now, isCall: true, itm: callItm)),
         Expanded(flex: 3, child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 1),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 1),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (isAtm) Text('ATM', style: TextStyle(color: c.primary,
-              fontSize: 9, fontWeight: FontWeight.w800)),
+            if (isAtm)
+              Text('ATM', style: TextStyle(
+                color: c.primary, fontSize: 9, fontWeight: FontWeight.w800)),
             Text(_strike(strike.strikePrice),
               textAlign: TextAlign.center, maxLines: 1,
-              style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w800,
-                fontFeatures: [FontFeature.tabularFigures()])),
+              style: _tabular.copyWith(
+                fontSize: 12, fontWeight: FontWeight.w800)),
           ]),
         )),
-        Expanded(flex: 3, child: _chainCell(context, market, put, now,
-          text: _chainLtp(market, put, now),
-          strong: true, itm: putItm)),
-        Expanded(flex: 2, child: _chainCell(context, market, put, now,
-          text: put == null ? '—' : _shortCount(
-            _displayOpenInterest(market, put, now)), itm: putItm)),
+        Expanded(flex: 5, child: _chainLegCell(
+          context, market, strike.put, now, isCall: false, itm: putItm)),
       ]),
     );
   }
 
-  String _chainLtp(CustomerFnoMarket market, CustomerFnoLeg? leg,
-      DateTime now) {
-    if (leg == null) return '—';
-    if (_displayQuote(market, leg, now)) return _amount(leg.ltp);
-    return _amount(_chainSnapshot(market, leg, now)?.ltp);
-  }
-
-  Widget _chainCell(BuildContext context, CustomerFnoMarket market,
-      CustomerFnoLeg? leg, DateTime now, {required String text,
-      bool strong = false, bool itm = false}) {
+  Widget _chainLegCell(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoLeg? leg, DateTime now, {
+      required bool isCall, required bool itm}) {
     final c = Theme.of(context).colorScheme;
+    final alignment = isCall ? Alignment.centerLeft : Alignment.centerRight;
+    final textAlign = isCall ? TextAlign.left : TextAlign.right;
+    final chain = leg == null ? null : _chainSnapshot(market, leg, now);
     final fresh = leg != null && _fresh(market, leg, now);
-    final pct = fresh ? leg.priceChangePct : null;
-    final color = strong && pct != null
-        ? pct < 0 ? c.error : pct > 0 ? c.primary : c.onSurface
-        : strong ? c.onSurface : c.onSurfaceVariant;
+    final visible = leg != null && _displayQuote(market, leg, now);
+    final price = visible ? leg.ltp : chain?.ltp;
+    final change = fresh && leg?.previousClose != null && leg?.ltp != null
+        ? leg!.ltp! - leg.previousClose!
+        : chain?.referencePriceChange;
+    final changePct = fresh ? leg?.priceChangePct
+        : chain?.referencePriceChangePct;
+    final oi = leg == null ? null : _displayOpenInterest(market, leg, now);
+    final oiDiff = chain?.openInterestChange;
+    final delta = fresh && leg?.delta != null ? leg!.delta : chain?.delta;
+    final iv = fresh && leg?.iv != null ? leg!.iv : chain?.iv;
+    final bid = fresh && leg?.bid != null ? leg!.bid : chain?.bid;
+    final ask = fresh && leg?.ask != null ? leg!.ask : chain?.ask;
+    final primary = switch (_chainView) {
+      'OI' => _shortCount(oi),
+      'Greeks' => _decimal(delta, places: 3),
+      'Depth' => _amount(bid),
+      _ => _amount(price),
+    };
+    final secondary = switch (_chainView) {
+      'OI' => oiDiff == null ? 'ΔOI —'
+          : '${_signedShort(oiDiff)}  ${_signedPct(chain?.openInterestChangePct)}',
+      'Greeks' => 'IV ${_decimal(iv)}',
+      'Depth' => 'Ask ${_amount(ask)}',
+      _ => change == null || changePct == null ? 'Δ —'
+          : '${_signedAmount(change)}  ${_signedPct(changePct)}',
+    };
+    final changeColor = switch (_chainView) {
+      'OI' => oiDiff,
+      'Price' => change,
+      _ => null,
+    };
+    final movementColor = changeColor == null ? c.onSurfaceVariant
+        : changeColor > 0 ? c.primary
+        : changeColor < 0 ? c.error : c.onSurfaceVariant;
     return InkWell(
+      key: leg == null ? null :
+        ValueKey('fno-chain-leg-${leg.instrumentKey}'),
       onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
       child: Container(
-        color: itm ? c.primary.withValues(alpha: .045) : null,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
-        child: Text(text,
-          textAlign: TextAlign.right, maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: _tabular.copyWith(
-            fontSize: 11.5, fontWeight:
-              strong ? FontWeight.w800 : FontWeight.w500, color: color)),
+        alignment: alignment,
+        color: itm ? c.primary.withValues(alpha: .035) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 9),
+        child: Column(
+          crossAxisAlignment: isCall ? CrossAxisAlignment.start :
+              CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min, children: [
+          Text(primary, textAlign: textAlign, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _tabular.copyWith(
+              fontSize: 13.5, fontWeight: FontWeight.w800,
+              color: c.onSurface)),
+          const SizedBox(height: 3),
+          Text(secondary, textAlign: textAlign, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _tabular.copyWith(
+              fontSize: 9.7, fontWeight: FontWeight.w700,
+              color: movementColor)),
+        ]),
       ),
     );
+  }
+
+  static String _signedAmount(num? number) {
+    if (number == null || !number.isFinite) return '—';
+    return '${number >= 0 ? '+' : ''}${number.toStringAsFixed(2)}';
+  }
+
+  static String _signedShort(num? number) {
+    if (number == null || !number.isFinite) return '—';
+    return '${number >= 0 ? '+' : '−'}${_shortCount(number.abs())}';
+  }
+
+  static String _signedPct(num? number) {
+    if (number == null || !number.isFinite) return '—';
+    return '${number >= 0 ? '+' : ''}${number.toStringAsFixed(1)}%';
   }
 
   void _showLeg(BuildContext context, CustomerFnoMarket market,
