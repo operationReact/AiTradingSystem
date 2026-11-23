@@ -144,24 +144,22 @@ class MindToSandboxTests(unittest.TestCase):
                 token.assert_not_called()
                 orders.assert_not_called()
 
-    def test_explicit_nonfunded_execution_uses_validated_intent_only(self):
+    def test_untrusted_file_based_execution_is_disabled_even_with_confirmation(self):
         now = dt.datetime.now(dt.timezone.utc)
         data, master = samples(now)
-        expected = {"placed": True, "modified": True, "cancelled": True}
         with tempfile.TemporaryDirectory() as directory:
             p = Path(directory) / "mind.json"
             p.write_text(json.dumps(data))
-            with patch.object(bridge, "current_nse_master", return_value=master), \
-                 patch.object(bridge.ssm, "load_sandbox_token", return_value="secret-fixture"), \
-                 patch.object(bridge.broker, "sandbox_transport", return_value=object()) as transport, \
-                 patch.object(bridge.broker, "run_cycle", return_value=expected) as orders, \
+            with patch.object(bridge, "current_nse_master", return_value=master) as bod, \\
+                 patch.object(bridge.ssm, "load_sandbox_token") as token, \\
+                 patch.object(bridge.broker, "run_cycle") as orders, \\
                  contextlib.redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(bridge.main(["--research-json", str(p),
-                    "--execute-sandbox", "--confirmation", "SANDBOX_ONLY"]), 0)
-                self.assertIn("SIMULATED_LIFECYCLE:VERIFIED", out.getvalue())
-                transport.assert_called_once_with("secret-fixture")
-                args = orders.call_args.args
-                self.assertEqual(args[1:], (data["instrumentKey"], 65, "100.05", "0.05"))
+                    "--execute-sandbox", "--confirmation", "SANDBOX_ONLY"]), 2)
+                self.assertIn("FILE_EXECUTION_DISABLED", out.getvalue())
+                bod.assert_not_called()
+                token.assert_not_called()
+                orders.assert_not_called()
 
 
 if __name__ == "__main__":
