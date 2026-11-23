@@ -125,7 +125,8 @@ class MintTickFnoDiscoveryFacts {
     final chainRecent = snapshot != null && !snapshot.isAfter(utc) &&
         utc.difference(snapshot) <= const Duration(minutes: 5);
     int? oi(CustomerFnoLeg leg) {
-      if (market.hasFreshQuotes && recentTick(leg, utc)) {
+      if (market.hasFreshQuotes && recentTick(leg, utc) &&
+          leg.openInterest != null) {
         return leg.openInterest;
       }
       return chainRecent
