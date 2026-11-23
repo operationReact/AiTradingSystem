@@ -481,7 +481,7 @@ void main() {
         const ValueKey('minttick-options-smartlist-top-traded')));
     await tester.pump();
     expect(find.text('34.0K'), findsWidgets);
-    expect(find.text('Volume'), findsWidgets);
+    expect(find.text('VOLUME'), findsWidgets);
     await tester.ensureVisible(find.byKey(
         const ValueKey('minttick-options-smartlist-oi-gainers')));
     await tester.tap(find.byKey(
