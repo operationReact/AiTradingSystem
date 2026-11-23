@@ -986,7 +986,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       bool strong = false, bool itm = false}) {
     final c = Theme.of(context).colorScheme;
     final fresh = leg != null && _fresh(market, leg, now);
-    final pct = fresh ? leg?.priceChangePct : null;
+    final pct = fresh ? leg.priceChangePct : null;
     final color = strong && pct != null
         ? pct < 0 ? c.error : pct > 0 ? c.primary : c.onSurface
         : strong ? c.onSurface : c.onSurfaceVariant;
