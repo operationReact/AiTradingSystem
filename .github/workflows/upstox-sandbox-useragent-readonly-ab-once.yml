@@ -1,0 +1,84 @@
+name: Upstox sandbox User-Agent A/B read-only diagnostic (one-shot)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-sandbox-useragent-readonly-ab-once.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  compare-identical-requests:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Only run on exact newly added one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-sandbox-useragent-readonly-ab-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Assume existing locked sandbox SSM reader role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox-ua-${{ github.run_id }}
+      - name: Same authenticated read-only GET vs three User-Agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import sys
+          import urllib.error
+          import urllib.request
+          sys.path.insert(0, 'scripts')
+          from upstox_fno_sandbox_ssm import load_sandbox_token
+
+          token = load_sandbox_token()
+          origin = 'https://api-sandbox.upstox.com'
+          variants = (
+              ('PYTHON_URLLIB_DEFAULT', None),
+              ('MINTTICK_EXPLICIT', 'MintTick-Upstox-ReadOnly/1.0'),
+              ('UPSTOX_PYTHON_SDK', 'Swagger-Codegen/1.0.0/python'),
+          )
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+          print('SANDBOX_UA_AB_ONLY_GET:TRUE')
+          for path in ('/v3/order/place', '/v2/order/place'):
+              for label, agent in variants:
+                  headers = {
+                      'Authorization': 'Bearer ' + token,
+                      'Accept': 'application/json',
+                      'Content-Type': 'application/json',
+                  }
+                  if agent is not None:
+                      headers['User-Agent'] = agent
+                  if label == 'UPSTOX_PYTHON_SDK':
+                      headers['X-Upstox-SDK-Language'] = 'python'
+                      headers['X-Upstox-SDK-Version'] = '2.31.0'
+                  req = urllib.request.Request(origin + path, headers=headers, method='GET')
+                  try:
+                      with opener.open(req, timeout=8) as response:
+                          status = response.status
+                  except urllib.error.HTTPError as e:
+                      status = e.code
+                  except (OSError, urllib.error.URLError, TimeoutError) as e:
+                      print('SANDBOX_UA_AB:' + path + ':' + label + ':TRANSPORT_' + type(e).__name__)
+                      continue
+                  print('SANDBOX_UA_AB:' + path + ':' + label + ':HTTP_' + str(status))
+          print('SANDBOX_UA_AB_POST_PUT_DELETE:ZERO')
+          print('SANDBOX_UA_AB_REAL_MONEY_ORDERS:ZERO')
+          PY
