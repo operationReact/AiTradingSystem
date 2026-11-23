@@ -94,7 +94,8 @@ class SandboxLifecycleTests(unittest.TestCase):
                 self.assertEqual(calls, [])
 
     def test_only_fixed_sandbox_host_and_approved_paths(self):
-        self.assertEqual(probe.SANDBOX, "https://sandbox.upstox.com")
+        self.assertEqual(probe.SANDBOX, "https://api-sandbox.upstox.com")
+        self.assertNotEqual(probe.SANDBOX, "https://sandbox.upstox.com")
         self.assertNotIn("api-hft.upstox.com", probe.SANDBOX)
         with self.assertRaises(probe.SandboxError):
             probe.sandbox_transport("bad\nheader")
