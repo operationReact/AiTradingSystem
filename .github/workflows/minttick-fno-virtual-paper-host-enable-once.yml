@@ -39,6 +39,7 @@ jobs:
             'infra/ec2-paper/fno_virtual_paper_enable.py',
             'scripts/tests/test_fno_virtual_paper_enable.py',
             '.github/workflows/minttick-fno-virtual-paper-host-enable-once.yml',
+            '.github/workflows/mind-fno-paper-runtime-contract.yml',
           }
           assert paths==expected, "PAPER activation must be exact reviewed one-shot commit"
           script=Path('infra/ec2-paper/fno_virtual_paper_enable.py').read_text()
