@@ -84,8 +84,8 @@ class UpstoxFnoPlusMultiSocketPoolTest {
         assertThatThrownBy(()->denied.subscribeVerified(List.of("NSE_FO|61001")))
             .hasMessage("UPSTOX_PLUS_RIGHTS_OR_SESSION_UNVERIFIED");
         verify(extra.get(0),never()).start(anyList());
-        when(calendar.isInsideFnoSession(NOW)).thenReturn(false);
         var closed=pool(true);
+        when(calendar.isInsideFnoSession(NOW)).thenReturn(false);
         assertThatThrownBy(()->closed.subscribeVerified(List.of("NSE_FO|61001")))
             .hasMessage("UPSTOX_PLUS_RIGHTS_OR_SESSION_UNVERIFIED");
     }
