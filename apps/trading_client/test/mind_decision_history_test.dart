@@ -230,6 +230,14 @@ void main() {
       final bad = newsPayload(included: 0, status: 'NO_INCLUDED_EVIDENCE', net: null, direction: 'UNKNOWN');
       expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
     });
+
+    test('an excluded item with EXCLUDED_INVALID_SCORE (#1819) is accepted, not untrustworthy', () {
+      final ok = newsPayload(included: 0, status: 'NO_INCLUDED_EVIDENCE', net: null, direction: 'UNKNOWN');
+      final row = (ok['evidence'] as List).first as Map<String, dynamic>;
+      row['included'] = false;
+      row['status'] = 'EXCLUDED_INVALID_SCORE';
+      expect(decodedStatus(ok), MindNewsStatus.noIncludedEvidence);
+    });
   });
 }
 
