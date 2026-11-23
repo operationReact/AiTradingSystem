@@ -100,6 +100,19 @@ class FnoFuturesContractRegistryTest {
     }
 
     @Test
+    void startupBootstrapLoadsOnceWithoutWaitingForNextMorning() throws Exception {
+        var fetcher = mock(FuturesInstrumentMasterFetcher.class);
+        when(fetcher.fetch()).thenReturn(new FuturesInstrumentMasterFetcher.Fetched(
+            completeSyntheticUniverse(), "bootstrap-sha"));
+        var reg = registry(fetcher, true);
+        reg.bootstrapIfNeeded();
+        assertEquals("LOADED", reg.universeStatus().state());
+        assertEquals("bootstrap-sha", reg.universeStatus().sha256());
+        reg.bootstrapIfNeeded();
+        verify(fetcher, times(1)).fetch();
+    }
+
+    @Test
     void refreshIsNoOpWithoutVerifiedDiscoveryPermission() throws Exception {
         FuturesInstrumentMasterFetcher fetcher = mock(FuturesInstrumentMasterFetcher.class);
         var reg = registry(fetcher, false);
