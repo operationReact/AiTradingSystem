@@ -100,6 +100,26 @@ class FnoFuturesContractRegistryTest {
     }
 
     @Test
+    void independentlyVerifiedDisplayRightsAlsoPermitListedIdentityDiscovery()
+            throws Exception {
+        var fetcher = mock(FuturesInstrumentMasterFetcher.class);
+        when(fetcher.fetch()).thenReturn(new FuturesInstrumentMasterFetcher.Fetched(
+            completeSyntheticUniverse(), "display-approved"));
+        // Even when the separate research-only discovery flag is false,
+        // existing verified F&O display rights include contract identities.
+        var approved = new FnoFuturesContractRegistry(fetcher, false, true);
+        approved.refresh();
+        assertEquals("LOADED", approved.universeStatus().state());
+        assertEquals("display-approved", approved.universeStatus().sha256());
+
+        var deniedFetcher = mock(FuturesInstrumentMasterFetcher.class);
+        var denied = new FnoFuturesContractRegistry(deniedFetcher, false, false);
+        denied.refresh();
+        assertEquals("DISCOVERY_NOT_VERIFIED", denied.universeStatus().state());
+        verifyNoInteractions(deniedFetcher);
+    }
+
+    @Test
     void startupBootstrapLoadsOnceWithoutWaitingForNextMorning() throws Exception {
         var fetcher = mock(FuturesInstrumentMasterFetcher.class);
         when(fetcher.fetch()).thenReturn(new FuturesInstrumentMasterFetcher.Fetched(
