@@ -20,6 +20,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -33,6 +34,7 @@ public class UpstoxFnoV3LiveFeedService {
     // Conservative same-connection cap. Provider's standard Full limit is
     // higher, but account-level quotas must be verified before further scaling.
     static final int MAX_SUBSCRIPTIONS = 256;
+    static final int MAX_PLUS_FULL_ONLY_PER_SOCKET = 1500;
     static final int MAX_INITIAL_SUBSCRIPTIONS = 64;
     static final int MAX_INCREMENTAL_KEYS = 64;
     static final int MAX_FRAGMENT_BYTES = 1024 * 1024;
@@ -54,6 +56,7 @@ public class UpstoxFnoV3LiveFeedService {
     record Observation(UpstoxFnoV3FeedCodec.Tick tick, Instant observedAt) {}
 
     private final UpstoxAnalyticsSource source;
+    private final int subscriptionLimit;
     private final Clock clock;
     private final Dialer dialer;
     private final ScheduledExecutorService reconnects;
@@ -74,7 +77,9 @@ public class UpstoxFnoV3LiveFeedService {
     private volatile long connectionAttemptId;
 
     @Autowired
-    public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source) {
+    public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source,
+            @Value("${minttick.upstox-fno.plus-full-capacity-verified:false}")
+            boolean verifiedPlusFullCapacity) {
         this(source, Clock.systemUTC(),
                 (uri, listener) -> HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(10))
@@ -85,12 +90,20 @@ public class UpstoxFnoV3LiveFeedService {
                     Thread t = new Thread(r, "minttick-upstox-fno-stream-reconnect");
                     t.setDaemon(true);
                     return t;
-                }));
+                }), verifiedPlusFullCapacity);
     }
 
     UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source, Clock clock,
                                 Dialer dialer, ScheduledExecutorService reconnects) {
+        this(source, clock, dialer, reconnects, false);
+    }
+
+    UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source, Clock clock,
+            Dialer dialer, ScheduledExecutorService reconnects,
+            boolean verifiedPlusFullCapacity) {
         this.source = source;
+        this.subscriptionLimit = verifiedPlusFullCapacity
+            ? MAX_PLUS_FULL_ONLY_PER_SOCKET : MAX_SUBSCRIPTIONS;
         this.clock = clock;
         this.dialer = dialer;
         this.reconnects = reconnects;
@@ -161,7 +174,7 @@ public class UpstoxFnoV3LiveFeedService {
         var newKeys = verifiedKeys.stream()
             .filter(k -> !subscribed.contains(k)).toList();
         if (newKeys.isEmpty()) return status();
-        if (subscribed.size() + newKeys.size() > MAX_SUBSCRIPTIONS) {
+        if (subscribed.size() + newKeys.size() > subscriptionLimit) {
             throw new IllegalStateException("UPSTOX_FNO_SUBSCRIPTION_CAP_REACHED");
         }
         WebSocket current = socket;
@@ -189,6 +202,9 @@ public class UpstoxFnoV3LiveFeedService {
         subscribed = Set.copyOf(merged);
         return status();
     }
+
+    /** Local conservative full-mode quota, never a live account entitlement grant. */
+    int subscriptionLimit() { return subscriptionLimit; }
 
     private void connectOnce() {
         if (!wanted || destroyed) return;
@@ -483,7 +499,7 @@ public class UpstoxFnoV3LiveFeedService {
                 || !regularNseSession(clock.instant())) return List.of();
         return subscribed.stream()
             .filter(UpstoxFnoV3FeedCodec::validKey)
-            .limit(MAX_SUBSCRIPTIONS)
+            .limit(subscriptionLimit)
             .map(this::eligibleDisplayQuote)
             .flatMap(java.util.Optional::stream)
             .toList();
