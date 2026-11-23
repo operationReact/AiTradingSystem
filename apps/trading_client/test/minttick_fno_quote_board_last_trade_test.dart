@@ -39,7 +39,7 @@ CustomerFnoMarket _market({
           'ltp': lastPrice,
           'previousClose': 100,
           'openInterest': lastOi,
-          if (liveVolume != null) 'volume': liveVolume,
+          'volume': liveVolume,
         },
       },
     ],
