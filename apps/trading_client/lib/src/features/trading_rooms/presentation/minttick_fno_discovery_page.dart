@@ -1021,7 +1021,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                   : Icons.unfold_more, size: 16),
               label: Text(_showAllStrikes
                   ? 'Near ATM'
-                  : 'All ${market.strikes.length} strikes (+hidden more)'),
+                  : 'All ${market.strikes.length} strikes (\${hidden} more)'),
             )),
         const SizedBox(height: 2),
         Text('Tap a premium to inspect quote source, IV, OI, spread and Greeks. '
