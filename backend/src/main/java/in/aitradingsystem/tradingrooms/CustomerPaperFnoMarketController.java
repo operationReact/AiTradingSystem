@@ -55,7 +55,24 @@ public class CustomerPaperFnoMarketController {
                       boolean quoteFresh, boolean paperEligible,
                       BigDecimal ltp, BigDecimal previousClose, Long openInterest,
                       BigDecimal iv, BigDecimal delta, BigDecimal theta,
-                      BigDecimal gamma, BigDecimal vega) {}
+                      BigDecimal gamma, BigDecimal vega,
+                      Long volume, Long bidQuantity, Long askQuantity,
+                      Long lastTradedQuantity) {
+        // Existing option-leg construction stays compatible; unspecified V3
+        // quantities remain NULL, never confused with traded volume or OI.
+        public Leg(String instrumentKey, String tradingSymbol, String side,
+                int lotSize, BigDecimal tickSize, BigDecimal bid, BigDecimal ask,
+                Instant exchangeAt, Instant observedAt,
+                boolean quoteFresh, boolean paperEligible,
+                BigDecimal ltp, BigDecimal previousClose, Long openInterest,
+                BigDecimal iv, BigDecimal delta, BigDecimal theta,
+                BigDecimal gamma, BigDecimal vega) {
+            this(instrumentKey, tradingSymbol, side, lotSize, tickSize,
+                bid, ask, exchangeAt, observedAt, quoteFresh, paperEligible,
+                ltp, previousClose, openInterest, iv, delta, theta, gamma, vega,
+                null, null, null, null);
+        }
+    }
     public record Strike(BigDecimal strikePrice, Leg call, Leg put) {}
     /** Real Upstox V2 option-chain snapshot, NOT an exchange-timed trade or order quote. */
     public record ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
@@ -337,7 +354,11 @@ public class CustomerPaperFnoMarketController {
                 d == null ? null : d.delta(),
                 d == null ? null : d.theta(),
                 d == null ? null : d.gamma(),
-                d == null ? null : d.vega());
+                d == null ? null : d.vega(),
+                d == null ? null : d.volume(),
+                d == null ? null : d.bidQuantity(),
+                d == null ? null : d.askQuantity(),
+                d == null ? null : d.lastTradedQuantity());
         }
         // Execution-eligible quotes still require strictly validated bid/ask.
         var quote = marketOpen ? live.eligiblePaperQuote(c.instrumentKey())
@@ -368,7 +389,11 @@ public class CustomerPaperFnoMarketController {
                 d == null ? null : d.delta(),
                 d == null ? null : d.theta(),
                 d == null ? null : d.gamma(),
-                d == null ? null : d.vega());
+                d == null ? null : d.vega(),
+                d == null ? null : d.volume(),
+                d == null ? null : d.bidQuantity(),
+                d == null ? null : d.askQuantity(),
+                d == null ? null : d.lastTradedQuantity());
     }
 
     private boolean ownedPaperRoom(UUID owner,UUID room) {
