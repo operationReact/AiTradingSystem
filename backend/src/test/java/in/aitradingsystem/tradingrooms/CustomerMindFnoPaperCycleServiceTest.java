@@ -56,6 +56,103 @@ class CustomerMindFnoPaperCycleServiceTest {
             initial,cash,0L,0L,halted,1L,NOW,true);
     }
 
+    private CustomerMindFnoResearchController.FnoResearch validWorkerCandidate(String strategy) {
+        when(capability.internalCapability(owner,room)).thenReturn(
+            new CustomerPaperFnoCapabilityController.Capability(
+                "SOURCE_CHECK_REQUIRED",true,true,false,List.of()));
+        var result=mock(CustomerMindFnoResearchController.FnoResearch.class);
+        when(result.status()).thenReturn("RESEARCH_CANDIDATE");
+        when(result.strategyId()).thenReturn(strategy);
+        when(result.signal()).thenReturn("strategy.STR-181".equals(strategy)
+            ? "BUY_CALL_RESEARCH" : "BUY_PUT_RESEARCH");
+        when(result.quoteSource()).thenReturn("UPSTOX_V3_EXCHANGE_TIMED");
+        when(result.exchangeAt()).thenReturn(NOW.minusSeconds(2));
+        when(result.observedAt()).thenReturn(NOW.minusSeconds(1));
+        when(result.latestCompletedCloseAt()).thenReturn(NOW.minusSeconds(86400));
+        when(result.ask()).thenReturn(new BigDecimal("125"));
+        when(result.lotSize()).thenReturn(65);
+        when(result.instrumentKey()).thenReturn("NSE_FO|61001");
+        when(result.expiry()).thenReturn(LocalDate.of(2026,11,26));
+        when(research.inspectForOwnedPaperWorker()).thenReturn(result);
+        return result;
+    }
+
+    @Test
+    void futureAndStaleSignalBarsNeverReachPaperOrders() {
+        for (Instant invalidClose : List.of(NOW.plusSeconds(60),
+                NOW.minusSeconds(5*86400L))) {
+            reset(research,capability,orders);
+            var candidate=validWorkerCandidate("strategy.STR-181");
+            when(candidate.latestCompletedCloseAt()).thenReturn(invalidClose);
+            var result=cycle.runOptedIn(owner,room);
+            assertThat(result.reasonCode()).isEqualTo("FNO_SIGNAL_PROVENANCE_INVALID");
+            assertThat(result.action()).isEqualTo("NONE");
+            assertThat(result.liveMoney()).isFalse();
+            verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+        }
+    }
+
+    @Test
+    void quoteObservationBeforeExchangeTimeIsRejectedEvenIfOtherwiseFresh() {
+        var candidate=validWorkerCandidate("strategy.STR-181");
+        when(candidate.exchangeAt()).thenReturn(NOW.minusSeconds(1));
+        when(candidate.observedAt()).thenReturn(NOW.minusSeconds(2));
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.reasonCode()).isEqualTo("FNO_RESEARCH_QUOTE_STALE");
+        assertThat(result.action()).isEqualTo("NONE");
+        verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+    }
+
+    @Test
+    void duplicateLongPutCrossoverNeverSubmitsAnotherPaperOrder() {
+        validWorkerCandidate("strategy.STR-182");
+        when(jdbc.sql(anyString()).param(eq("owner"),eq(owner))
+            .param(eq("room"),eq(room)).param(eq("key"),anyString())
+            .query(Boolean.class).single()).thenReturn(true);
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.reasonCode()).isEqualTo("MIND_FNO_SIGNAL_ALREADY_TRADED");
+        assertThat(result.action()).isEqualTo("NONE");
+        verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+    }
+
+    @Test
+    void putSignalRoutesOnlyOneLongPutVirtualBuyAndRejectsSafely() {
+        validWorkerCandidate("strategy.STR-182");
+        when(jdbc.sql(anyString()).param(eq("owner"),eq(owner))
+            .param(eq("room"),eq(room)).param(eq("key"),anyString())
+            .query(Boolean.class).single()).thenReturn(false);
+        when(orders.submit(eq(owner),eq(room),anyString(),
+            eq("NSE_FO|61001"),eq(LocalDate.of(2026,11,26)),
+            eq("BUY"),eq(1),eq(new BigDecimal("125"))))
+            .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT,"Paper risk rejected"));
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.status()).isEqualTo("ORDER_REJECTED");
+        assertThat(result.action()).isEqualTo("NONE");
+        assertThat(result.liveMoney()).isFalse();
+        verify(orders,times(1)).submit(eq(owner),eq(room),anyString(),
+            eq("NSE_FO|61001"),eq(LocalDate.of(2026,11,26)),
+            eq("BUY"),eq(1),eq(new BigDecimal("125")));
+    }
+
+    @Test
+    void unknownVirtualSubmissionOutcomeNeverRetriesOrClaimsNoFill() {
+        validWorkerCandidate("strategy.STR-181");
+        when(jdbc.sql(anyString()).param(eq("owner"),eq(owner))
+            .param(eq("room"),eq(room)).param(eq("key"),anyString())
+            .query(Boolean.class).single()).thenReturn(false);
+        when(orders.submit(eq(owner),eq(room),anyString(),anyString(),
+            any(LocalDate.class),eq("BUY"),eq(1),any(BigDecimal.class)))
+            .thenThrow(new IllegalStateException("Simulated ledger uncertainty"));
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.status()).isEqualTo("UNKNOWN");
+        assertThat(result.reasonCode()).isEqualTo("PAPER_ORDER_OUTCOME_UNKNOWN");
+        assertThat(result.action()).isEqualTo("NONE");
+        assertThat(result.fillId()).isNull();
+        verify(orders,times(1)).submit(eq(owner),eq(room),anyString(),anyString(),
+            any(LocalDate.class),eq("BUY"),eq(1),any(BigDecimal.class));
+    }
+
     @Test
     void noPaperRightsMeansNoResearchOrVirtualOrder() {
         when(capability.capability(room,auth)).thenReturn(ResponseEntity.ok(
