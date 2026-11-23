@@ -175,10 +175,18 @@ public class CustomerMindFnoPaperCycleService {
     private CycleResult manageExisting(Instant now,UUID owner,UUID room,
             CustomerPaperFnoOrderService.Position position,
             String orderAudit,String cashAudit) {
-        if (position.quantity()<=0 || position.quantity()!=position.lotSize()
-                || !position.instrumentKey().matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")) {
+        // A corrupted position or ledger basis must never turn into a SELL.
+        // Validate all fields before querying the order history or quotes.
+        if (position==null || position.instrumentKey()==null
+                || !position.instrumentKey().matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || (!"CE".equals(position.optionType())
+                    && !"PE".equals(position.optionType()))
+                || position.expiry()==null || position.lotSize()<=0
+                || position.lotSize()>10000 || position.quantity()<=0
+                || position.quantity()!=position.lotSize()
+                || position.costBasisPaise()<=0) {
             return abstain(now,room,"BLOCKED","UNSUPPORTED_PAPER_POSITION",
-                null,position.instrumentKey(),orderAudit,cashAudit);
+                null,position==null ? null : position.instrumentKey(),orderAudit,cashAudit);
         }
         // Guard against closing manually originated or manually modified holdings.
         String latestKey=jdbc.sql("""
@@ -268,7 +276,7 @@ public class CustomerMindFnoPaperCycleService {
 
     static boolean shouldExit(long basisPaise,long indicativePnlPaise,
             boolean expiryDay,boolean nearClose) {
-        if(basisPaise<=0) return true; // invalid book should never stay hidden
+        if(basisPaise<=0) return false; // invalid basis must be blocked by manageExisting
         // Use BigDecimal to avoid integer overflow; estimated P&L includes sell fees.
         BigDecimal bps=BigDecimal.valueOf(indicativePnlPaise)
             .multiply(BigDecimal.valueOf(10000))
