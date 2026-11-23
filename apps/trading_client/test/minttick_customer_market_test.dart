@@ -448,17 +448,24 @@ void main() {
     expect(find.text('125.60'), findsOneWidget);
     expect(find.text('Buy 52.6%'), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-detail-market-badge')), findsOneWidget);
-    expect(find.byKey(const ValueKey('mock-data-badge')), findsNWidgets(3));
-    expect(find.text('Mock sector: Sample sector'), findsOneWidget);
-    expect(find.byKey(const ValueKey('mock-analyze-trade-room')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-detail-company-info')), findsOneWidget);
+    expect(find.text('Company information'), findsOneWidget);
+    expect(find.text('Lot size'), findsOneWidget);
+    expect(find.text('Tick size'), findsOneWidget);
+    expect(find.text('Mock sector: Sample sector'), findsNothing);
     expect(find.text('₹121.00'), findsOneWidget);
     expect(find.text('₹120.00'), findsOneWidget);
     expect(find.text('987654'), findsOneWidget);
     expect(find.text('+4.55 (+3.76%) · vs prev. close'), findsOneWidget);
-    expect(find.textContaining('provider day values'), findsOneWidget);
+    expect(find.textContaining('provider day values'), findsNothing);
     expect(fake.detailRequests, 1);
     expect(fake.candleIntervals, ['ONE_DAY']);
     expect(find.textContaining('Historical ·'), findsOneWidget);
+    // Diagnostics stay available via the info action rather than occupying
+    // the main chart card under every stock.
+    expect(find.byKey(const ValueKey('stock-chart-last-bar-time')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('stock-chart-provenance')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('stock-chart-last-bar-time')), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-chart-last-trade-time')), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-chart-coverage-warning')), findsOneWidget);
@@ -516,7 +523,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('stock-detail-range-5Y')));
     await tester.pumpAndSettle();
     expect(fake.candleIntervals.last, 'ONE_MONTH');
+    expect(find.byKey(const ValueKey('stock-detail-monthly-disclaimer')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('stock-chart-provenance')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('stock-detail-monthly-disclaimer')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     final fiveYears = fake.candleDateRanges.last;
     expect(DateTime.parse(fiveYears.$2).difference(DateTime.parse(fiveYears.$1)).inDays, 1826);
     await tester.tap(find.byKey(const ValueKey('stock-detail-range-MAX')));
