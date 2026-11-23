@@ -1214,6 +1214,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
     final pct = fresh ? leg.priceChangePct : null;
+    final snapshotDelta = chain?.referencePriceChange;
+    final snapshotPct = chain?.referencePriceChangePct;
+    final oiDelta = chain?.openInterestChange;
+    final oiDeltaPct = chain?.openInterestChangePct;
+    final refBid = fresh && leg.bid != null ? leg.bid : chain?.bid;
+    final refAsk = fresh && leg.ask != null ? leg.ask : chain?.ask;
+    final spread = refBid != null && refAsk != null && refAsk >= refBid
+        ? refAsk - refBid : null;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1243,13 +1251,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 _price(visible ? leg.ltp : chain?.ltp)),
             _sheetRow(sheetContext, 'Change since previous close',
                 pct == null ? '—' : _changeText(pct)),
+            if (chain != null) ...[
+              _sheetRow(sheetContext, 'V2 provider close · reference',
+                  _price(chain.closePrice)),
+              _sheetRow(sheetContext, 'V2 premium change · reference',
+                  snapshotDelta == null || snapshotPct == null
+                      ? '—' : '${_signedAmount(snapshotDelta)} '
+                          '(${_signedPct(snapshotPct)})'),
+              _sheetRow(sheetContext, 'Change in OI · V2 reference',
+                  _signedShort(oiDelta)),
+              _sheetRow(sheetContext, 'Change in OI % · V2 reference',
+                  _signedPct(oiDeltaPct)),
+            ],
             _sheetRow(sheetContext,
                 fresh && leg.bid != null ? 'Bid' : 'Bid · chain snapshot',
                 _price(fresh && leg.bid != null ? leg.bid : chain?.bid)),
             _sheetRow(sheetContext,
                 fresh && leg.ask != null ? 'Ask' : 'Ask · chain snapshot',
                 _price(fresh && leg.ask != null ? leg.ask : chain?.ask)),
-            _sheetRow(sheetContext, 'Previous close',
+            _sheetRow(sheetContext, 'Bid–ask spread',
+                spread == null ? '—' : _price(spread)),
+            _sheetRow(sheetContext, 'Previous close · V3',
                 _price(visible ? leg.previousClose : null)),
             _sheetRow(sheetContext,
                 fresh && leg.openInterest != null
@@ -1300,14 +1322,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
             const SizedBox(height: 12),
             if (chain != null) ...[
-              Text('Chain snapshot values are indicative and cannot be used '
-                  'as executable quotes or proof of a recent trade.',
+              Text('V2 price change compares provider close_price with '
+                  'V2 LTP. It is reference-only, not an exchange-timed '
+                  'live change or executable quote.',
                 style: type.bodySmall),
               const SizedBox(height: 8),
             ],
             Text('Browsing never sends an order. Order entry happens only in '
                 'your trading terminal after risk checks and confirmation.',
               style: type.bodySmall),
+            if (_room != null && widget.onOpenRoom != null) ...[
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                key: const ValueKey('fno-contract-open-room'),
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  widget.onOpenRoom?.call(_room!);
+                },
+                icon: const Icon(Icons.candlestick_chart_rounded, size: 18),
+                label: const Text('Open room to review trade'),
+              ),
+            ],
           ]),
       )),
     );
