@@ -313,7 +313,23 @@ public class UpstoxFnoV3LiveFeedService {
             java.math.BigDecimal iv, java.math.BigDecimal delta,
             java.math.BigDecimal theta, java.math.BigDecimal gamma,
             java.math.BigDecimal vega, java.math.BigDecimal bid,
-            java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt) {}
+            java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt,
+            Long volume, Long bidQuantity, Long askQuantity,
+            Long lastTradedQuantity) {
+        // Compatibility: an older feed fixture has UNKNOWN volume and depth
+        // sizes; never derive them from OI or synthesize a positive number.
+        public DisplayQuote(String key, java.math.BigDecimal ltp,
+                java.math.BigDecimal previousClose, Long openInterest,
+                java.math.BigDecimal iv, java.math.BigDecimal delta,
+                java.math.BigDecimal theta, java.math.BigDecimal gamma,
+                java.math.BigDecimal vega, java.math.BigDecimal bid,
+                java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt) {
+            this(key, ltp, previousClose, openInterest,
+                iv, delta, theta, gamma, vega,
+                bid, ask, exchangeAt, observedAt,
+                null, null, null, null);
+        }
+    }
 
     /**
      * Display-only V3 observation. A fresh exchange-timed LTPC is meaningful
@@ -347,7 +363,9 @@ public class UpstoxFnoV3LiveFeedService {
         return java.util.Optional.of(new DisplayQuote(
                 key, tick.ltp(), tick.previousClose(), tick.openInterest(),
                 tick.iv(), tick.delta(), tick.theta(), tick.gamma(), tick.vega(),
-                tick.bid(), tick.ask(), exchange, received));
+                tick.bid(), tick.ask(), exchange, received,
+                tick.volume(), tick.bidQuantity(), tick.askQuantity(),
+                tick.lastTradedQuantity()));
     }
 
     /**

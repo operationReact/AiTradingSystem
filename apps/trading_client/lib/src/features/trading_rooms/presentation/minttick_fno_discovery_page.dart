@@ -1090,6 +1090,20 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                         : visible ? 'OI · last trade' : 'Open interest',
                 _count(_displayOpenInterest(market, leg, now))),
             _sheetRow(sheetContext,
+                fresh && leg.volume != null
+                    ? 'Traded volume · V3'
+                    : 'Traded volume · chain snapshot',
+                _count(fresh && leg.volume != null
+                    ? leg.volume : chain?.volume)),
+            _sheetRow(sheetContext, 'Last traded quantity · V3',
+                _count(fresh ? leg.lastTradedQuantity : null)),
+            if (fresh && leg.bid != null && leg.ask != null) ...[
+              _sheetRow(sheetContext, 'Best bid quantity · V3',
+                  _count(leg.bidQuantity)),
+              _sheetRow(sheetContext, 'Best ask quantity · V3',
+                  _count(leg.askQuantity)),
+            ],
+            _sheetRow(sheetContext,
                 fresh && leg.iv != null ? 'IV' : 'IV · chain snapshot',
                 _decimal(fresh && leg.iv != null ? leg.iv : chain?.iv)),
             _sheetRow(sheetContext,

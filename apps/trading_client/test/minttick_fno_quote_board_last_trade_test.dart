@@ -7,6 +7,8 @@ CustomerFnoMarket _market({
   bool rights = true,
   num? lastPrice = 110.25,
   int? lastOi = 500,
+  int? liveVolume,
+  bool freshQuote = false,
   bool withChain = false,
   Duration age = const Duration(hours: 1),
 }) {
@@ -15,7 +17,7 @@ CustomerFnoMarket _market({
   return CustomerFnoMarket.decode({
     'underlyingKey': 'NSE_INDEX|Nifty 50',
     'expiry': '2026-12-08',
-    'status': 'MARKET_CLOSED',
+    'status': freshQuote ? 'FRESH_QUOTES' : 'MARKET_CLOSED',
     'snapshotAt': now.toIso8601String(),
     'displayRightsVerified': rights,
     'liveOrderEnabled': false,
@@ -32,11 +34,12 @@ CustomerFnoMarket _market({
           'ask': null,
           'exchangeAt': observed.toIso8601String(),
           'observedAt': observed.toIso8601String(),
-          'quoteFresh': false,
+          'quoteFresh': freshQuote,
           'paperEligible': false,
           'ltp': lastPrice,
           'previousClose': 100,
           'openInterest': lastOi,
+          'volume': liveVolume,
         },
       },
     ],
@@ -50,13 +53,14 @@ CustomerFnoMarket _market({
   });
 }
 
-Future<void> _pumpBoard(WidgetTester tester, CustomerFnoMarket market) async {
+Future<void> _pumpBoard(WidgetTester tester, CustomerFnoMarket market,
+    {bool fresh = false}) async {
   await tester.pumpWidget(MaterialApp(
     home: Scaffold(
       body: SingleChildScrollView(
         child: MintTickFnoQuoteBoard(
           market: market,
-          fresh: false,
+          fresh: fresh,
           strike: 25000,
           selected: null,
           onStrike: (_) {},
@@ -85,6 +89,33 @@ void main() {
         find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed,
       isNull,
     );
+  });
+
+  testWidgets('actual V3 exchange-time volume is shown but cannot enable PAPER',
+      (tester) async {
+    await _pumpBoard(tester, _market(
+        freshQuote: true, liveVolume: 125000,
+        age: const Duration(seconds: 1)), fresh: true);
+    expect(find.text('OI 500  ·  Volume 125000'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(
+        find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed,
+      isNull,
+    );
+  });
+
+  test('malformed V3 negative volume cannot enter the options model', () {
+    expect(() => CustomerFnoLeg.decode({
+      'instrumentKey': 'NSE_FO|61001',
+      'tradingSymbol': 'NIFTY 25000 CE',
+      'side': 'CE',
+      'lotSize': 65,
+      'tickSize': 0.05,
+      'bid': null, 'ask': null,
+      'exchangeAt': null, 'observedAt': null,
+      'quoteFresh': false, 'paperEligible': false,
+      'volume': -1,
+    }), throwsFormatException);
   });
 
   testWidgets('read-only chain snapshot has its own label and cannot trade',

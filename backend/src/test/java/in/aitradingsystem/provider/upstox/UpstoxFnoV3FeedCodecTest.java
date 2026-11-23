@@ -28,6 +28,10 @@ class UpstoxFnoV3FeedCodecTest {
         assertThat(x.bid()).isEqualByComparingTo("119.5");
         assertThat(x.ask()).isEqualByComparingTo("121");
         assertThat(x.openInterest()).isEqualTo(5000L);
+        assertThat(x.volume()).isEqualTo(125000L);
+        assertThat(x.lastTradedQuantity()).isEqualTo(65L);
+        assertThat(x.bidQuantity()).isEqualTo(100L);
+        assertThat(x.askQuantity()).isEqualTo(200L);
         assertThat(x.iv()).isEqualByComparingTo("0.21");
         assertThat(x.delta()).isEqualByComparingTo("-0.52");
         assertThat(x.theta()).isEqualByComparingTo("-2.1");
@@ -37,11 +41,12 @@ class UpstoxFnoV3FeedCodecTest {
 
     @Test
     void decodesMarketFullFeedWithTopDepthAndOpenInterest() {
-        Proto ltpc = new Proto().d(1, 125.1).v(2, TRADE_MS);
-        Proto depth = new Proto().m(1, new Proto().d(2, 125).d(4, 126));
+        Proto ltpc = new Proto().d(1, 125.1).v(2, TRADE_MS).v(3, 20);
+        Proto depth = new Proto().m(1, new Proto()
+            .v(1, 130).d(2, 125).v(3, 75).d(4, 126));
         Proto greeks = new Proto().d(1, 0.4).d(2, -3.5).d(3, 0.002).d(4, 5.1);
         Proto marketFF = new Proto().m(1, ltpc).m(2, depth).m(3, greeks)
-                .d(7, 4001).d(8, .18);
+                .v(6, 80000).d(7, 4001).d(8, .18);
         Proto f = new Proto().m(2, new Proto().m(1, marketFF));
         var x = UpstoxFnoV3FeedCodec.decode(
                 new Proto().m(2, new Proto().s(1, KEY).m(2, f)).v(3, TRADE_MS + 200).bytes())
@@ -50,6 +55,10 @@ class UpstoxFnoV3FeedCodecTest {
         assertThat(x.bid()).isEqualByComparingTo("125");
         assertThat(x.ask()).isEqualByComparingTo("126");
         assertThat(x.openInterest()).isEqualTo(4001);
+        assertThat(x.volume()).isEqualTo(80000L);
+        assertThat(x.lastTradedQuantity()).isEqualTo(20L);
+        assertThat(x.bidQuantity()).isEqualTo(130L);
+        assertThat(x.askQuantity()).isEqualTo(75L);
         assertThat(x.iv()).isEqualByComparingTo(".18");
         assertThat(x.delta()).isEqualByComparingTo(".4");
     }
@@ -114,6 +123,37 @@ class UpstoxFnoV3FeedCodecTest {
     }
 
     @Test
+    void absentV3VolumeOrTopSizeStaysMissingNeverFabricatedFromOI() {
+        Proto ltpc = new Proto().d(1, 150).v(2, TRADE_MS);
+        Proto frame = new Proto().m(2, new Proto().s(1, KEY)
+            .m(2, new Proto().m(3,
+                new Proto().m(1, ltpc).d(5, 9000))))
+            .v(3, TRADE_MS + 100);
+        var observation = UpstoxFnoV3FeedCodec.decode(frame.bytes()).ticks().getFirst();
+        assertThat(observation.openInterest()).isEqualTo(9000L);
+        assertThat(observation.volume()).isNull();
+        assertThat(observation.bidQuantity()).isNull();
+        assertThat(observation.askQuantity()).isNull();
+        assertThat(observation.lastTradedQuantity()).isNull();
+    }
+
+    @Test
+    void negativeV3VolumeOrDepthQuantityFailsClosed() {
+        Proto ltpc = new Proto().d(1, 150).v(2, TRADE_MS);
+        Proto negativeVolume = new Proto().m(2, new Proto().s(1, KEY)
+            .m(2, new Proto().m(3,
+                new Proto().m(1, ltpc).v(4, -1))));
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.decode(negativeVolume.bytes()))
+            .hasMessage("UPSTOX_FNO_INVALID_BINARY_FEED");
+        Proto negativeDepth = new Proto().m(2, new Proto().s(1, KEY)
+            .m(2, new Proto().m(3, new Proto()
+                .m(1, ltpc)
+                .m(2, new Proto().v(1, -1).d(2, 149).v(3, 100).d(4, 151)))));
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.decode(negativeDepth.bytes()))
+            .hasMessage("UPSTOX_FNO_INVALID_BINARY_FEED");
+    }
+
+    @Test
     void absentTradeTimestampIsNeverFabricatedFromFeedTimestamp() {
         var frame = new Proto().m(2, new Proto().s(1, KEY)
                 .m(2, new Proto().m(1, new Proto().d(1, 120.5))))
@@ -169,7 +209,8 @@ class UpstoxFnoV3FeedCodecTest {
     /** Real LTPC/analytics payload without first-level depth. */
     static byte[] validFirstLevelWithoutDepth() {
         Proto ltpc = new Proto().d(1, 120.5).v(2, TRADE_MS).v(3, 65).d(4, 130);
-        Proto first = new Proto().m(1, ltpc).d(5, 5000).d(6, .21);
+        Proto first = new Proto().m(1, ltpc).v(4, 125000)
+            .d(5, 5000).d(6, .21);
         return new Proto().m(2,
                 new Proto().s(1, KEY).m(2, new Proto().m(3, first)))
                 .v(3, TRADE_MS + 1000).bytes();
@@ -180,7 +221,7 @@ class UpstoxFnoV3FeedCodecTest {
         Proto firstDepth = new Proto().v(1, 100).d(2, 119.5).v(3, 200).d(4, 121);
         Proto greeks = new Proto().d(1, -0.52).d(2, -2.1).d(3, .001).d(4, 4.2);
         Proto first = new Proto().m(1, ltpc).m(2, firstDepth).m(3, greeks)
-                .d(5, 5000).d(6, .21);
+                .v(4, 125000).d(5, 5000).d(6, .21);
         return new Proto().m(2, new Proto().s(1, KEY).m(2, new Proto().m(3, first)))
                 .v(3, TRADE_MS + 1000).bytes();
     }

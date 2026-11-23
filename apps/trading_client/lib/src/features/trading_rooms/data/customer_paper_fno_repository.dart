@@ -298,6 +298,7 @@ class CustomerFnoLeg {
     required this.quoteFresh,
     required this.paperEligible,
     this.ltp, this.previousClose, this.openInterest,
+    this.volume, this.bidQuantity, this.askQuantity, this.lastTradedQuantity,
     this.iv, this.delta, this.theta, this.gamma, this.vega,
   });
 
@@ -306,6 +307,9 @@ class CustomerFnoLeg {
   final num? ltp;
   final num? previousClose;
   final int? openInterest;
+  /// These are V3 exchange-time observations only, never V2 reference data.
+  /// Volume != OI != last trade quantity != top bid/ask quantity.
+  final int? volume, bidQuantity, askQuantity, lastTradedQuantity;
   final num? iv, delta, theta, gamma, vega;
 
   /// Only populated by a fresh exchange-timed authorised V3 observation.
@@ -351,6 +355,10 @@ class CustomerFnoLeg {
     final ltp = value['ltp'];
     final previousClose = value['previousClose'];
     final openInterest = value['openInterest'];
+    final volume = value['volume'];
+    final bidQuantity = value['bidQuantity'];
+    final askQuantity = value['askQuantity'];
+    final lastTradedQuantity = value['lastTradedQuantity'];
     final iv = value['iv'];
     final delta = value['delta'];
     final theta = value['theta'];
@@ -361,10 +369,16 @@ class CustomerFnoLeg {
         throw const FormatException('Invalid V3 option metric');
       }
     }
+    for (final count in [
+      openInterest, volume, bidQuantity, askQuantity, lastTradedQuantity,
+    ]) {
+      if (count != null && (count is! int || count < 0)) {
+        throw const FormatException('Invalid V3 option count');
+      }
+    }
     if ((ltp != null && ltp <= 0) ||
         (previousClose != null && previousClose <= 0) ||
-        (iv != null && iv < 0) ||
-        (openInterest != null && (openInterest is! int || openInterest < 0))) {
+        (iv != null && iv < 0)) {
       throw const FormatException('Invalid V3 option metric range');
     }
     // A quote is only usable when fresh and paper eligible; the server says so.
@@ -382,6 +396,10 @@ class CustomerFnoLeg {
       paperEligible: eligible,
       ltp: ltp as num?, previousClose: previousClose as num?,
       openInterest: openInterest as int?,
+      volume: volume as int?,
+      bidQuantity: bidQuantity as int?,
+      askQuantity: askQuantity as int?,
+      lastTradedQuantity: lastTradedQuantity as int?,
       iv: iv as num?, delta: delta as num?, theta: theta as num?,
       gamma: gamma as num?, vega: vega as num?,
     );

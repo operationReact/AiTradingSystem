@@ -239,7 +239,9 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           style: t.labelSmall?.copyWith(
             color: pct >= 0 ? c.primary : c.error),
           maxLines: 1, overflow: TextOverflow.ellipsis),
-        Text('OI ${oi ?? '—'}  ·  Volume —',
+        Text('OI ${oi ?? '—'}  ·  '
+          '${live ? 'Volume' : chain?.volume != null ? 'Chain Vol' : 'Volume'} '
+          '${(live ? leg.volume : chain?.volume) ?? '—'}',
           style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
