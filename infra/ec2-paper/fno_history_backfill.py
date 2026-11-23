@@ -262,7 +262,7 @@ class MetadataQueue:
             raise ValueError("INVALID_FNO_STATE")
         allowed_reasons = {"NONE","RATE_LIMIT","PROVIDER_5XX","TRANSPORT",
                            "AUTH_REJECTED","INVALID_DATA","SINK_ERROR","RETRY_EXHAUSTED",
-                           "PROVIDER_4XX"}
+                           "PROVIDER_4XX","SINK_PROVENANCE_REJECTED"}
         if reason not in allowed_reasons or type(rows) is not int or rows < 0:
             raise ValueError("INVALID_FNO_RECEIPT")
         if state != "DONE" and rows:
@@ -387,6 +387,13 @@ class BackfillWorker:
             self.rights.require(batch.interval, self.today())
             try:
                 written = self.sink.upsert(batch, rows, batch.dedupe_key)
+            except ValueError:
+                # Immutable source conflicts are custody failures, not
+                # transient transport issues. Do not endlessly retry and
+                # never allow a revised old candle to overwrite evidence.
+                self.queue.finish(batch,state="BLOCKED",
+                                  reason="SINK_PROVENANCE_REJECTED")
+                return "BLOCKED"
             except (OSError, TimeoutError, RuntimeError):
                 self.queue.finish(batch,state="RETRY",reason="SINK_ERROR",
                                   retry_after=min(600,2 ** min(batch.attempts,9)))
