@@ -169,6 +169,67 @@ void main() {
       expect(find.textContaining('failed validation and is not used'), findsOneWidget);
       expect(find.textContaining('Evidence direction'), findsNothing);
     });
+
+    // Contradictory or out-of-window payloads must fail closed: untrustworthy, never evidence.
+    MindNewsStatus decodedStatus(Map<String, dynamic> news) =>
+        MindDecisionHistory.decode(history([record()..['news'] = news])).decisions.single.news!.status;
+
+    test('NO_COVERAGE with counts, a net and a bullish label is untrustworthy (reviewer case)', () {
+      final bad = newsPayload(status: 'NO_COVERAGE', net: 0.6, direction: 'POSITIVE', included: 1)
+        ..['evidence'] = <Map<String, dynamic>>[]
+        ..['uncertainty'] = 'UNKNOWN';
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
+
+    test('a genuinely empty NO_COVERAGE decodes as no coverage, distinct from absent', () {
+      final ok = newsPayload(status: 'NO_COVERAGE', net: null, direction: 'UNKNOWN', included: 0)
+        ..['evidence'] = <Map<String, dynamic>>[]
+        ..['uncertainty'] = 'UNKNOWN'
+        ..['excludedCount'] = 0;
+      expect(decodedStatus(ok), MindNewsStatus.noCoverage);
+    });
+
+    test('NO_INCLUDED_EVIDENCE that carries a net is untrustworthy', () {
+      final bad = newsPayload(status: 'NO_INCLUDED_EVIDENCE', net: 0.5, direction: 'UNKNOWN', included: 0);
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
+
+    test('INCLUDED whose label contradicts its net is untrustworthy', () {
+      final bad = newsPayload(net: -0.6, direction: 'POSITIVE');
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
+
+    test('included evidence published after asOf is untrustworthy', () {
+      final bad = newsPayload();
+      (bad['evidence'] as List).first['publishedAt'] = '2026-11-13T10:00:00Z';
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
+
+    test('included evidence analyzed after asOf is untrustworthy', () {
+      final bad = newsPayload();
+      (bad['evidence'] as List).first['analysisAvailableAt'] = '2026-11-13T10:00:00Z';
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
+
+    test('included evidence past its validity window is untrustworthy', () {
+      final bad = newsPayload();
+      (bad['evidence'] as List).first['validUntil'] = '2026-11-13T09:31:00Z';
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
+
+    test('an excluded item marked INCLUDED, or an unknown reason code, is untrustworthy', () {
+      final excludedMarked = newsPayload();
+      (excludedMarked['evidence'] as List).first['included'] = false;
+      expect(decodedStatus(excludedMarked), MindNewsStatus.untrustworthy);
+      final unknownCode = newsPayload();
+      (unknownCode['evidence'] as List).first['status'] = 'EXCLUDED_MADE_UP';
+      expect(decodedStatus(unknownCode), MindNewsStatus.untrustworthy);
+    });
+
+    test('included rows may never outnumber the included count', () {
+      final bad = newsPayload(included: 0, status: 'NO_INCLUDED_EVIDENCE', net: null, direction: 'UNKNOWN');
+      expect(decodedStatus(bad), MindNewsStatus.untrustworthy);
+    });
   });
 }
 

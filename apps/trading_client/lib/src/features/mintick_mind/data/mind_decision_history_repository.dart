@@ -199,25 +199,62 @@ class MindNewsContext {
         (net is num && (net < -1 || net > 1))) {
       throw const FormatException('Untrustworthy news context');
     }
-    // Unknown must never become directional: direction is UNKNOWN exactly when no net exists.
     final hasNet = net is num;
-    if (hasNet == (direction == 'UNKNOWN')) throw const FormatException('Direction contradicts evidence');
-    if (status == MindNewsStatus.includedEvidence && (!hasNet || included == 0)) {
-      throw const FormatException('Included status without included evidence');
+    final netValue = hasNet ? net.toDouble() : null;
+    final utcAsOf = asOf.toUtc();
+    // Fail closed on every status/count/net/direction inconsistency. Each status has one legal shape.
+    switch (status) {
+      case MindNewsStatus.noCoverage:
+      case MindNewsStatus.unavailable:
+        // Nothing was known: no counts, no net, no evidence, never a directional label.
+        if (included != 0 || excluded != 0 || hasNet || direction != 'UNKNOWN' ||
+            uncertainty != 'UNKNOWN' || rows.isNotEmpty) {
+          throw const FormatException('Coverage-free status carries evidence');
+        }
+      case MindNewsStatus.noIncludedEvidence:
+        // Evidence was found but none was admitted: no net, no direction, and at least one excluded item.
+        if (included != 0 || hasNet || direction != 'UNKNOWN' || rows.isEmpty) {
+          throw const FormatException('No-included status is inconsistent');
+        }
+      case MindNewsStatus.includedEvidence:
+        // A numeric net and a non-UNKNOWN label must come together, and the label must match the net band.
+        if (included < 1 || netValue == null || direction == 'UNKNOWN' || uncertainty == 'UNKNOWN') {
+          throw const FormatException('Included status is inconsistent');
+        }
+        final expected = netValue > 0.20 ? 'POSITIVE' : netValue < -0.20 ? 'NEGATIVE' : 'NEUTRAL';
+        if (direction != expected) throw const FormatException('Direction contradicts net');
+      case MindNewsStatus.untrustworthy:
+        throw const FormatException('Untrustworthy status');
+    }
+    final evidence = List<MindNewsEvidence>.unmodifiable(rows.map((r) => _evidence(r, utcAsOf)));
+    // Included rows can never outnumber the included count.
+    if (evidence.where((e) => e.included).length > included) {
+      throw const FormatException('Included rows exceed included count');
     }
     return MindNewsContext(
       status: status,
-      asOf: asOf.toUtc(),
-      netDirection: hasNet ? net.toDouble() : null,
+      asOf: utcAsOf,
+      netDirection: netValue,
       direction: direction,
       uncertainty: uncertainty,
       includedCount: included,
       excludedCount: excluded,
-      evidence: List.unmodifiable(rows.map(_evidence)),
+      evidence: evidence,
     );
   }
 
-  static MindNewsEvidence _evidence(Object? value) {
+  static const _reasonCodes = {
+    'INCLUDED',
+    'EXCLUDED_PUBLISHED_AFTER_AS_OF',
+    'EXCLUDED_ANALYSIS_NOT_YET_AVAILABLE',
+    'EXCLUDED_UNVERIFIED_INSTRUMENT',
+    'EXCLUDED_ANALYSIS_FAILED',
+    'EXCLUDED_EXPIRED',
+    'EXCLUDED_LOW_CONFIDENCE',
+    'EXCLUDED_UNCERTAIN',
+  };
+
+  static MindNewsEvidence _evidence(Object? value, DateTime asOf) {
     if (value is! Map<String, dynamic>) throw const FormatException('Invalid news evidence');
     final source = value['source'];
     final title = value['title'];
@@ -234,6 +271,16 @@ class MindNewsContext {
         status is! String || included is! bool || published == null || available == null ||
         validUntil == null || (score != null && score is! num) || (confidence != null && confidence is! num)) {
       throw const FormatException('Invalid news evidence');
+    }
+    if (!_reasonCodes.contains(status)) throw const FormatException('Unknown evidence reason');
+    if (included) {
+      // Included evidence must be knowable at asOf and still valid there.
+      if (status != 'INCLUDED' || published.toUtc().isAfter(asOf) || available.toUtc().isAfter(asOf) ||
+          !asOf.isBefore(validUntil.toUtc())) {
+        throw const FormatException('Included evidence violates as-of or validity');
+      }
+    } else if (status == 'INCLUDED') {
+      throw const FormatException('Excluded evidence marked INCLUDED');
     }
     return MindNewsEvidence(
       source: source,
