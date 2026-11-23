@@ -34,6 +34,7 @@ jobs:
             'scripts/mind/enable_fno_paper_verify_scheduler.py',
             'scripts/mind/test_enable_fno_paper_verify_scheduler.py',
             '.github/workflows/minttick-mind-fno-paper-verify-worker-once.yml',
+            '.github/workflows/mind-fno-paper-runtime-contract.yml',
           }
           assert paths==expected, "Must be exact reviewed virtual worker opt-in commit"
           PY
