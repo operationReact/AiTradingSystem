@@ -1,0 +1,64 @@
+name: MintTick F&O independent historical candle custody E2E
+
+# Independently audits local data receipts without broker access.
+# Historical strategy E2E remains 0/43 until original point-in-time
+# data, 43 evaluators and cost-aware OOS acceptance are integrated.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-independent-candle-e2e.yml'
+      - 'infra/ec2-paper/fno_independent_candle_e2e.py'
+      - 'infra/ec2-paper/upstox_fno_backfill_adapters.py'
+      - 'infra/ec2-paper/fno_history_backfill.py'
+      - 'scripts/tests/test_fno_independent_candle_e2e.py'
+      - 'scripts/tests/test_upstox_fno_backfill_adapters.py'
+      - 'scripts/tests/test_fno_history_backfill.py'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-independent-candle-e2e.yml'
+      - 'infra/ec2-paper/fno_independent_candle_e2e.py'
+      - 'infra/ec2-paper/upstox_fno_backfill_adapters.py'
+      - 'infra/ec2-paper/fno_history_backfill.py'
+      - 'scripts/tests/test_fno_independent_candle_e2e.py'
+      - 'scripts/tests/test_upstox_fno_backfill_adapters.py'
+      - 'scripts/tests/test_fno_history_backfill.py'
+
+permissions:
+  contents: read
+
+jobs:
+  independent-source-storage-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile source, sink and independent receipt checker
+        run: |
+          python3 -m py_compile \
+            infra/ec2-paper/fno_independent_candle_e2e.py \
+            infra/ec2-paper/upstox_fno_backfill_adapters.py \
+            infra/ec2-paper/fno_history_backfill.py
+      - name: Run provider-adapter + downloader + independent SQLite E2E
+        run: |
+          python3 -m unittest discover -s scripts/tests \
+            -p 'test_fno_history_backfill.py' -v
+          python3 -m unittest discover -s scripts/tests \
+            -p 'test_upstox_fno_backfill_adapters.py' -v
+          python3 -m unittest discover -s scripts/tests \
+            -p 'test_fno_independent_candle_e2e.py' -v
+      - name: Enforce no orders and truthful historical strategy E2E status
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/fno_independent_candle_e2e.py').read_text()
+          assert 'STORAGE_ROUND_TRIP_VERIFIED_NOT_STRATEGY_E2E' in s
+          assert '"historicalStrategyE2EValidated":0' in s
+          for phrase in ('boto3', 'submitOrder', 'placeOrder', 'get-parameter',
+                         'requests.get(', 'start-instances'):
+              assert phrase not in s, phrase
+          print('HISTORICAL_CANDLE_CUSTODY_E2E:TEST_PASS;strategyE2E=0/43;orders=false')
+          PY
