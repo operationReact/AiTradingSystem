@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../data/customer_paper_fno_repository.dart';
 
-/// Real server-backed option quote panel. The customer F&O market API currently
-/// exposes bid/ask, listed strikes and expiries only: NOT index LTP, OI,
-/// volume, historical candles, Greeks or IV. Never manufacture these fields.
+/// Real server-backed option quote panel. Fresh V3 trades, separately
+/// authorized retained last trades, and short-lived read-only V2 chain
+/// snapshots retain distinct labels and NEVER share order eligibility.
+/// No generated index quote, volume, candles or broker authorization.
 class MintTickFnoQuoteBoard extends StatelessWidget {
   const MintTickFnoQuoteBoard({
     required this.market, required this.fresh, required this.strike,
@@ -30,6 +31,39 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
 
   bool get verified => fresh && market.displayRightsVerified &&
       market.hasFreshQuotes;
+
+  /// The backend returns retained last trades only with independent rights.
+  /// A stale price can be displayed as Last, but never used for order entry.
+  static bool retainedTradeVisible(
+      CustomerFnoMarket market, CustomerFnoLeg leg, DateTime now) {
+    final at = leg.exchangeAt?.toUtc();
+    final utc = now.toUtc();
+    return market.displayRightsVerified && !leg.quoteFresh &&
+        leg.ltp != null && leg.ltp! > 0 && at != null &&
+        !at.isAfter(utc) &&
+        utc.difference(at) <= const Duration(days: 7);
+  }
+
+  /// V2 HTTP snapshots are display-only and cannot establish exchange time.
+  static CustomerFnoChainSnapshotIndicator? recentChainSnapshot(
+      CustomerFnoMarket market, CustomerFnoLeg leg, DateTime now) {
+    final at = market.snapshotAt?.toUtc();
+    final utc = now.toUtc();
+    if (!market.displayRightsVerified || at == null || at.isAfter(utc) ||
+        utc.difference(at) > const Duration(minutes: 5)) {
+      return null;
+    }
+    return market.chainSnapshotIndicators[leg.instrumentKey];
+  }
+
+  static String lastTime(DateTime? at) {
+    if (at == null) return '—';
+    final local = at.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
 
   static String value(num? v) => v == null || !v.isFinite || v <= 0
       ? '—' : '₹${v.toStringAsFixed(2)}';
@@ -157,10 +191,18 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
       num strike, String side, Color accent) {
     final c = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
-    final show = verified && leg != null && leg.quoteFresh;
+    final live = verified && leg != null && leg.quoteFresh;
+    final retained = leg != null &&
+        retainedTradeVisible(market, leg, DateTime.now().toUtc());
+    final chain = leg == null ? null :
+        recentChainSnapshot(market, leg, DateTime.now().toUtc());
     final selectedLeg = leg != null && selected?.instrumentKey == leg.instrumentKey;
-    final validLtp = show ? leg.ltp : null;
-    final pct = show ? leg.priceChangePct : null;
+    final displayedLtp = live || retained ? leg?.ltp : null;
+    final chainLtp = displayedLtp == null ? chain?.ltp : null;
+    final oi = market.displayRightsVerified
+        ? ((live || retained ? leg?.openInterest : null) ?? chain?.openInterest)
+        : null;
+    final pct = live ? leg?.priceChangePct : null;
     return OutlinedButton(
       key: leg == null ? ValueKey('fno-premium-$side-unlisted') :
         ValueKey('paper-fno-leg-${leg.instrumentKey}'),
@@ -175,14 +217,19 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: accent)),
         const SizedBox(height: 4),
-        Text(validLtp != null ? 'LTP ${value(validLtp)}' :
-             show ? 'Ask ${value(leg.ask)}' : 'LTP —',
+        Text(displayedLtp != null
+            ? '${live ? 'LTP' : 'Last'} ${value(displayedLtp)}'
+            : chainLtp != null ? 'Chain ${value(chainLtp)}'
+            : live ? 'Ask ${value(leg?.ask)}' : 'LTP —',
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 3),
-        Text(show ? 'Bid ${value(leg.bid)}' : 'Quote not fresh',
+        Text(live ? 'Bid ${value(leg?.bid)}'
+            : retained ? 'Last trade · ${lastTime(leg?.exchangeAt)}'
+            : chain != null ? 'Chain snapshot · read only'
+            : 'Quote not fresh',
           style: t.labelSmall?.copyWith(
-            color: show ? accent : c.onSurfaceVariant),
+            color: live ? accent : c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 5),
         Divider(color: c.outlineVariant, height: 1),
@@ -192,8 +239,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           style: t.labelSmall?.copyWith(
             color: pct >= 0 ? c.primary : c.error),
           maxLines: 1, overflow: TextOverflow.ellipsis),
-        Text('OI ${show && leg.openInterest != null ? leg.openInterest : '—'}'
-             '  ·  Volume —',
+        Text('OI ${oi ?? '—'}  ·  Volume —',
           style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
@@ -351,14 +397,25 @@ class _OptionsReferenceListState extends State<_OptionsReferenceList> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final now = DateTime.now().toUtc();
+    bool live(CustomerFnoLeg leg) => widget.verified && leg.quoteFresh;
+    bool retained(CustomerFnoLeg leg) =>
+        MintTickFnoQuoteBoard.retainedTradeVisible(widget.market, leg, now);
+    CustomerFnoChainSnapshotIndicator? chain(CustomerFnoLeg leg) =>
+        MintTickFnoQuoteBoard.recentChainSnapshot(widget.market, leg, now);
+    int? oi(CustomerFnoLeg leg) =>
+        widget.market.displayRightsVerified
+            ? ((live(leg) || retained(leg) ? leg.openInterest : null) ??
+                chain(leg)?.openInterest)
+            : null;
     final contracts = <(num, CustomerFnoLeg)>[];
     for (final strike in widget.market.strikes) {
       final leg = side == 'CE' ? strike.call : strike.put;
       if (leg != null) contracts.add((strike.strikePrice, leg));
     }
     contracts.sort((a, b) {
-      final lhs = a.$2.openInterest;
-      final rhs = b.$2.openInterest;
+      final lhs = oi(a.$2);
+      final rhs = oi(b.$2);
       if (lhs == null && rhs == null) return a.$1.compareTo(b.$1);
       if (lhs == null) return 1;
       if (rhs == null) return -1;
@@ -366,7 +423,7 @@ class _OptionsReferenceListState extends State<_OptionsReferenceList> {
     });
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Expanded(child: Text('Trending Options', style: text.titleMedium
+        Expanded(child: Text('Listed Options', style: text.titleMedium
             ?.copyWith(fontWeight: FontWeight.w800))),
         for (final option in const [('CE', 'Call'), ('PE', 'Put')])
           Padding(padding: const EdgeInsets.only(left: 6),
@@ -412,9 +469,7 @@ class _OptionsReferenceListState extends State<_OptionsReferenceList> {
                 ],
               )),
               Expanded(flex: 3, child: Text(
-                widget.market.displayRightsVerified &&
-                    leg.openInterest != null
-                    ? leg.openInterest!.toString() : '—',
+                oi(leg)?.toString() ?? '—',
                 textAlign: TextAlign.right,
                 style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               )),
@@ -422,21 +477,28 @@ class _OptionsReferenceListState extends State<_OptionsReferenceList> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    widget.verified && leg.quoteFresh && leg.ltp != null
-                        ? leg.ltp!.toStringAsFixed(2) : '—',
+                    (live(leg) || retained(leg) ? leg.ltp : chain(leg)?.ltp)
+                            ?.toStringAsFixed(2) ?? '—',
                     style: text.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w800,
-                      color: widget.verified && leg.quoteFresh
+                      color: live(leg)
                           ? ((leg.priceChangePct ?? 0) >= 0
                               ? colors.primary : colors.error)
                           : colors.onSurfaceVariant),
                   ),
-                  if (widget.verified && leg.quoteFresh &&
-                      leg.priceChangePct != null)
+                  if (live(leg) && leg.priceChangePct != null)
                     Text(
                       '${leg.priceChangePct! >= 0 ? '+' : ''}${leg.priceChangePct!.toStringAsFixed(2)}%',
                       style: text.labelSmall?.copyWith(
                           color: colors.onSurfaceVariant)),
+                  if (retained(leg) && leg.ltp != null)
+                    Text('Last · ${MintTickFnoQuoteBoard.lastTime(leg.exchangeAt)}',
+                      style: text.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant)),
+                  if (!live(leg) && !retained(leg) && chain(leg)?.ltp != null)
+                    Text('Chain · read only',
+                      style: text.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant)),
                 ],
               )),
             ]),
