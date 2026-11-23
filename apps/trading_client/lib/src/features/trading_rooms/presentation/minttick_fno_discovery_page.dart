@@ -181,6 +181,30 @@ class MintTickFnoDiscoveryFacts {
     return List.unmodifiable(legs);
   }
 
+  /// Closed-market V2 reference percentage movers are kept separate from
+  /// exchange-timed LIVE movers. No V2 observation can authorize execution.
+  static List<CustomerFnoLeg> referencePriceMovers(
+      CustomerFnoMarket market, DateTime now, String side,
+      {required bool positive}) {
+    final at = market.snapshotAt?.toUtc();
+    final utc = now.toUtc();
+    if (!market.displayRightsVerified || at == null || at.isAfter(utc) ||
+        utc.difference(at) > const Duration(minutes: 5)) return const [];
+    final all = optionLegs(market, side).where((leg) {
+      final delta = market.chainSnapshotIndicators[leg.instrumentKey]
+          ?.referencePriceChangePct;
+      return delta != null && (positive ? delta > 0 : delta < 0);
+    }).toList();
+    all.sort((a, b) {
+      final deltaA = market.chainSnapshotIndicators[a.instrumentKey]!
+          .referencePriceChangePct!;
+      final deltaB = market.chainSnapshotIndicators[b.instrumentKey]!
+          .referencePriceChangePct!;
+      return positive ? deltaB.compareTo(deltaA) : deltaA.compareTo(deltaB);
+    });
+    return List.unmodifiable(all);
+  }
+
   /// No underlying spot/reference is NOT permission to render hundreds of
   /// rows or invent an ATM. Start at the middle of the listed strike range
   /// until the user explicitly selects Show all.
@@ -531,10 +555,15 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         : _smartlistKind == 'Highest OI'
             ? MintTickFnoDiscoveryFacts.highestOpenInterest(
                 market, now, _optionSide)
-            : MintTickFnoDiscoveryFacts.snapshotLeaders(
-                market, now, _optionSide,
-                metric: _smartlistKind == 'Top traded'
-                    ? 'VOLUME' : 'OI_GAIN');
+            : _smartlistKind == 'Price gainers' ||
+              _smartlistKind == 'Price losers'
+                ? MintTickFnoDiscoveryFacts.referencePriceMovers(
+                    market, now, _optionSide,
+                    positive: _smartlistKind == 'Price gainers')
+                : MintTickFnoDiscoveryFacts.snapshotLeaders(
+                    market, now, _optionSide,
+                    metric: _smartlistKind == 'Top traded'
+                        ? 'VOLUME' : 'OI_GAIN');
     final smartlist = smartlistPool
         .where((leg) => searchKeys.contains(leg.instrumentKey))
         .take(5).toList();
@@ -598,19 +627,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           _sideToggle('PE', 'Puts'),
         ]),
         const SizedBox(height: 12),
-        Text('Listed Options',
+        Text('Market activity',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
-        _optionsList(context, market, listed, now),
-        const SizedBox(height: 16),
-        Text('Options Smartlists',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
+        const SizedBox(height: 6),
         SingleChildScrollView(scrollDirection: Axis.horizontal,
           child: Row(children: [
-            for (final kind in const ['Highest OI', 'Top traded', 'OI gainers'])
+            for (final kind in const [
+              'Highest OI', 'OI gainers', 'Top traded',
+              'Price gainers', 'Price losers'
+            ])
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ChoiceChip(
@@ -621,21 +647,29 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                   onSelected: (_) => setState(() => _smartlistKind = kind),
                 )),
           ])),
-        if (smartlist.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('Provider snapshot · read only',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant))),
+        const SizedBox(height: 4),
+        Text('Source-backed V2 reference rankings; not live trade signals',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        if (_search.trim().isNotEmpty) ...[
+          Text('Search results', style: Theme.of(context).textTheme.titleSmall),
+          _optionsList(context, market, listed, now),
+          const SizedBox(height: 12),
+        ],
         _optionsList(context, market, smartlist, now,
           emptyText: _smartlistKind == 'Highest OI'
               ? 'Verified open-interest counts unavailable.'
               : _smartlistKind == 'Top traded'
                   ? 'Verified traded volume unavailable.'
-                  : 'Verified OI changes unavailable.',
+                  : _smartlistKind == 'OI gainers'
+                      ? 'Verified OI changes unavailable.'
+                      : 'Reference close or premium data unavailable.',
           compact: true),
-        const SizedBox(height: 14),
-        _movers(context, market, now),
+        if (market != null && market.hasFreshQuotes) ...[
+          const SizedBox(height: 12),
+          _movers(context, market, now),
+        ],
       ] else if (_section == 'Universe') ...[
         MintTickFnoUniversePanel(
           repository: CustomerFnoUniverseRepository(widget.discovery.api)),
@@ -813,7 +847,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                        _chainSnapshot(market, leg, now) != null))
                     Text(_fresh(market, leg, now)
                         ? _changeText(leg.priceChangePct)
-                        : _displayQuote(market, leg, now) ? 'Last' : 'Snapshot',
+                        : _chainSnapshot(market, leg, now)
+                                    ?.referencePriceChangePct != null
+                            ? 'Ref ${_signedPct(_chainSnapshot(
+                                market, leg, now)!.referencePriceChangePct)}'
+                            : _displayQuote(market, leg, now) ? 'Last'
+                                : 'Snapshot',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: style.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
