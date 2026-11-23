@@ -111,6 +111,10 @@ public class CustomerMindFnoPaperCycleService {
         }
         var decision=worker ? research.inspectForOwnedPaperWorker()
             : research.inspect(auth); // same verified provider source as Mind UI
+        if (decision==null) {
+            return abstain(now,room,"BLOCKED","FNO_RESEARCH_RESPONSE_MISSING",
+                null,null,books.status(),audit.status());
+        }
         if (!"RESEARCH_CANDIDATE".equals(decision.status()) ||
                 !"UPSTOX_V3_EXCHANGE_TIMED".equals(decision.quoteSource()) ||
                 !List.of("strategy.STR-181","strategy.STR-182").contains(decision.strategyId()) ||
@@ -134,8 +138,10 @@ public class CustomerMindFnoPaperCycleService {
                 || decision.exchangeAt().isAfter(now) || decision.observedAt().isAfter(now)
                 // Provider observations cannot predate their exchange ticks.
                 || decision.observedAt().isBefore(decision.exchangeAt())
-                || java.time.Duration.between(decision.exchangeAt(),now).toSeconds()>15
-                || java.time.Duration.between(decision.observedAt(),now).toSeconds()>15) {
+                || java.time.Duration.between(decision.exchangeAt(),now)
+                    .compareTo(java.time.Duration.ofSeconds(15))>0
+                || java.time.Duration.between(decision.observedAt(),now)
+                    .compareTo(java.time.Duration.ofSeconds(15))>0) {
             return abstain(now,room,"BLOCKED","FNO_RESEARCH_QUOTE_STALE",
                 decision.strategyId(),decision.instrumentKey(),books.status(),audit.status());
         }
