@@ -189,7 +189,9 @@ class MintTickFnoDiscoveryFacts {
     final at = market.snapshotAt?.toUtc();
     final utc = now.toUtc();
     if (!market.displayRightsVerified || at == null || at.isAfter(utc) ||
-        utc.difference(at) > const Duration(minutes: 5)) return const [];
+        utc.difference(at) > const Duration(minutes: 5)) {
+      return const [];
+    }
     final all = optionLegs(market, side).where((leg) {
       final delta = market.chainSnapshotIndicators[leg.instrumentKey]
           ?.referencePriceChangePct;
@@ -235,7 +237,9 @@ class MintTickFnoTerminalAnalytics {
     num result = market.strikes.first.strikePrice;
     for (final row in market.strikes) {
       if ((row.strikePrice - reference).abs() <
-          (result - reference).abs()) result = row.strikePrice;
+          (result - reference).abs()) {
+        result = row.strikePrice;
+      }
     }
     return result;
   }
@@ -296,7 +300,9 @@ class MintTickFnoTerminalAnalytics {
     if (nearest == null) return null;
     for (final row in market.strikes) {
       if (row.strikePrice != nearest ||
-          row.call == null || row.put == null) continue;
+          row.call == null || row.put == null) {
+        continue;
+      }
       final call = market.chainSnapshotIndicators[row.call!.instrumentKey]?.iv;
       final put = market.chainSnapshotIndicators[row.put!.instrumentKey]?.iv;
       if (call == null || put == null || call < 0 || put < 0) return null;
@@ -1060,7 +1066,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                   : Icons.unfold_more, size: 16),
               label: Text(_showAllStrikes
                   ? 'Near ATM'
-                  : 'All ${market.strikes.length} strikes (${hidden} more)'),
+                  : 'All ${market.strikes.length} strikes ($hidden more)'),
             )),
         const SizedBox(height: 2),
         Text('Tap a premium to inspect quote source, IV, OI, spread and Greeks. '
