@@ -1,9 +1,12 @@
 package in.aitradingsystem.provider.upstox;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
+import java.io.InputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -36,8 +39,9 @@ public final class UpstoxNseEquityIsinSource {
         "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz");
     private static final Pattern ISIN = Pattern.compile("[A-Z]{2}[A-Z0-9]{9}[0-9]");
     private static final Pattern SYMBOL = Pattern.compile("[A-Z0-9&._/+-]{1,100}");
-    private static final int MAX_COMPRESSED = 32 * 1024 * 1024;
-    private static final int MAX_UNCOMPRESSED = 80 * 1024 * 1024;
+    private static final int MAX_COMPRESSED = 64 * 1024 * 1024;
+    private static final long MAX_UNCOMPRESSED = 512L * 1024 * 1024;
+    private static final int MAX_ROWS = 1_000_000;
     private static final Duration MAX_AGE = Duration.ofHours(36);
     private final ObjectMapper mapper;
     private final Clock clock;
@@ -107,31 +111,42 @@ public final class UpstoxNseEquityIsinSource {
                 || (payload[0] & 0xff) != 0x1f || (payload[1] & 0xff) != 0x8b) {
             throw new IllegalArgumentException("Invalid Upstox NSE BOD gzip");
         }
-        byte[] uncompressed;
-        try (var input = new GZIPInputStream(new ByteArrayInputStream(payload));
-             var output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int size;
-            while ((size = input.read(buffer)) != -1) {
-                if (size > MAX_UNCOMPRESSED - output.size()) {
-                    throw new IllegalArgumentException("Upstox NSE BOD exceeds safety limit");
-                }
-                output.write(buffer, 0, size);
-            }
-            uncompressed = output.toByteArray();
-        } catch (IOException ex) {
-            throw new IllegalArgumentException("Invalid Upstox NSE BOD compression");
-        }
-        try {
-            JsonNode json = mapper.readTree(uncompressed);
-            if (json == null || !json.isArray() || json.size() > 100_000) {
-                throw new IllegalArgumentException("Invalid Upstox NSE instrument list");
+        // The NSE BOD archive includes options and futures. Parse JSON as a
+        // bounded stream: never load its multi-hundred-MB full tree into RAM.
+        try (var zip = new GZIPInputStream(new ByteArrayInputStream(payload));
+             var bounded = new FilterInputStream(zip) {
+                 private long seen;
+                 private void count(long n) throws IOException {
+                     seen += n;
+                     if (seen > MAX_UNCOMPRESSED) {
+                         throw new IOException("NSE BOD uncompressed data limit exceeded");
+                     }
+                 }
+                 @Override public int read() throws IOException {
+                     int value = in.read();
+                     if (value >= 0) count(1);
+                     return value;
+                 }
+                 @Override public int read(byte[] b, int off, int len) throws IOException {
+                     int n = in.read(b, off, len);
+                     if (n > 0) count(n);
+                     return n;
+                 }
+             };
+             JsonParser parser = mapper.getFactory().createParser(bounded)) {
+            if (parser.nextToken() != JsonToken.START_ARRAY) {
+                throw new IllegalArgumentException("Upstox NSE BOD must be a JSON array");
             }
             Map<String, String> matches = new HashMap<>();
             Set<String> ambiguous = new HashSet<>();
+            int total = 0;
             int valid = 0;
-            for (JsonNode item : json) {
-                if (!item.isObject()) throw new IllegalArgumentException("Malformed instrument row");
+            JsonToken token;
+            while ((token = parser.nextToken()) != JsonToken.END_ARRAY) {
+                if (token == null || ++total > MAX_ROWS || token != JsonToken.START_OBJECT) {
+                    throw new IllegalArgumentException("Malformed or oversized NSE BOD");
+                }
+                JsonNode item = mapper.readTree(parser);
                 if (!"NSE".equals(item.path("exchange").asText())
                         || !"NSE_EQ".equals(item.path("segment").asText())
                         || !"EQ".equals(item.path("instrument_type").asText())) continue;
@@ -150,9 +165,12 @@ public final class UpstoxNseEquityIsinSource {
                     matches.remove(symbol);
                 }
             }
-            return new Parse(Map.copyOf(matches), json.size(), valid);
+            if (parser.nextToken() != null) {
+                throw new IllegalArgumentException("Trailing bytes after NSE BOD array");
+            }
+            return new Parse(Map.copyOf(matches), total, valid);
         } catch (IOException ex) {
-            throw new IllegalArgumentException("Invalid Upstox NSE BOD JSON");
+            throw new IllegalArgumentException("Invalid or oversized Upstox NSE BOD");
         }
     }
 }
