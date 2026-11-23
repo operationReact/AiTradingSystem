@@ -19,6 +19,10 @@ import urllib.request
 from decimal import Decimal, InvalidOperation
 
 SANDBOX = "https://api-sandbox.upstox.com"
+# Upstox sandbox edge blocks Python-urllib's default User-Agent with HTTP 403.
+# Confirmed by same-token, same-method A/B against V2/V3 routes (run 45202972675).
+# Use an explicit truthful sandbox application identifier for order requests.
+SANDBOX_USER_AGENT = "MintTick-Upstox-Sandbox/1.0"
 INSTRUMENT = re.compile(r"NSE_FO\|[A-Za-z0-9._-]{1,64}\Z")
 ORDER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _ALLOWED = {("POST", "/v3/order/place"), ("PUT", "/v3/order/modify")}
@@ -123,7 +127,8 @@ def sandbox_transport(token: str):
         req = urllib.request.Request(
             SANDBOX + path, data=data, method=method,
             headers={"Authorization": "Bearer " + token,
-                     "Accept": "application/json", "Content-Type": "application/json"})
+                     "Accept": "application/json", "Content-Type": "application/json",
+                     "User-Agent": SANDBOX_USER_AGENT})
         try:
             with opener.open(req, timeout=6) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
