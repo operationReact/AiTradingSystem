@@ -227,16 +227,22 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
           ),
           ),
         ))),
-      SizedBox(height: 40, child: Row(children: [
-        Expanded(child: Text('Drag / pinch / tap', style: Theme.of(context)
-            .textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
-        TextButton(key: const ValueKey('stock-chart-volume'), onPressed: () =>
-            setState(() => _volume = !_volume),
+      SizedBox(height: 34, child: Row(
+        mainAxisAlignment: MainAxisAlignment.end, children: [
+          TextButton(key: const ValueKey('stock-chart-volume'),
+            style: TextButton.styleFrom(
+                foregroundColor: _volume ? scheme.primary : scheme.onSurfaceVariant,
+                visualDensity: VisualDensity.compact),
+            onPressed: () => setState(() => _volume = !_volume),
             child: Text(_volume ? 'Volume ✓' : 'Volume')),
-        TextButton(key: const ValueKey('stock-chart-sma20'), onPressed: () =>
-            setState(() => _sma20 = !_sma20),
-            child: Text(_sma20 ? 'SMA20 bars ✓' : 'SMA20 bars')),
-      ])),
+          TextButton(key: const ValueKey('stock-chart-sma20'),
+            style: TextButton.styleFrom(
+                foregroundColor: _sma20 ? scheme.primary : scheme.onSurfaceVariant,
+                visualDensity: VisualDensity.compact),
+            onPressed: () => setState(() => _sma20 = !_sma20),
+            child: Text(_sma20 ? 'MA20 ✓' : 'MA20')),
+        ],
+      )),
     ]);
   }
 }
