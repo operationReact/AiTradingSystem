@@ -226,7 +226,7 @@ public class FnoFuturesContractRegistry {
     public List<UpstoxFnoInstrumentUniverse.Contract> livePlanningCandidates(
             String underlyingKey) {
         if (underlyingKey == null || !underlyingKey.matches(
-                "(?:NSE_EQ\\\\|[A-Za-z0-9._-]{1,64}|NSE_INDEX\\\\|[A-Za-z0-9 ._-]{1,64})") ||
+                "(?:NSE_EQ\\|[A-Za-z0-9._-]{1,64}|NSE_INDEX\\|[A-Za-z0-9 ._-]{1,64})") ||
                 !"LOADED".equals(universeStatus().state()))
             return List.of();
         var snapshot = universeSnapshot;
