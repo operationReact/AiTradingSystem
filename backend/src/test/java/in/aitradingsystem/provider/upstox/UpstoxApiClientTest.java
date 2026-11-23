@@ -106,4 +106,45 @@ class UpstoxApiClientTest {
             .isEqualTo("UPSTOX");
         server.verify();
     }
+    @Test
+    void officialFundamentalsRequireExactIsinAndUseTheAccountBearer() {
+        server.expect(requestTo("https://api.upstox.com/v2/fundamentals/INE002A01018/key-ratios"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header("Authorization", "Bearer private-test-token"))
+            .andRespond(withSuccess("""
+                {"status":"success","data":[
+                  {"name":"P/E","company_value":"20.15","sector_value":"12.46"},
+                  {"name":"ROE","company_value":"8.94%","sector_value":"16.46%"}
+                ]}
+                """, MediaType.APPLICATION_JSON));
+        var ratios = api.fundamentals("private-test-token", "INE002A01018", "ratios");
+        assertThat(ratios.isArray()).isTrue();
+        assertThat(ratios.get(1).path("company_value").asText()).isEqualTo("8.94%");
+        server.verify();
+    }
+
+    @Test
+    void fundamentalsRejectUnverifiedIsinOrArbitrarySectionWithoutProviderCall() {
+        assertThatThrownBy(() -> api.fundamentals("session", "../other", "ratios"))
+            .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)
+            .hasMessage("UPSTOX_FUNDAMENTAL_ISIN_INVALID");
+        assertThatThrownBy(() -> api.fundamentals("session", "INE002A01018", "orders"))
+            .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)
+            .hasMessage("UPSTOX_FUNDAMENTAL_SECTION_INVALID");
+        server.verify();
+    }
+
+    @Test
+    void fundamentalForbiddenDoesNotLeakProviderResponseOrInvalidateLogin() {
+        server.expect(requestTo("https://api.upstox.com/v2/fundamentals/INE002A01018/profile"))
+            .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"message\":\"private broker account details\"}"));
+        assertThatThrownBy(() -> api.fundamentals("private-test-token", "INE002A01018", "profile"))
+            .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)
+            .hasMessage("UPSTOX_READ_UNAVAILABLE")
+            .hasMessageNotContaining("private broker account details");
+        server.verify();
+    }
+
 }
