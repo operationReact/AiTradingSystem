@@ -59,8 +59,18 @@ public class CustomerPaperFnoMarketController {
     public record Strike(BigDecimal strikePrice, Leg call, Leg put) {}
     /** Real Upstox V2 option-chain snapshot, NOT an exchange-timed trade or order quote. */
     public record ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
-            BigDecimal ask, Long openInterest, BigDecimal iv, BigDecimal delta,
-            BigDecimal theta, BigDecimal gamma, BigDecimal vega) {}
+            BigDecimal ask, Long openInterest, Long volume,
+            Long previousOpenInterest, BigDecimal iv, BigDecimal delta,
+            BigDecimal theta, BigDecimal gamma, BigDecimal vega) {
+        /** Older Java construction sites do not invent missing provider counts. */
+        public ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
+                BigDecimal ask, Long openInterest, BigDecimal iv,
+                BigDecimal delta, BigDecimal theta,
+                BigDecimal gamma, BigDecimal vega) {
+            this(ltp, bid, ask, openInterest, null, null,
+                    iv, delta, theta, gamma, vega);
+        }
+    }
     public record Market(String underlyingKey, LocalDate expiry, String source,
                          String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
                          boolean displayRightsVerified, boolean trainingRightsVerified,
