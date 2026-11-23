@@ -131,6 +131,8 @@ class CustomerFnoDiscoveryOffHoursTest {
         var reference = result.chainSnapshotIndicators().get(CE);
         assertThat(reference.ltp()).isEqualByComparingTo("999");
         assertThat(reference.openInterest()).isEqualTo(20L);
+        assertThat(reference.volume()).isEqualTo(10L);
+        assertThat(reference.previousOpenInterest()).isEqualTo(30L);
         assertThat(reference.iv()).isEqualByComparingTo(".21");
         assertThat(reference.bid()).isEqualByComparingTo("998");
         assertThat(result.strikes().getFirst().call().quoteFresh()).isFalse();

@@ -117,6 +117,8 @@ class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
             'bid': 121.0,
             'ask': 122.0,
             'openInterest': 5200,
+            'previousOpenInterest': 4800,
+            'volume': 34000,
             'iv': 0.21,
             'delta': 0.5,
             'gamma': 0.002,
@@ -396,6 +398,42 @@ void main() {
     expect(find.text('IV · chain snapshot'), findsWidgets);
     expect(find.text('0.21'), findsWidgets);
     expect(find.text('Chain retrieved'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('authorized V2 chain OI populates Highest OI, never Top traded',
+      (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _ChainSnapshotDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Listed Options'), findsWidgets);
+    expect(find.byKey(const ValueKey('minttick-options-smartlist-highest-oi')),
+        findsOneWidget);
+    expect(find.textContaining('Provider snapshot'), findsOneWidget);
+    expect(find.text('5200'), findsWidgets);
+    await tester.ensureVisible(find.byKey(
+        const ValueKey('minttick-options-smartlist-top-traded')));
+    await tester.tap(find.byKey(
+        const ValueKey('minttick-options-smartlist-top-traded')));
+    await tester.pump();
+    expect(find.text('34000'), findsWidgets);
+    expect(find.text('Volume'), findsWidgets);
+    await tester.ensureVisible(find.byKey(
+        const ValueKey('minttick-options-smartlist-oi-gainers')));
+    await tester.tap(find.byKey(
+        const ValueKey('minttick-options-smartlist-oi-gainers')));
+    await tester.pump();
+    expect(find.text('400'), findsWidgets);
+    expect(find.text('ΔOI'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
