@@ -75,8 +75,9 @@ public final class NewsFeaturePolicy {
         if (c.analysisAvailableAt() == null || c.analysisAvailableAt().isAfter(asOf)) {
             return Status.EXCLUDED_ANALYSIS_NOT_YET_AVAILABLE;
         }
-        if (!c.symbolVerified()) return Status.EXCLUDED_UNVERIFIED_INSTRUMENT;
+        // A failed analysis has no trustworthy symbol mapping, so its failure is the reported reason.
         if (!"ANALYZED".equals(c.analysisStatus())) return Status.EXCLUDED_ANALYSIS_FAILED;
+        if (!c.symbolVerified()) return Status.EXCLUDED_UNVERIFIED_INSTRUMENT;
         if (!asOf.isBefore(validUntil(c.publishedAt(), c.horizon()))) return Status.EXCLUDED_EXPIRED;
         if (c.confidence() == null || c.materiality() == null || c.directionScore() == null
             || c.confidence().compareTo(MIN_CONFIDENCE) < 0) {

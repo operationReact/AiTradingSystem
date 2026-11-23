@@ -137,6 +137,20 @@ public class ResearchScanRepository {
     }
 
     /**
+     * Attach the as-of news context to an already-saved candidate. Write-once: an existing context
+     * is never overwritten, so a later re-scan cannot rewrite what was known at the original scan.
+     */
+    public void recordNewsContext(UUID runId, long instrumentId, String strategy, Instant candleTime,
+                                  String contextJson) {
+        jdbc.update("""
+                UPDATE research_scan_candidate
+                   SET news_context = ?::jsonb, news_context_contract = 'news.context.v1'
+                 WHERE scan_run_id = ? AND instrument_id = ? AND strategy = ?
+                   AND signal_candle_time = ? AND news_context IS NULL
+                """, contextJson, runId, instrumentId, strategy, offset(candleTime));
+    }
+
+    /**
      * Append the exact MA_RECLAIM input bundle once. A duplicate never edits
      * earlier custody. This is intentionally not backfilled for old runs.
      */

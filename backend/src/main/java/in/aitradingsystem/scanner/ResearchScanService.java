@@ -2,6 +2,8 @@ package in.aitradingsystem.scanner;
 
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.mind.MindSourceSnapshot;
+import in.aitradingsystem.news.feature.NewsContext;
+import in.aitradingsystem.news.feature.NewsFeatureService;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataQualityService;
@@ -28,6 +30,8 @@ public class ResearchScanService {
     private final StrategyRegistry registry;
     private final StrategyConfigService strategyConfigs;
     private final ScannerEngine engine;
+    /** Optional advisory news context. Null in fixtures; when disabled, nothing is attached. */
+    private final NewsFeatureService newsFeatures;
 
     @Autowired
     public ResearchScanService(
@@ -37,30 +41,31 @@ public class ResearchScanService {
             Clock clock,
             StrategyRegistry registry,
             StrategyConfigService strategyConfigs,
+            NewsFeatureService newsFeatures,
             @Value("${app.research.scan.max-universe-size:3500}") int maxUniverseSize,
             @Value("${app.research.scan.max-candle-age-minutes:60}") int maxCandleAgeMinutes) {
         this(scans, marketData, quality, clock, registry, strategyConfigs,
-                maxUniverseSize, maxCandleAgeMinutes, false);
+                maxUniverseSize, maxCandleAgeMinutes, false, newsFeatures);
     }
 
     /** Unit-fixture constructor: production always injects the quality/configuration gates. */
     ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData, Clock clock,
             int maxUniverseSize, int maxCandleAgeMinutes) {
         this(scans, marketData, null, clock, defaultRegistry(), null,
-                maxUniverseSize, maxCandleAgeMinutes, true);
+                maxUniverseSize, maxCandleAgeMinutes, true, null);
     }
 
     /** Quality-gate fixture constructor retained for focused scan tests. */
     ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
             MarketDataQualityService quality, Clock clock, int maxUniverseSize, int maxCandleAgeMinutes) {
         this(scans, marketData, quality, clock, defaultRegistry(), null,
-                maxUniverseSize, maxCandleAgeMinutes, true);
+                maxUniverseSize, maxCandleAgeMinutes, true, null);
     }
 
     private ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
             MarketDataQualityService quality, Clock clock, StrategyRegistry registry,
             StrategyConfigService strategyConfigs, int maxUniverseSize, int maxCandleAgeMinutes,
-            boolean fixtureBypass) {
+            boolean fixtureBypass, NewsFeatureService newsFeatures) {
         if (maxUniverseSize < 1 || maxUniverseSize > 10000) {
             throw new IllegalArgumentException("maxUniverseSize must be between 1 and 10000");
         }
@@ -77,6 +82,7 @@ public class ResearchScanService {
         this.maxUniverseSize = maxUniverseSize;
         this.registry = registry;
         this.strategyConfigs = strategyConfigs;
+        this.newsFeatures = newsFeatures;
         this.engine = new ScannerEngine(registry.enabledStrategies(), Duration.ofMinutes(maxCandleAgeMinutes));
     }
 
@@ -142,6 +148,12 @@ public class ResearchScanService {
                         Integer configVersion = activeConfig == null ? null : activeConfig.configVersion();
                         if (scans.saveCandidate(runId, candidate, strategy.descriptor().version(), configVersion,
                                 instrument.catalogueVersion(), dataCutoffAt)) {
+                            // Advisory annotation only: news never changes candidacy, score or execution.
+                            String newsJson = newsContextJson(instrument, evaluatedAt);
+                            if (newsJson != null) {
+                                scans.recordNewsContext(runId, instrument.id(), candidate.strategy(),
+                                        candidate.candleTime(), newsJson);
+                            }
                             // Capture at the exact scanner evaluation boundary.
                             // A custody failure marks this scan PARTIAL; later Mind
                             // replay refuses a candidate without frozen inputs.
@@ -178,6 +190,19 @@ public class ResearchScanService {
             scans.failRun(runId, scannedCount, candidateCount, "SCAN_FAILED", "Research scan failed before completion");
         }
         return scans.requireRun(runId);
+    }
+
+    /**
+     * Serialized as-of news context, or null when the rollout flag is off. A failed lookup is
+     * recorded as UNAVAILABLE rather than failing the scan, and is never read as neutral evidence.
+     */
+    private String newsContextJson(Instrument instrument, Instant asOf) {
+        if (newsFeatures == null || !newsFeatures.enabled()) return null;
+        try {
+            return newsFeatures.toJson(newsFeatures.contextFor(instrument.id(), instrument.tradingSymbol(), asOf));
+        } catch (RuntimeException e) {
+            return newsFeatures.toJson(NewsContext.unavailable(instrument.id(), instrument.tradingSymbol(), asOf));
+        }
     }
 
     private void recordNotEvaluated(UUID runId, long instrumentId, String reasonCode, Instant dataCutoffAt) {
