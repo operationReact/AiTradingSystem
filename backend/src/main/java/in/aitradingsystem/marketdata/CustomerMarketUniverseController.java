@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -58,7 +59,7 @@ public final class CustomerMarketUniverseController {
                                  String companyName, String exchange, String securityType,
                                  String industry, String sizeSegment,
                                  List<CompanyMembership> indexMemberships) {}
-    private record IndustryProof(String indexCode, String industry, String source, LocalDate asOf) {}
+    record IndustryProof(String indexCode, String industry, String source, LocalDate asOf) {}
 
     @GetMapping("/company-profile")
     public ResponseEntity<CompanyProfile> companyProfile(Authentication authentication,
@@ -101,7 +102,7 @@ public final class CustomerMarketUniverseController {
     }
 
     /** Conflicting industry classifications remain absent rather than silently choosing a source. */
-    private static CompanyProfile profileFromProofs(CompanyIdentity listing, List<IndustryProof> proofs) {
+    static CompanyProfile profileFromProofs(CompanyIdentity listing, List<IndustryProof> proofs) {
         List<IndustryProof> eligible = proofs.stream()
             .filter(p -> p.indexCode() != null && !p.indexCode().isBlank()
                 && p.source() != null && !p.source().isBlank()
