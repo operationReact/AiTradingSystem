@@ -99,6 +99,37 @@ class UpstoxFuturesInstrumentMasterLiveFileTest {
         Files.write(Path.of("target", "fno-master-facts.txt"), FACTS);
     }
 
+    @Test
+    void officialFileProvesEveryListedNseFoCEPEAndFutureContractIsParsed() throws Exception {
+        String env = System.getenv("FNO_INSTRUMENT_MASTER_GZ");
+        assumeTrue(env != null && !env.isBlank(),
+            "real published master file unavailable in this test environment");
+        Path file = Path.of(env);
+        assertTrue(Files.isRegularFile(file));
+        var today = LocalDate.now(IST);
+        UpstoxFnoInstrumentUniverse.Catalog universe;
+        try (InputStream raw = Files.newInputStream(file)) {
+            universe = UpstoxFnoInstrumentUniverse.parse(raw, today);
+        }
+        assertTrue(universe.futures() > 0, "missing NSE_FO futures");
+        assertTrue(universe.calls() > 0, "missing NSE_FO call options");
+        assertTrue(universe.puts() > 0, "missing NSE_FO put options");
+        assertEquals(universe.size(),
+            universe.futures() + universe.calls() + universe.puts());
+        assertEquals(universe.size(), universe.byInstrumentKey().size());
+        assertTrue(universe.underlyings() > 1,
+            "catalog should contain index AND stock derivatives");
+        String safeFacts = "FNO_UNIVERSE_REAL_SOURCE=UPSTOX_BOD\n" +
+            "FNO_UNIVERSE_CURRENT_TOTAL=" + universe.size() + "\n" +
+            "FNO_UNIVERSE_CE=" + universe.calls() + "\n" +
+            "FNO_UNIVERSE_PE=" + universe.puts() + "\n" +
+            "FNO_UNIVERSE_FUT=" + universe.futures() + "\n" +
+            "FNO_UNIVERSE_UNDERLYINGS=" + universe.underlyings() + "\n";
+        System.out.print(safeFacts);
+        Files.createDirectories(Path.of("target"));
+        Files.writeString(Path.of("target", "fno-universe-facts.txt"), safeFacts);
+    }
+
     /** Same magic-byte detection as the parser: gzip (1f 8b) or plain JSON. */
     private static InputStream gzipOrPlain(Path file) throws Exception {
         InputStream raw = new java.io.BufferedInputStream(Files.newInputStream(file));
