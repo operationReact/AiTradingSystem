@@ -178,7 +178,7 @@ public class CustomerMindFnoPaperCycleService {
         // A corrupted position or ledger basis must never turn into a SELL.
         // Validate all fields before querying the order history or quotes.
         if (position==null || position.instrumentKey()==null
-                || !position.instrumentKey().matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}")
+                || !position.instrumentKey().matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
                 || (!"CE".equals(position.optionType())
                     && !"PE".equals(position.optionType()))
                 || position.expiry()==null || position.lotSize()<=0
