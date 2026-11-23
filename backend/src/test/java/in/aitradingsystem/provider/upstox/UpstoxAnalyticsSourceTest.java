@@ -336,4 +336,41 @@ class UpstoxAnalyticsSourceTest {
         assertThat(probe.liveTradingEnabled()).isFalse();
         verifyNoInteractions(ssm);
     }
+    @Test
+    void v2ChainPriceChangeRetainsOnlyProviderCloseReference() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var quote = mapper.readTree("""
+            {
+              "instrument_key":"NSE_FO|61001",
+              "market_data":{
+                "ltp":121.50,"close_price":112.00,
+                "bid_price":121.00,"ask_price":122.00,
+                "volume":34000,"oi":5200.0,"prev_oi":4800.0
+              },
+              "option_greeks":{
+                "iv":21.0,"delta":0.5,"gamma":0.002,
+                "theta":-2.5,"vega":3.2
+              }
+            }
+            """);
+        var parsed = UpstoxAnalyticsSource.fnoQuote(quote);
+        assertThat(parsed.ltp()).isEqualByComparingTo("121.50");
+        assertThat(parsed.closePrice()).isEqualByComparingTo("112.00");
+        assertThat(parsed.openInterest()).isEqualTo(5200L);
+        assertThat(parsed.previousOpenInterest()).isEqualTo(4800L);
+
+        // The source omitting close_price must not invent a delta.
+        var missing = mapper.readTree("""
+            {
+              "instrument_key":"NSE_FO|61001",
+              "market_data":{
+                "ltp":121.50,"bid_price":121.00,"ask_price":122.00,
+                "volume":34000,"oi":5200,"prev_oi":4800
+              },
+              "option_greeks":{}
+            }
+            """);
+        assertThat(UpstoxAnalyticsSource.fnoQuote(missing).closePrice()).isNull();
+    }
+
 }
