@@ -33,7 +33,8 @@ public class CustomerMindFnoPaperAutomationService {
         String action,String strategyId,String instrumentKey,UUID fillId,
         Long realizedPnlDeltaPaise,Long cashAfterPaise,
         String orderReconciliation,String walletReconciliation,boolean liveMoney) {}
-    private record Due(UUID room,UUID owner) {}
+    // Exact database lease token fences stale workers after reassignment.
+    private record Due(UUID room,UUID owner,Instant leaseUntil) {}
 
     public CustomerMindFnoPaperAutomationService(JdbcClient jdbc,
             CustomerPaperFnoCapabilityController capability,
@@ -66,7 +67,8 @@ public class CustomerMindFnoPaperAutomationService {
             INSERT INTO mind_fno_paper_automation(room_id,user_id,enabled,next_run_at)
             VALUES(:room,:owner,:enabled,NOW())
             ON CONFLICT(room_id) DO UPDATE SET
-                enabled=EXCLUDED.enabled,next_run_at=NOW(),updated_at=NOW()
+                enabled=EXCLUDED.enabled,next_run_at=NOW(),
+                lease_until=NULL,updated_at=NOW()
             WHERE mind_fno_paper_automation.user_id=EXCLUDED.user_id
             """).param("room",room).param("owner",owner)
             .param("enabled",enabled).update();
@@ -123,10 +125,11 @@ public class CustomerMindFnoPaperAutomationService {
             SET lease_until=NOW()+INTERVAL '90 seconds',
                 next_run_at=NOW()+INTERVAL '20 seconds',updated_at=NOW()
             FROM due WHERE w.room_id=due.room_id
-            RETURNING w.room_id,w.user_id
+            RETURNING w.room_id,w.user_id,w.lease_until
             """).query((rs,i)->new Due(
                 rs.getObject("room_id",UUID.class),
-                rs.getObject("user_id",UUID.class))).list();
+                rs.getObject("user_id",UUID.class),
+                rs.getTimestamp("lease_until").toInstant())).list();
         for (Due due:claims) {
             try { runClaimed(due); }
             catch(RuntimeException failure) {
@@ -137,7 +140,9 @@ public class CustomerMindFnoPaperAutomationService {
                         last_status='UNKNOWN',last_reason='CYCLE_JOURNAL_FAILED',
                         lease_until=NULL,updated_at=NOW()
                     WHERE room_id=:room AND user_id=:owner
-                    """).param("room",due.room()).param("owner",due.owner()).update();
+                      AND lease_until=:lease AND enabled=TRUE
+                    """).param("room",due.room()).param("owner",due.owner())
+                        .param("lease",due.leaseUntil()).update();
             }
         }
     }
@@ -147,15 +152,33 @@ public class CustomerMindFnoPaperAutomationService {
         boolean uncertain="UNKNOWN".equals(result.status())
             || result.status().startsWith("FILLED_AUDIT_")
             || "PAPER_RECONCILIATION_MISMATCH".equals(result.reasonCode());
+        // This is ONE atomic PostgreSQL statement. An older process must not
+        // journal or clear an expired/reassigned lease, nor overwrite a newer
+        // worker's status. INSERT happens only if the UPDATE returns the
+        // exact currently-owned lease; failed inserts roll back the UPDATE.
         jdbc.sql("""
+            WITH accepted AS (
+              UPDATE mind_fno_paper_automation SET
+                lease_until=NULL,last_status=:status,last_reason=:reason,
+                last_run_at=:at,
+                enabled=CASE WHEN :uncertain THEN FALSE ELSE enabled END,
+                updated_at=NOW()
+              WHERE room_id=:room AND user_id=:owner AND enabled=TRUE
+                AND lease_until=:lease AND lease_until>NOW()
+              RETURNING room_id,user_id
+            )
             INSERT INTO mind_fno_paper_cycle_event(
                 id,room_id,user_id,evaluated_at,status,reason_code,action,
                 strategy_id,instrument_key,fill_id,realized_pnl_delta_paise,
                 cash_after_paise,order_reconciliation,wallet_reconciliation)
-            VALUES(:id,:room,:owner,:at,:status,:reason,:action,
-                :strategy,:instrument,:fill,:pnl,:cash,:orders,:wallet)
+            SELECT :id,accepted.room_id,accepted.user_id,:evaluated,:status,
+                :reason,:action,:strategy,:instrument,:fill,:pnl,:cash,
+                :orders,:wallet
+            FROM accepted
             """).param("id",UUID.randomUUID()).param("room",due.room())
-            .param("owner",due.owner()).param("at",result.evaluatedAt())
+            .param("owner",due.owner()).param("lease",due.leaseUntil())
+            .param("at",clock.instant()).param("evaluated",result.evaluatedAt())
+            .param("uncertain",uncertain)
             .param("status",result.status()).param("reason",result.reasonCode())
             .param("action",result.action()).param("strategy",result.strategyId())
             .param("instrument",result.instrumentKey()).param("fill",result.fillId())
@@ -163,15 +186,6 @@ public class CustomerMindFnoPaperAutomationService {
             .param("cash",result.walletCashAfterPaise())
             .param("orders",result.orderReconciliation())
             .param("wallet",result.walletReconciliation()).update();
-        jdbc.sql("""
-            UPDATE mind_fno_paper_automation SET
-              lease_until=NULL,last_status=:status,last_reason=:reason,
-              last_run_at=:at,enabled=CASE WHEN :uncertain THEN FALSE ELSE enabled END,
-              updated_at=NOW()
-            WHERE room_id=:room AND user_id=:owner
-            """).param("room",due.room()).param("owner",due.owner())
-            .param("status",result.status()).param("reason",result.reasonCode())
-            .param("at",clock.instant()).param("uncertain",uncertain).update();
     }
 
     private CustomerMindFnoPaperCycleService.CycleResult runOrAbstain(Due due) {
@@ -183,9 +197,10 @@ public class CustomerMindFnoPaperAutomationService {
                     ON r.id=w.room_id AND r.user_id=w.user_id
                   WHERE w.room_id=:room AND w.user_id=:owner AND w.enabled=TRUE
                     AND r.mode='PAPER' AND r.status='PAPER_FUNDED'
-                    AND r.market_scope='FNO' AND r.focus IN ('INTRADAY','SWING'))
+                    AND r.market_scope='FNO' AND r.focus IN ('INTRADAY','SWING')
+                    AND w.lease_until=:lease AND w.lease_until>NOW())
                 """).param("owner",due.owner()).param("room",due.room())
-                .query(Boolean.class).single();
+                .param("lease",due.leaseUntil()).query(Boolean.class).single();
             if(ready)return cycles.runOptedIn(due.owner(),due.room());
             return abstain(now,due.room(),"BLOCKED","ROOM_DISABLED_OR_NOT_ELIGIBLE");
         } catch(RuntimeException failure) {
