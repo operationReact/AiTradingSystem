@@ -113,6 +113,55 @@ class MintTickFnoDiscoveryFacts {
         b.priceChangePct!.abs().compareTo(a.priceChangePct!.abs()));
     return List.unmodifiable(all);
   }
+
+  /// Rank by actual open-interest counts, never mislabel OI as traded volume
+  /// or OI change. The V2 chain timestamp is the HTTP retrieval time, so
+  /// these observations are display-only and never confer order eligibility.
+  static List<CustomerFnoLeg> highestOpenInterest(
+      CustomerFnoMarket market, DateTime now, String side) {
+    if (!market.displayRightsVerified) return const [];
+    final utc = now.toUtc();
+    final snapshot = market.snapshotAt?.toUtc();
+    final chainRecent = snapshot != null && !snapshot.isAfter(utc) &&
+        utc.difference(snapshot) <= const Duration(minutes: 5);
+    int? oi(CustomerFnoLeg leg) {
+      if (market.hasFreshQuotes && recentTick(leg, utc)) {
+        return leg.openInterest;
+      }
+      return chainRecent
+          ? market.chainSnapshotIndicators[leg.instrumentKey]?.openInterest
+          : null;
+    }
+    final legs = optionLegs(market, side)
+        .where((leg) => oi(leg) != null).toList();
+    legs.sort((a, b) {
+      final difference = oi(b)!.compareTo(oi(a)!);
+      return difference != 0
+          ? difference : a.instrumentKey.compareTo(b.instrumentKey);
+    });
+    return List.unmodifiable(legs);
+  }
+
+  /// No underlying spot/reference is NOT permission to render hundreds of
+  /// rows or invent an ATM. Start at the middle of the listed strike range
+  /// until the user explicitly selects Show all.
+  static List<CustomerFnoStrike> visibleStrikes(
+      List<CustomerFnoStrike> strikes, num? reference,
+      {bool showAll = false, int radius = 4}) {
+    final window = radius * 2 + 1;
+    if (showAll || strikes.length <= window) return strikes;
+    var centre = strikes.length ~/ 2;
+    if (reference != null) {
+      for (var i = 0; i < strikes.length; i++) {
+        if ((strikes[i].strikePrice - reference).abs() <
+            (strikes[centre].strikePrice - reference).abs()) {
+          centre = i;
+        }
+      }
+    }
+    final start = math.max(0, math.min(centre - radius, strikes.length - window));
+    return strikes.sublist(start, start + window);
+  }
 }
 
 class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
@@ -120,7 +169,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   String? _roomId;
   String _section = 'Chain';
   String _optionSide = 'CE';
-  String _smartlistKind = 'Most active';
+  String _smartlistKind = 'Highest OI';
   String _search = '';
   bool _showAllStrikes = false;
   DateTime? _centeredExpiry;
@@ -355,11 +404,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         : MintTickFnoDiscoveryFacts.atmStrike(market, now) ??
             market.underlyingReferenceSpot;
     final ranked = [...all]..sort((a, b) {
-      final ao = a.openInterest;
-      final bo = b.openInterest;
-      if (ao != null && bo != null) return bo.compareTo(ao);
-      if (ao != null) return -1;
-      if (bo != null) return 1;
       final ak = _strikeForLeg(market!, a);
       final bk = _strikeForLeg(market, b);
       if (reference != null && ak != null && bk != null) {
@@ -369,9 +413,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       }
       return (ak ?? 0).compareTo(bk ?? 0);
     });
-    final trending = ranked.take(8).toList();
-    final topSmartlist = _smartlistKind == 'Most active'
-        ? ranked.where((leg) => leg.openInterest != null).take(6).toList()
+    final listed = ranked.take(8).toList();
+    final searchKeys = all.map((leg) => leg.instrumentKey).toSet();
+    final topSmartlist = _smartlistKind == 'Highest OI' && market != null
+        ? MintTickFnoDiscoveryFacts.highestOpenInterest(
+              market, now, _optionSide)
+            .where((leg) => searchKeys.contains(leg.instrumentKey))
+            .take(6).toList()
         : <CustomerFnoLeg>[];
     final freshCount = market == null ? 0
         : MintTickFnoDiscoveryFacts.freshLegs(market, now).length;
@@ -405,7 +453,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         ),
       ),
       const SizedBox(height: 12),
-      Text('Trending Options', style: Theme.of(context).textTheme.titleLarge
+      Text('Listed Options', style: Theme.of(context).textTheme.titleLarge
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 10),
       Row(children: [
@@ -453,7 +501,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: scheme.onSurfaceVariant)),
       const SizedBox(height: 10),
-      _optionsList(context, market, trending, now),
+      _optionsList(context, market, listed, now),
       const SizedBox(height: 24),
       Row(children: [
         Icon(Icons.candlestick_chart_rounded, size: 20, color: scheme.primary),
@@ -464,7 +512,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       ]),
       const SizedBox(height: 10),
       SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-        for (final kind in const ['Most active', 'Top traded', 'OI gainers'])
+        for (final kind in const ['Highest OI', 'Top traded', 'OI gainers'])
           Padding(padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
               key: ValueKey('minttick-options-smartlist-${kind.toLowerCase().replaceAll(' ', '-')}'),
@@ -474,9 +522,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             )),
       ])),
       const SizedBox(height: 8),
+      if (_smartlistKind == 'Highest OI' && topSmartlist.isNotEmpty)
+        Padding(padding: const EdgeInsets.only(bottom: 5),
+          child: Text('Source-backed OI · reference only, not traded volume',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant))),
       _optionsList(context, market, topSmartlist, now,
-          emptyText: _smartlistKind == 'Most active'
-              ? 'No verified open-interest data.'
+          emptyText: _smartlistKind == 'Highest OI'
+              ? 'No source-backed open-interest counts for this expiry.'
               : _smartlistKind == 'Top traded'
                   ? 'Trading volume not available from the option feed.'
                   : 'Open-interest change not available from the option feed.',
@@ -601,8 +654,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               )),
               Expanded(flex: 3, child: Text(
                 market != null && market.displayRightsVerified
-                    ? _count(leg.openInterest ??
-                        _chainSnapshot(market, leg, now)?.openInterest)
+                    ? _count(_displayOpenInterest(market, leg, now))
                     : '—',
                 textAlign: TextAlign.right,
                 style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -781,7 +833,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     }
     final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
     final near = atm ?? market.underlyingReferenceSpot;
-    final strikes = _visibleStrikes(market.strikes, near);
+    final strikes = MintTickFnoDiscoveryFacts.visibleStrikes(
+        market.strikes, near, showAll: _showAllStrikes,
+        radius: _windowRadius);
     final hiddenCount = market.strikes.length - strikes.length;
     if (near != null && _centeredExpiry != market.expiry) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -832,24 +886,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           Text('Market closed · no stale contract is labelled LIVE.',
             style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
       ]));
-  }
-
-  List<CustomerFnoStrike> _visibleStrikes(
-      List<CustomerFnoStrike> strikes, num? atm) {
-    final window = _windowRadius * 2 + 1;
-    if (_showAllStrikes || atm == null || strikes.length <= window) {
-      return strikes;
-    }
-    var centre = 0;
-    for (var i = 1; i < strikes.length; i++) {
-      if ((strikes[i].strikePrice - atm).abs() <
-          (strikes[centre].strikePrice - atm).abs()) {
-        centre = i;
-      }
-    }
-    final start = math.max(0,
-        math.min(centre - _windowRadius, strikes.length - window));
-    return strikes.sublist(start, start + window);
   }
 
   Widget _chainHeader(BuildContext context) {
@@ -918,8 +954,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final pct = fresh ? leg.priceChangePct : null;
     final snapshot = leg == null ? null : _chainSnapshot(market, leg, now);
     final cells = <Widget>[
-      _numCell(context, visible && leg.openInterest != null
-          ? _count(leg.openInterest) : _count(snapshot?.openInterest)),
+      _numCell(context, leg == null ? '—'
+          : _count(_displayOpenInterest(market, leg, now))),
       _numCell(context, visible
           ? _amount(leg.ltp) : _amount(snapshot?.ltp), bold: true),
       _numCell(context, _changeText(pct),
@@ -994,10 +1030,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             _sheetRow(sheetContext, 'Previous close',
                 _price(visible ? leg.previousClose : null)),
             _sheetRow(sheetContext,
-                visible && leg.openInterest != null
-                    ? 'Open interest' : 'OI · chain snapshot',
-                visible && leg.openInterest != null
-                    ? _count(leg.openInterest) : _count(chain?.openInterest)),
+                fresh && leg.openInterest != null
+                    ? 'Open interest'
+                    : chain?.openInterest != null
+                        ? 'OI · chain snapshot'
+                        : visible ? 'OI · last trade' : 'Open interest',
+                _count(_displayOpenInterest(market, leg, now))),
             _sheetRow(sheetContext,
                 fresh && leg.iv != null ? 'IV' : 'IV · chain snapshot',
                 _decimal(fresh && leg.iv != null ? leg.iv : chain?.iv)),
@@ -1176,6 +1214,19 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       return null;
     }
     return market.chainSnapshotIndicators[leg.instrumentKey];
+  }
+
+  // Prefer fresh V3 OI, then recent V2 reference OI, then independently
+  // authorized retained V3 OI. Never prefer last week's OI over newer chain OI.
+  static int? _displayOpenInterest(
+      CustomerFnoMarket market, CustomerFnoLeg leg, DateTime now) {
+    if (!market.displayRightsVerified) return null;
+    if (_fresh(market, leg, now) && leg.openInterest != null) {
+      return leg.openInterest;
+    }
+    final chainOi = _chainSnapshot(market, leg, now)?.openInterest;
+    if (chainOi != null) return chainOi;
+    return _displayQuote(market, leg, now) ? leg.openInterest : null;
   }
 
   static bool _displayQuote(CustomerFnoMarket market, CustomerFnoLeg leg,
