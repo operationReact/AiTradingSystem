@@ -60,7 +60,8 @@ Map<String, dynamic> overviewJson({String indexFreshness = 'LAST_CLOSE',
     };
 
 class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotMarketRepository,
-    CustomerCandleRepository, CustomerDetailRepository, CustomerWatchlistRepository,
+    CustomerCandleRepository, CustomerDetailRepository, CustomerCompanyProfileRepository,
+    CustomerWatchlistRepository,
     CustomerOverviewRepository {
   bool failOverview = false;
   String indexFreshness = 'LAST_CLOSE';
@@ -111,6 +112,24 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
       indexFreshness: indexFreshness,
       source: storedOverview ? 'STORED_LAST_OVERVIEW' : 'ANGEL_ONE_SMARTAPI_FULL_BULK',
     ));
+  }
+
+  @override
+  Future<CustomerCompanyProfile> companyProfile(int instrumentId) async {
+    return CustomerCompanyProfile.fromJson({
+      'contractVersion': 'customer.market.company-profile.v1',
+      'instrumentId': instrumentId,
+      'tradingSymbol': 'TEST-EQ',
+      'companyName': 'Test Company',
+      'exchange': 'NSE',
+      'securityType': 'EQ',
+      'industry': 'Engineering',
+      'sizeSegment': 'MID',
+      'indexMemberships': [
+        {'indexCode': 'MIDCAP150', 'source': 'NSE_MIDCAP150_CSV',
+          'sourceAsOf': '2026-11-20'},
+      ],
+    });
   }
 
   @override
@@ -452,6 +471,16 @@ void main() {
     expect(find.text('Company information'), findsOneWidget);
     expect(find.text('Lot size'), findsOneWidget);
     expect(find.text('Tick size'), findsOneWidget);
+    expect(find.text('Industry'), findsOneWidget);
+    expect(find.text('Engineering'), findsOneWidget);
+    expect(find.text('Index size'), findsOneWidget);
+    expect(find.text('MID'), findsOneWidget);
+    expect(find.byKey(const ValueKey('company-index-MIDCAP150')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('company-source-details')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('NSE_MIDCAP150_CSV'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(find.text('Mock sector: Sample sector'), findsNothing);
     expect(find.text('₹121.00'), findsOneWidget);
     expect(find.text('₹120.00'), findsOneWidget);
