@@ -61,7 +61,7 @@ jobs:
           if p.get("Type") != "SecureString":
               raise RuntimeError("SANDBOX_SSM_NOT_SECURESTRING")
           token = p.get("Value")
-          if not isinstance(token, str) or not re.fullmatch(r"[^\\s]{20,4096}", token):
+          if not isinstance(token, str) or not re.fullmatch(r"[^\s]{20,4096}", token):
               raise RuntimeError("SANDBOX_SSM_INVALID_TOKEN_FORMAT")
           print("SANDBOX_SSM_SECURESTRING:READ_AND_DECRYPT_VERIFIED")
           print("SANDBOX_BROKER_REQUESTS:ZERO")
