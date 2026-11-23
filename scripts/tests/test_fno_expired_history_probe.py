@@ -51,6 +51,10 @@ class ExpiredHistoryContractTests(unittest.TestCase):
             self.assertIn("/future/contract?", get.call_args_list[1].args[0])
             self.assertIn("/historical-candle/", get.call_args_list[2].args[0])
             self.assertIn("%7C", get.call_args_list[2].args[0])
+            # 21 calendar days can include >=7 actual futures sessions;
+            # the previous seven-day probe returned only five on real host.
+            self.assertIn("/2026-11-19/2026-10-29",
+                          get.call_args_list[2].args[0])
 
     def test_prefers_last_source_listed_expiry_from_completed_month(self):
         listed = {"status": "success", "data": ["2026-11-19", "2026-10-22", "2026-10-29"]}
