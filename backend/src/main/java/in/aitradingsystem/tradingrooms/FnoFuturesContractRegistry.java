@@ -206,6 +206,17 @@ public class FnoFuturesContractRegistry {
         return new UniverseResult(state, rows.total(), rows.contracts());
     }
 
+    /** Search over the already-loaded provider file; never perform a provider GET. */
+    public UniverseResult universeSearch(String query, String type,
+            int page, int pageSize) {
+        UniverseStatus state = universeStatus();
+        if (!("LOADED".equals(state.state()) ||
+                "STALE_LAST_REFRESH_FAILED".equals(state.state())))
+            return new UniverseResult(state, 0, List.of());
+        var result = universeSnapshot.catalog().search(query, type, page, pageSize);
+        return new UniverseResult(state, result.total(), result.contracts());
+    }
+
     private static byte[] gunzipIfNeeded(byte[] bytes) throws java.io.IOException {
         if (bytes.length >= 2 && (bytes[0] & 0xff) == 0x1f && (bytes[1] & 0xff) == 0x8b) {
             try (var in = new java.util.zip.GZIPInputStream(new ByteArrayInputStream(bytes))) {
