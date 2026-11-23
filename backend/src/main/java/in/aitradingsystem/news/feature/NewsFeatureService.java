@@ -57,20 +57,21 @@ public class NewsFeatureService {
         String base = baseSymbol(tradingSymbol);
         if (!SAFE_BASE_SYMBOL.matcher(base).matches()) {
             return new NewsContext(NewsFeaturePolicy.CONTRACT, instrumentId, tradingSymbol, asOf,
-                NewsContext.STATUS_NO_COVERAGE, null, "UNKNOWN", "UNKNOWN", 0, 0, List.of(), NewsContext.LIMITATIONS);
+                NewsContext.STATUS_NO_COVERAGE, null, "UNKNOWN", "UNKNOWN", 0, 0, List.of(), NewsContext.LIMITATIONS,
+                false, null, null);
         }
         List<Row> rows = jdbc.sql("""
                 SELECT x.article_id, x.source, x.title, x.url, x.published_at,
                        x.analysis_status, x.provider, x.model, x.sentiment, x.direction_score,
                        x.confidence, x.materiality, x.horizon, x.contradiction, x.ambiguity,
-                       x.impacted_symbols, x.evidence, x.analysis_created_at
+                       x.impacted_symbols, x.evidence, x.analysis_created_at, x.category
                   FROM (
                       SELECT DISTINCT ON (a.id)
                              a.id AS article_id, a.source, a.title, a.url, a.published_at,
                              an.status AS analysis_status, an.provider, an.model, an.sentiment,
                              an.direction_score, an.confidence, an.materiality, an.horizon,
                              an.contradiction, an.ambiguity, an.impacted_symbols, an.evidence,
-                             an.created_at AS analysis_created_at
+                             an.created_at AS analysis_created_at, an.category
                         FROM news_articles a
                         JOIN news_analyses an ON an.article_id = a.id
                        WHERE a.published_at <= :asOf
@@ -109,11 +110,13 @@ public class NewsFeatureService {
                 (Boolean) rs.getObject("ambiguity"),
                 rs.getString("impacted_symbols"),
                 rs.getString("evidence"),
-                rs.getObject("analysis_created_at", OffsetDateTime.class).toInstant()))
+                rs.getObject("analysis_created_at", OffsetDateTime.class).toInstant(),
+                rs.getString("category")))
             .list();
 
         List<NewsFeaturePolicy.Evaluated> evaluated = new ArrayList<>();
         List<NewsContext.Evidence> evidence = new ArrayList<>();
+        boolean blackoutActive = false;
         for (Row row : rows) {
             boolean verified = symbols(row.impactedSymbols()).stream()
                 .anyMatch(s -> baseSymbol(s).equals(base));
@@ -125,13 +128,19 @@ public class NewsFeatureService {
                 verified);
             NewsFeaturePolicy.Status status = NewsFeaturePolicy.classify(candidate, asOf);
             evaluated.add(new NewsFeaturePolicy.Evaluated(candidate, status));
+            NewsEventClassifier.EventClass eventClass = NewsEventClassifier.classify(row.category());
+            java.time.Instant validUntil = NewsFeaturePolicy.validUntil(row.publishedAt(), row.horizon());
+            java.time.Instant blackoutUntil = NewsEventClassifier.blackoutUntil(eventClass, row.materiality(), row.publishedAt());
+            boolean included = status == NewsFeaturePolicy.Status.INCLUDED;
+            if (included && NewsEventClassifier.inBlackout(blackoutUntil, asOf)) blackoutActive = true;
             if (evidence.size() < MAX_EVIDENCE) {
                 evidence.add(new NewsContext.Evidence(
                     row.articleId(), row.source(), row.title(), row.url(), row.publishedAt(),
-                    row.analysisCreatedAt(), NewsFeaturePolicy.validUntil(row.publishedAt(), row.horizon()),
+                    row.analysisCreatedAt(), validUntil,
                     row.horizon(), row.sentiment(), row.directionScore(), row.confidence(), row.materiality(),
                     row.provider(), row.model(), truncate(row.evidence(), 300), status.name(),
-                    status == NewsFeaturePolicy.Status.INCLUDED));
+                    included, eventClass.name(),
+                    NewsFreshness.of(row.publishedAt(), validUntil, asOf).name(), blackoutUntil));
             }
         }
 
@@ -142,7 +151,7 @@ public class NewsFeatureService {
         return new NewsContext(NewsFeaturePolicy.CONTRACT, instrumentId, tradingSymbol, asOf, status,
             aggregate.netDirection(), aggregate.direction(), aggregate.uncertainty(),
             aggregate.includedCount(), aggregate.excludedCount(), List.copyOf(evidence),
-            NewsContext.LIMITATIONS);
+            NewsContext.LIMITATIONS, blackoutActive, null, null);
     }
 
     /** Upper-case base symbol: NSE equity series suffix "-EQ" is dropped for comparison. */
@@ -174,5 +183,5 @@ public class NewsFeatureService {
                        String analysisStatus, String provider, String model, String sentiment,
                        BigDecimal directionScore, BigDecimal confidence, BigDecimal materiality,
                        String horizon, Boolean contradiction, Boolean ambiguity, String impactedSymbols,
-                       String evidence, Instant analysisCreatedAt) {}
+                       String evidence, Instant analysisCreatedAt, String category) {}
 }

@@ -15,13 +15,14 @@ class NewsLeakageAuditTest {
                                                  Instant validUntil) {
         return new NewsContext.Evidence("article-1", "SRC", "t", "u", publishedAt, analysisAt, validUntil,
             "INTRADAY", "POSITIVE", new BigDecimal("0.5"), new BigDecimal("0.8"), new BigDecimal("0.7"),
-            "TEST", "m", "s", included ? "INCLUDED" : "EXCLUDED_EXPIRED", included);
+            "TEST", "m", "s", included ? "INCLUDED" : "EXCLUDED_EXPIRED", included,
+            "GENERAL", "FRESH", null);
     }
 
     private static NewsContext context(NewsContext.Evidence... items) {
         return new NewsContext(NewsFeaturePolicy.CONTRACT, 1L, "X-EQ", SIGNAL,
             NewsContext.STATUS_INCLUDED_EVIDENCE, null, "UNKNOWN", "UNKNOWN", 0, 0, List.of(items),
-            NewsContext.LIMITATIONS);
+            NewsContext.LIMITATIONS, false, null, null);
     }
 
     @Test
