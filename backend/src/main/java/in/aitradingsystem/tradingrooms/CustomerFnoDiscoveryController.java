@@ -258,7 +258,15 @@ public final class CustomerFnoDiscoveryController {
         var lastByKey = new java.util.HashMap<String,
             CustomerFnoLastTradeSnapshotStore.LastTrade>();
         var store = lastTrades;
-        if (store != null) lastByKey.putAll(store.latestAll(keys));
+        if (store != null) {
+            try {
+                lastByKey.putAll(store.latestAll(keys));
+            } catch (RuntimeException snapshotUnavailable) {
+                // An unavailable read-only snapshot table must not suppress
+                // separately authorized Upstox REST last trades or listed contracts.
+                // Never treat an absent snapshot as a fresh/executable quote.
+            }
+        }
 
         // REST full quotes contain actual last-trade times, including previous
         // session values. Independent permission is mandatory, and REST data
