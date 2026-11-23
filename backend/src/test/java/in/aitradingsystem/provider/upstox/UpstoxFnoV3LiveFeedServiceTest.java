@@ -279,6 +279,55 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void realtimeSummaryRequiresActualFreshExchangeTickAndNeverCountsSpot() {
+        var now = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var stream = service(now);
+        try {
+            var stopped = stream.streamingCoverage();
+            assertThat(stopped.subscribedNseFno()).isZero();
+            stream.start(List.of("NSE_FO|61001"),
+                List.of("NSE_EQ|INE002A01018"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket, ByteBuffer.wrap(
+                UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            var live = stream.streamingCoverage();
+            assertThat(live.socketState()).isEqualTo("CONNECTED");
+            assertThat(live.subscribedNseFno()).isEqualTo(1);
+            assertThat(live.freshExchangeLtp()).isEqualTo(1);
+            assertThat(live.freshTwoSidedDepth()).isEqualTo(1);
+            assertThat(live.withOi()).isEqualTo(1);
+            assertThat(live.withVolume()).isEqualTo(1);
+            assertThat(live.withGreeks()).isEqualTo(1);
+            assertThat(live.liveOrderAuthorized()).isFalse();
+            stream.stop();
+            assertThat(stream.streamingCoverage().freshExchangeLtp()).isZero();
+            assertThat(stream.streamingCoverage().subscribedNseFno()).isZero();
+        } finally {
+            stream.shutdown();
+        }
+    }
+
+    @Test
+    void subscribedButNoValidTradeTimeIsCountedAsMissingNotLive() {
+        var now = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var stream = service(now);
+        try {
+            stream.start(List.of("NSE_FO|61001", "NSE_FO|61002"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket, ByteBuffer.wrap(
+                UpstoxFnoV3FeedCodecTest.validFirstLevelWithoutDepth()), true);
+            var evidence = stream.streamingCoverage();
+            assertThat(evidence.subscribedNseFno()).isEqualTo(2);
+            assertThat(evidence.freshExchangeLtp()).isEqualTo(1);
+            assertThat(evidence.withoutFreshLtp()).isEqualTo(1);
+            assertThat(evidence.freshTwoSidedDepth()).isZero();
+            assertThat(evidence.liveOrderAuthorized()).isFalse();
+        } finally {
+            stream.shutdown();
+        }
+    }
+
+    @Test
     void cannotStartTwoConnectionsOrSubscribeArbitraryKeys() {
         var s = service();
         try {
