@@ -177,15 +177,16 @@ public class CustomerMindFnoPaperCycleService {
             String orderAudit,String cashAudit) {
         // A corrupted position or ledger basis must never turn into a SELL.
         // Validate all fields before querying the order history or quotes.
-        if (position.instrumentKey()==null
+        if (position==null || position.instrumentKey()==null
                 || !position.instrumentKey().matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}")
-                || !List.of("CE","PE").contains(position.optionType())
+                || (!"CE".equals(position.optionType())
+                    && !"PE".equals(position.optionType()))
                 || position.expiry()==null || position.lotSize()<=0
                 || position.lotSize()>10000 || position.quantity()<=0
                 || position.quantity()!=position.lotSize()
                 || position.costBasisPaise()<=0) {
             return abstain(now,room,"BLOCKED","UNSUPPORTED_PAPER_POSITION",
-                null,position.instrumentKey(),orderAudit,cashAudit);
+                null,position==null ? null : position.instrumentKey(),orderAudit,cashAudit);
         }
         // Guard against closing manually originated or manually modified holdings.
         String latestKey=jdbc.sql("""
