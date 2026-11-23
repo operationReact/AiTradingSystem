@@ -12,7 +12,8 @@ import java.util.UUID;
 /**
  * Small, bounded reader for Upstox MarketDataFeedV3.proto. Uses the official
  * V3 protobuf field numbers, without an extra protoc toolchain/runtime dependency.
- * Only decodes F&O LTPC, first depth, OI, IV and Greeks. Never decodes JSON ticks.
+ * Decodes F&O LTPC, last traded quantity, first depth with real quantities,
+ * live volume, OI, IV and Greeks. Never decodes JSON ticks.
  * Unknown protobuf fields are safely skipped for forward compatibility.
  */
 final class UpstoxFnoV3FeedCodec {
@@ -22,7 +23,20 @@ final class UpstoxFnoV3FeedCodec {
     record Tick(String instrumentKey, Instant tradedAt, Instant feedAt,
                 BigDecimal ltp, BigDecimal bid, BigDecimal ask, Long openInterest,
                 BigDecimal iv, BigDecimal delta, BigDecimal theta,
-                BigDecimal gamma, BigDecimal vega, BigDecimal previousClose) {}
+                BigDecimal gamma, BigDecimal vega, BigDecimal previousClose,
+                Long volume, Long bidQuantity, Long askQuantity,
+                Long lastTradedQuantity) {
+        // Existing test constructor remains source-compatible; absent
+        // V3 fields are UNKNOWN, never a fabricated zero.
+        Tick(String key, Instant tradedAt, Instant feedAt,
+                BigDecimal ltp, BigDecimal bid, BigDecimal ask, Long oi,
+                BigDecimal iv, BigDecimal delta, BigDecimal theta,
+                BigDecimal gamma, BigDecimal vega, BigDecimal previousClose) {
+            this(key, tradedAt, feedAt, ltp, bid, ask, oi,
+                    iv, delta, theta, gamma, vega, previousClose,
+                    null, null, null, null);
+        }
+    }
 
     record FeedFrame(Instant feedAt, List<Tick> ticks) {}
 
@@ -113,7 +127,8 @@ final class UpstoxFnoV3FeedCodec {
                         && f.quote != null) {
                     Quote q = f.quote;
                     ticks.add(new Tick(f.key, q.tradedAt, feedAt, q.ltp, q.bid, q.ask,
-                            q.oi, q.iv, q.delta, q.theta, q.gamma, q.vega, q.previousClose));
+                            q.oi, q.iv, q.delta, q.theta, q.gamma, q.vega, q.previousClose,
+                            q.volume, q.bidQuantity, q.askQuantity, q.lastTradedQuantity));
                 }
             }
             return new FeedFrame(feedAt, List.copyOf(ticks));
@@ -167,6 +182,8 @@ final class UpstoxFnoV3FeedCodec {
                 case 1 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseLtpc(w.message(), q); }
                 case 2 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseDepth(w.message(), q); }
                 case 3 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseGreeks(w.message(), q); }
+                // MarketFullFeed.vtt = 6: actual provider-traded quantity today.
+                case 6 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.volume = nonnegativeCount(w.varint()); }
                 case 7 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.oi = nonnegativeLong(w.decimal()); }
                 case 8 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.iv = nonnegative(w.decimal()); }
                 default -> w.skip(t);
@@ -181,6 +198,8 @@ final class UpstoxFnoV3FeedCodec {
                 case 1 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseLtpc(w.message(), q); }
                 case 2 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseTopQuote(w.message(), q); }
                 case 3 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseGreeks(w.message(), q); }
+                // FirstLevelWithGreeks.vtt = 4; do not reuse the OI field.
+                case 4 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.volume = nonnegativeCount(w.varint()); }
                 case 5 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.oi = nonnegativeLong(w.decimal()); }
                 case 6 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.iv = nonnegative(w.decimal()); }
                 default -> w.skip(t);
@@ -194,6 +213,8 @@ final class UpstoxFnoV3FeedCodec {
             switch (t >>> 3) {
                 case 1 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.ltp = nonnegative(w.decimal()); }
                 case 2 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.tradedAt = epochMillis(w.varint()); }
+                // LTPC.ltq = 3: last trade size, distinct from total volume.
+                case 3 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.lastTradedQuantity = nonnegativeCount(w.varint()); }
                 case 4 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.previousClose = nonnegative(w.decimal()); }
                 default -> w.skip(t);
             }
@@ -217,7 +238,9 @@ final class UpstoxFnoV3FeedCodec {
         while (w.more()) {
             int t = w.tag();
             switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.bidQuantity = nonnegativeCount(w.varint()); }
                 case 2 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.bid = nonnegative(w.decimal()); }
+                case 3 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.askQuantity = nonnegativeCount(w.varint()); }
                 case 4 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.ask = nonnegative(w.decimal()); }
                 default -> w.skip(t);
             }
@@ -244,6 +267,10 @@ final class UpstoxFnoV3FeedCodec {
         if (v.signum() < 0) throw new IllegalArgumentException();
         return v;
     }
+    private static long nonnegativeCount(long v) {
+        if (v < 0) throw new IllegalArgumentException();
+        return v;
+    }
     private static Long nonnegativeLong(BigDecimal v) {
         if (v.signum() < 0) throw new IllegalArgumentException();
         return v.longValueExact();
@@ -256,7 +283,7 @@ final class UpstoxFnoV3FeedCodec {
     private static final class Quote {
         Instant tradedAt;
         BigDecimal ltp, bid, ask, iv, delta, theta, gamma, vega, previousClose;
-        Long oi;
+        Long oi, volume, bidQuantity, askQuantity, lastTradedQuantity;
     }
 
     /** Minimal protobuf wire cursor, length- and tag-bounded, with no reflection. */
