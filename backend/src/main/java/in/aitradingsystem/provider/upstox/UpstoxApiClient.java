@@ -218,6 +218,26 @@ public class UpstoxApiClient {
         return get(token, "/v2/order/history?tag=" + tag);
     }
 
+    /**
+     * Official Upstox Company Fundamentals API. Only fixed section names and
+     * exact validated ISINs are accepted. Never accept a caller-supplied URL.
+     * Financial figures are forwarded only after broker success validation.
+     */
+    public JsonNode fundamentals(String token, String isin, String section) {
+        if (isin == null || !isin.matches("[A-Z]{2}[A-Z0-9]{9}[0-9]")) {
+            throw new UpstoxProviderException("UPSTOX_FUNDAMENTAL_ISIN_INVALID");
+        }
+        String base = "/v2/fundamentals/" + isin + "/";
+        String path = switch (section) {
+            case "profile" -> base + "profile";
+            case "ratios" -> base + "key-ratios";
+            case "income" -> base + "income-statement?type=consolidated&time_period=quarterly";
+            case "shareholding" -> base + "share-holdings";
+            default -> throw new UpstoxProviderException("UPSTOX_FUNDAMENTAL_SECTION_INVALID");
+        };
+        return get(token, path);
+    }
+
     private JsonNode get(String token, String fixedPath) {
         if (token == null || token.isBlank()) {
             throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
