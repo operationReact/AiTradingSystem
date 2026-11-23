@@ -89,6 +89,10 @@ class UpstoxFnoV3LiveFeedServiceTest {
             assertThat(latest.orElseThrow().previousClose())
                 .isEqualByComparingTo("130");
             assertThat(latest.orElseThrow().openInterest()).isEqualTo(5000L);
+            assertThat(latest.orElseThrow().volume()).isEqualTo(125000L);
+            assertThat(latest.orElseThrow().lastTradedQuantity()).isEqualTo(65L);
+            assertThat(latest.orElseThrow().bidQuantity()).isEqualTo(100L);
+            assertThat(latest.orElseThrow().askQuantity()).isEqualTo(200L);
             assertThat(latest.orElseThrow().delta()).isEqualByComparingTo("-0.52");
             assertThat(latest.orElseThrow().iv()).isEqualByComparingTo(".21");
             s.stop();
@@ -114,6 +118,10 @@ class UpstoxFnoV3LiveFeedServiceTest {
             assertThat(display.orElseThrow().openInterest()).isEqualTo(5000L);
             assertThat(display.orElseThrow().bid()).isNull();
             assertThat(display.orElseThrow().ask()).isNull();
+            assertThat(display.orElseThrow().volume()).isEqualTo(125000L);
+            assertThat(display.orElseThrow().lastTradedQuantity()).isEqualTo(65L);
+            assertThat(display.orElseThrow().bidQuantity()).isNull();
+            assertThat(display.orElseThrow().askQuantity()).isNull();
             s.stop();
             assertThat(s.eligibleDisplayQuote("NSE_FO|61001")).isEmpty();
         } finally {
