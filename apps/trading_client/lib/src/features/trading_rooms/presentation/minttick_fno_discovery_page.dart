@@ -870,163 +870,162 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       ));
   }
 
-  Widget _chain(BuildContext context, CustomerFnoMarket? market, DateTime now) {
+  Widget _chain(BuildContext context, CustomerFnoMarket? market,
+      DateTime now) {
     final c = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     if (market == null) {
-      return _panel(context, 'NIFTY option chain', 'Source-listed contracts',
+      return _panel(context, 'NIFTY option chain', 'Exchange-listed contracts',
         const Text('No verified option contracts available for this expiry.'));
     }
     final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
     final near = atm ?? market.underlyingReferenceSpot;
     final strikes = MintTickFnoDiscoveryFacts.visibleStrikes(
-        market.strikes, near, showAll: _showAllStrikes,
-        radius: _windowRadius);
+      market.strikes, near, showAll: _showAllStrikes,
+      radius: _windowRadius);
     final hiddenCount = market.strikes.length - strikes.length;
-    if (near != null && _centeredExpiry != market.expiry) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_chainScroll.hasClients) return;
-        final position = _chainScroll.position;
-        final target = (_strikeCentreX - position.viewportDimension / 2)
-            .clamp(0.0, position.maxScrollExtent);
-        _chainScroll.jumpTo(target.toDouble());
-        _centeredExpiry = market.expiry;
-      });
-    }
+
     return _panel(context, 'NIFTY option chain',
-      '${_ymd(market.expiry)} · ${market.strikes.length} strikes · '
-      'exchange-listed',
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(atm == null
-            ? (near == null
-                ? 'ATM unavailable until CE and PE quotes are both fresh.'
-                : 'Near provider reference ${_strike(near)} · not a live index quote.')
-            : 'ATM ≈ ${_strike(atm)} · estimated where CE and PE last prices '
-              'are closest. Not a spot price.',
-          style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-        if (market.chainSnapshotIndicators.isNotEmpty) ...[
-          Text('Upstox chain snapshot · read only · not an executable quote',
+      '${_ymd(market.expiry)} · ${market.strikes.length} listed strikes',
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (near != null)
+          Text(atm == null
+              ? 'Near ${_strike(near)} · provider reference'
+              : 'ATM ≈ ${_strike(atm)} · estimated from fresh option prices',
             style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-          const SizedBox(height: 6),
-        ],
-        const SizedBox(height: 10),
-        SingleChildScrollView(
-          controller: _chainScroll,
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(width: _tableWidth, child: Column(children: [
-            _chainHeader(context),
-            for (final strike in strikes)
-              _chainRow(context, market, strike, atm, now),
-          ])),
+        Padding(
+          padding: const EdgeInsets.only(top: 3, bottom: 10),
+          child: Text(
+            market.status == 'MARKET_CLOSED'
+                ? 'Market closed · displayed prices are not live'
+                : market.hasFreshQuotes
+                    ? 'Fresh prices marked by color; other values may be snapshots'
+                    : 'Reference prices · not executable quotes',
+            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant),
+          ),
         ),
-        const SizedBox(height: 8),
+        // All five columns fit the available phone width. More metrics
+        // belong in the contract details sheet, not off-screen columns.
+        _chainHeader(context),
+        for (final strike in strikes)
+          _chainRow(context, market, strike, atm, now),
         if (market.strikes.length > strikes.length || _showAllStrikes)
           Align(alignment: Alignment.centerRight,
             child: TextButton(
+              key: const ValueKey('fno-chain-expand-strikes'),
               onPressed: () => setState(() => _showAllStrikes = !_showAllStrikes),
               child: Text(_showAllStrikes
-                  ? 'Show strikes near ATM'
+                  ? 'Show near ATM'
                   : 'Show all ${market.strikes.length} strikes ($hiddenCount more)'),
             )),
-        if (market.status == 'MARKET_CLOSED')
-          Text('Market closed · no stale contract is labelled LIVE.',
-            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
       ]));
   }
 
   Widget _chainHeader(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: c.onSurfaceVariant, fontWeight: FontWeight.w700);
-    Widget sub(String text) => SizedBox(width: _cellWidth,
-        child: Text(text, textAlign: TextAlign.right, style: style));
+      color: c.onSurfaceVariant, fontWeight: FontWeight.w700, fontSize: 10);
+    Widget heading(String label, int flex, {bool center = false}) =>
+        Expanded(flex: flex, child: Text(label,
+          textAlign: center ? TextAlign.center : TextAlign.right,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: style));
     return Column(children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(children: [
+          Expanded(flex: 5, child: Text('CALL · CE',
+            textAlign: TextAlign.center, style: style)),
+          Expanded(flex: 3, child: Text('STRIKE',
+            textAlign: TextAlign.center,
+            style: style?.copyWith(color: c.onSurface))),
+          Expanded(flex: 5, child: Text('PUT · PE',
+            textAlign: TextAlign.center, style: style)),
+        ]),
+      ),
       Row(children: [
-        SizedBox(width: _cellWidth * 3, child: Text('CALL · CE',
-          textAlign: TextAlign.center,
-          style: style?.copyWith(color: c.onSurface))),
-        SizedBox(width: _strikeWidth, child: Text('STRIKE',
-          textAlign: TextAlign.center,
-          style: style?.copyWith(color: c.onSurface))),
-        SizedBox(width: _cellWidth * 3, child: Text('PUT · PE',
-          textAlign: TextAlign.center,
-          style: style?.copyWith(color: c.onSurface))),
+        heading('OI', 2),
+        heading('LTP', 3),
+        heading('STRIKE', 3, center: true),
+        heading('LTP', 3),
+        heading('OI', 2),
       ]),
-      const SizedBox(height: 4),
-      Row(children: [
-        sub('OI'), sub('LTP'), sub('Chg'),
-        const SizedBox(width: _strikeWidth),
-        sub('Chg'), sub('LTP'), sub('OI'),
-      ]),
-      Divider(color: c.outlineVariant, height: 10),
+      Divider(color: c.outlineVariant, height: 11),
     ]);
   }
 
   Widget _chainRow(BuildContext context, CustomerFnoMarket market,
       CustomerFnoStrike strike, num? atm, DateTime now) {
     final c = Theme.of(context).colorScheme;
-    final tint = c.primary.withValues(alpha: 0.07);
     final isAtm = atm != null && strike.strikePrice == atm;
     final callItm = atm != null && strike.strikePrice < atm;
     final putItm = atm != null && strike.strikePrice > atm;
+    final call = strike.call;
+    final put = strike.put;
     return Container(
       decoration: BoxDecoration(
-        color: isAtm ? c.primary.withValues(alpha: 0.14) : null,
+        color: isAtm ? c.primary.withValues(alpha: .10) : null,
         border: Border(bottom: BorderSide(
-          color: c.outlineVariant.withValues(alpha: 0.5), width: 0.5))),
+          color: c.outlineVariant.withValues(alpha: .42), width: .5))),
       child: Row(children: [
-        _legCells(context, market, strike.call, now, itm: callItm,
-            tint: tint, reverse: false),
-        SizedBox(width: _strikeWidth, child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        Expanded(flex: 2, child: _chainCell(context, market, call, now,
+          text: call == null ? '—' : _shortCount(
+            _displayOpenInterest(market, call, now)), itm: callItm)),
+        Expanded(flex: 3, child: _chainCell(context, market, call, now,
+          text: _chainLtp(market, call, now),
+          strong: true, itm: callItm)),
+        Expanded(flex: 3, child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 1),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             if (isAtm) Text('ATM', style: TextStyle(color: c.primary,
-                fontSize: 9, fontWeight: FontWeight.w800)),
-            Text(_strike(strike.strikePrice), style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w800)),
-          ]))),
-        _legCells(context, market, strike.put, now, itm: putItm,
-            tint: tint, reverse: true),
+              fontSize: 9, fontWeight: FontWeight.w800)),
+            Text(_strike(strike.strikePrice),
+              textAlign: TextAlign.center, maxLines: 1,
+              style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w800,
+                fontFeatures: [FontFeature.tabularFigures()])),
+          ]),
+        )),
+        Expanded(flex: 3, child: _chainCell(context, market, put, now,
+          text: _chainLtp(market, put, now),
+          strong: true, itm: putItm)),
+        Expanded(flex: 2, child: _chainCell(context, market, put, now,
+          text: put == null ? '—' : _shortCount(
+            _displayOpenInterest(market, put, now)), itm: putItm)),
       ]),
     );
   }
 
-  Widget _legCells(BuildContext context, CustomerFnoMarket market,
-      CustomerFnoLeg? leg, DateTime now, {required bool itm,
-      required Color tint, required bool reverse}) {
+  String _chainLtp(CustomerFnoMarket market, CustomerFnoLeg? leg,
+      DateTime now) {
+    if (leg == null) return '—';
+    if (_displayQuote(market, leg, now)) return _amount(leg.ltp);
+    return _amount(_chainSnapshot(market, leg, now)?.ltp);
+  }
+
+  Widget _chainCell(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoLeg? leg, DateTime now, {required String text,
+      bool strong = false, bool itm = false}) {
     final c = Theme.of(context).colorScheme;
     final fresh = leg != null && _fresh(market, leg, now);
-    final visible = leg != null && _displayQuote(market, leg, now);
-    final pct = fresh ? leg.priceChangePct : null;
-    final snapshot = leg == null ? null : _chainSnapshot(market, leg, now);
-    final cells = <Widget>[
-      _numCell(context, leg == null ? '—'
-          : _count(_displayOpenInterest(market, leg, now))),
-      _numCell(context, visible
-          ? _amount(leg.ltp) : _amount(snapshot?.ltp), bold: true),
-      _numCell(context, _changeText(pct),
-          color: pct == null ? c.onSurfaceVariant
-              : pct >= 0 ? c.primary : c.error),
-    ];
+    final color = strong && fresh
+        ? (leg.priceChangePct ?? 0) < 0 ? c.error : c.primary
+        : strong ? c.onSurface : c.onSurfaceVariant;
     return InkWell(
       onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
       child: Container(
-        width: _cellWidth * 3,
-        color: itm ? tint : null,
-        child: Row(children: reverse ? cells.reversed.toList() : cells)),
-    );
-  }
-
-  Widget _numCell(BuildContext context, String text,
-      {bool bold = false, Color? color}) =>
-      SizedBox(width: _cellWidth, child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        child: Text(text, textAlign: TextAlign.right, maxLines: 1,
+        color: itm ? c.primary.withValues(alpha: .045) : null,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
+        child: Text(text,
+          textAlign: TextAlign.right, maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: _tabular.copyWith(
-            fontSize: 12,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
-            color: color))));
+            fontSize: 11.5, fontWeight:
+              strong ? FontWeight.w800 : FontWeight.w500, color: color)),
+      ),
+    );
+  }
 
   void _showLeg(BuildContext context, CustomerFnoMarket market,
       CustomerFnoLeg leg, DateTime now) {
