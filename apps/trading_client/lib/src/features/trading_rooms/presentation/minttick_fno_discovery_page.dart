@@ -149,7 +149,9 @@ class MintTickFnoDiscoveryFacts {
       CustomerFnoMarket market, DateTime now, String side,
       {required String metric}) {
     if (!market.displayRightsVerified ||
-        (metric != 'VOLUME' && metric != 'OI_GAIN')) return const [];
+        (metric != 'VOLUME' && metric != 'OI_GAIN')) {
+      return const [];
+    }
     final utc = now.toUtc();
     final at = market.snapshotAt?.toUtc();
     if (at == null || at.isAfter(utc) ||
