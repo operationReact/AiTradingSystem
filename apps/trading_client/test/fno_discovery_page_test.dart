@@ -399,6 +399,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('authorized V2 chain OI populates Highest OI, never Top traded',
+      (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _ChainSnapshotDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Listed Options'), findsWidgets);
+    expect(find.byKey(const ValueKey('minttick-options-smartlist-highest-oi')),
+        findsOneWidget);
+    expect(find.textContaining('Source-backed OI'), findsOneWidget);
+    expect(find.text('5200'), findsWidgets);
+    await tester.ensureVisible(find.byKey(
+        const ValueKey('minttick-options-smartlist-top-traded')));
+    await tester.tap(find.byKey(
+        const ValueKey('minttick-options-smartlist-top-traded')));
+    await tester.pump();
+    expect(find.text('Trading volume not available from the option feed.'),
+        findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('open market without V3 still shows rights-gated V2 reference chain',
       (tester) async {
     final rooms = TradingRoomDraftStore();
