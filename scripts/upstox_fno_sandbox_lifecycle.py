@@ -106,6 +106,32 @@ def run_cycle(call, instrument: str, quantity: int, price: str, tick: str) -> di
     return result
 
 
+def _safe_provider_error_code(http_error) -> str:
+    """Only return a tightly allowlisted Upstox error identifier, never a body."""
+    try:
+        body = http_error.read(4096)
+        data = json.loads(body)
+    except (OSError, ValueError, TypeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    possible = []
+    for key in ("errorCode", "error_code", "code"):
+        possible.append(data.get(key))
+    for key in ("errors", "error"):
+        entry = data.get(key)
+        if isinstance(entry, dict):
+            possible.extend(entry.get(k) for k in ("errorCode", "error_code", "code"))
+        elif isinstance(entry, list):
+            for row in entry[:3]:
+                if isinstance(row, dict):
+                    possible.extend(row.get(k) for k in ("errorCode", "error_code", "code"))
+    for value in possible:
+        if isinstance(value, str) and re.fullmatch(r"UDAPI[0-9]{3,6}", value):
+            return value
+    return ""
+
+
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, msg, headers, newurl):
         return None
@@ -133,7 +159,11 @@ def sandbox_transport(token: str):
             with opener.open(req, timeout=6) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            raise SandboxError("SANDBOX_HTTP_ERROR_" + str(exc.code)) from None
+            # Do not log provider bodies or headers; safely expose only standard
+            # UDAPI code strings, never messages, keys, tokens or order values.
+            provider_code = _safe_provider_error_code(exc)
+            suffix = "_" + provider_code if provider_code else ""
+            raise SandboxError("SANDBOX_HTTP_ERROR_" + str(exc.code) + suffix) from None
         except (urllib.error.URLError, TimeoutError, OSError):
             raise SandboxError("SANDBOX_TRANSPORT_OUTCOME_UNKNOWN") from None
         if len(raw) > _MAX_RESPONSE_BYTES:
