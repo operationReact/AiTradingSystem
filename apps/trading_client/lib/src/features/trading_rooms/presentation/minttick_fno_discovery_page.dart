@@ -626,7 +626,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       ),
       for (final leg in legs)
         InkWell(
-          key: ValueKey('minttick-options-contract-${leg.instrumentKey}'),
+          key: ValueKey(compact
+              ? 'minttick-options-smartlist-contract-${leg.instrumentKey}'
+              : 'minttick-options-contract-${leg.instrumentKey}'),
           onTap: market == null ? null : () => _showLeg(context, market, leg, now),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
