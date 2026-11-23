@@ -186,8 +186,10 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   }
 
   Future<void> _loadCompany() async {
-    final repo = widget.repository;
-    if (repo is! CustomerCompanyProfileRepository) return;
+    final CustomerCompanyProfileRepository? repo =
+        widget.repository is CustomerCompanyProfileRepository
+            ? widget.repository as CustomerCompanyProfileRepository : null;
+    if (repo == null) return;
     try {
       final profile = await repo.companyProfile(widget.stock.id);
       if (!mounted || profile.tradingSymbol != widget.stock.tradingSymbol ||
