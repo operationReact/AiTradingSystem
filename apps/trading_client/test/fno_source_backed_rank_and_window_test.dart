@@ -15,7 +15,7 @@ Map<String, Object?> _leg(String key, String side,
   'observedAt': at?.toIso8601String(),
   'quoteFresh': at != null,
   'paperEligible': false,
-  if (oi != null) 'openInterest': oi,
+  'openInterest': oi,
 };
 
 CustomerFnoMarket _market(DateTime now,
