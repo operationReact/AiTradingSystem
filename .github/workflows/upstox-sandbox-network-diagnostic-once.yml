@@ -1,0 +1,80 @@
+name: Upstox sandbox read-only network diagnostic one-shot
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-sandbox-network-diagnostic-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-sandbox-network:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exactly one newly added workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-sandbox-network-diagnostic-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Diagnose upstream hostname DNS TLS and unauthenticated GET only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import http.client
+          import os
+          import socket
+          import ssl
+          import urllib.error
+          import urllib.request
+
+          host = "sandbox.upstox.com"
+          print("SANDBOX_DIAG_METHOD:READ_ONLY_NO_TOKEN_NO_POST")
+          print("SANDBOX_DIAG_PROXY_PRESENT:" + str(any(
+              k in os.environ for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
+          )).lower())
+
+          try:
+              ips = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+              print("SANDBOX_DIAG_DNS:OK")
+              print("SANDBOX_DIAG_DNS_ADDRESS_COUNT:" + str(len({i[4][0] for i in ips})))
+          except (OSError, socket.gaierror) as e:
+              print("SANDBOX_DIAG_DNS:" + type(e).__name__)
+              raise SystemExit(0)
+
+          try:
+              with socket.create_connection((host, 443), timeout=7) as sock:
+                  with ssl.create_default_context().wrap_socket(sock, server_hostname=host) as conn:
+                      print("SANDBOX_DIAG_TLS:OK")
+                      print("SANDBOX_DIAG_TLS_VERSION:" + str(conn.version()))
+          except (OSError, ssl.SSLError, TimeoutError) as e:
+              print("SANDBOX_DIAG_TLS:" + type(e).__name__)
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+          for method, path in (("GET", "/"), ("GET", "/v3/order/place")):
+              req = urllib.request.Request("https://" + host + path,
+                                           method=method,
+                                           headers={"Accept": "application/json"})
+              try:
+                  with opener.open(req, timeout=7) as res:
+                      print("SANDBOX_DIAG_HTTP_" + path.replace("/", "_") + ":" + str(res.status))
+              except urllib.error.HTTPError as e:
+                  print("SANDBOX_DIAG_HTTP_" + path.replace("/", "_") + ":" + str(e.code))
+              except (OSError, urllib.error.URLError, ssl.SSLError, TimeoutError, http.client.HTTPException) as e:
+                  print("SANDBOX_DIAG_HTTP_" + path.replace("/", "_") + ":" + type(e).__name__)
+          print("SANDBOX_DIAG_BROKER_ORDERS:ZERO")
+          PY
