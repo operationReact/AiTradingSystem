@@ -10,6 +10,10 @@ class CustomerFnoUniverseRepository {
   Future<CustomerFnoUniverseStatus> status() async =>
       CustomerFnoUniverseStatus.decode(await api.getJson('$_root/status'));
 
+  Future<CustomerFnoRealtimeCoverage> realtimeCoverage() async =>
+      CustomerFnoRealtimeCoverage.decode(
+          await api.getJson('$_root/realtime-coverage'));
+
   Future<CustomerFnoUniversePage> contracts({String? type, int page = 0}) async {
     final params = <String, String>{'page': '$page', 'size': '50'};
     if (type != null) params['type'] = type;
@@ -25,6 +29,93 @@ class CustomerFnoUniverseRepository {
     if (type != null) params['type'] = type;
     return CustomerFnoUniversePage.decode(
       await api.getJson('$_root/search', query: params));
+  }
+}
+
+/// Independent source-evidence coverage. It must never be interpreted as
+/// current total NSE coverage, account permission, or LIVE order authorization.
+class CustomerFnoRealtimeCoverage {
+  const CustomerFnoRealtimeCoverage({
+    required this.catalogState,
+    required this.catalogSha,
+    required this.catalogContracts,
+    required this.realtimeState,
+    required this.subscribedNseFno,
+    required this.freshExchangeLtp,
+    required this.freshTwoSidedDepth,
+    required this.subscribedWithoutFreshLtp,
+    required this.freshWithOi,
+    required this.freshWithVolume,
+    required this.freshWithGreeks,
+    required this.checkedAt,
+  });
+
+  final String catalogState, realtimeState;
+  final String? catalogSha;
+  final int catalogContracts, subscribedNseFno, freshExchangeLtp;
+  final int freshTwoSidedDepth, subscribedWithoutFreshLtp;
+  final int freshWithOi, freshWithVolume, freshWithGreeks;
+  final DateTime checkedAt;
+
+  bool get connected => realtimeState == 'CONNECTED';
+
+  static CustomerFnoRealtimeCoverage decode(Object? raw) {
+    if (raw is! Map<String, dynamic> ||
+        raw['catalogState'] is! String ||
+        raw['realtimeState'] is! String ||
+        (raw['realtimeState'] as String).length > 70 ||
+        raw['liveOrdersAuthorized'] != false ||
+        (raw['catalogSha'] != null && raw['catalogSha'] is! String)) {
+      throw const FormatException('Unverified F&O coverage source');
+    }
+    const names = [
+      'catalogContracts', 'subscribedNseFno', 'freshExchangeLtp',
+      'freshTwoSidedDepth', 'subscribedWithoutFreshLtp',
+      'freshWithOi', 'freshWithVolume', 'freshWithGreeks',
+    ];
+    final counts = <String, int>{};
+    for (final name in names) {
+      final value = raw[name];
+      if (value is! int || value < 0 || value > 300000) {
+        throw const FormatException('Invalid F&O realtime coverage count');
+      }
+      counts[name] = value;
+    }
+    final total = counts['catalogContracts']!;
+    final subscribed = counts['subscribedNseFno']!;
+    final fresh = counts['freshExchangeLtp']!;
+    if (subscribed > 256 ||
+        (total > 0 && subscribed > total) ||
+        subscribed != fresh + counts['subscribedWithoutFreshLtp']! ||
+        counts['freshTwoSidedDepth']! > fresh ||
+        counts['freshWithOi']! > fresh ||
+        counts['freshWithVolume']! > fresh ||
+        counts['freshWithGreeks']! > fresh ||
+        (raw['catalogState'] == 'LOADED' &&
+            (raw['catalogSha'] == null || total == 0)) ||
+        (raw['catalogState'] != 'LOADED' && total > 0) ||
+        (raw['realtimeState'] != 'CONNECTED' && subscribed > 0)) {
+      throw const FormatException('Inconsistent F&O realtime coverage');
+    }
+    final date = raw['checkedAt'];
+    final timestamp = date is String ? DateTime.tryParse(date) : null;
+    if (timestamp == null) {
+      throw const FormatException('Missing F&O coverage check time');
+    }
+    return CustomerFnoRealtimeCoverage(
+      catalogState: raw['catalogState'] as String,
+      catalogSha: raw['catalogSha'] as String?,
+      catalogContracts: total,
+      realtimeState: raw['realtimeState'] as String,
+      subscribedNseFno: subscribed,
+      freshExchangeLtp: fresh,
+      freshTwoSidedDepth: counts['freshTwoSidedDepth']!,
+      subscribedWithoutFreshLtp: counts['subscribedWithoutFreshLtp']!,
+      freshWithOi: counts['freshWithOi']!,
+      freshWithVolume: counts['freshWithVolume']!,
+      freshWithGreeks: counts['freshWithGreeks']!,
+      checkedAt: timestamp.toUtc(),
+    );
   }
 }
 
