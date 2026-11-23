@@ -117,7 +117,8 @@ class CustomerPaperFnoMarketControllerTest {
                 CE,new BigDecimal("111"),new BigDecimal("105"),4001L,
                 new BigDecimal(".18"),new BigDecimal(".4"),new BigDecimal("-3.5"),
                 new BigDecimal(".002"),new BigDecimal("5.1"),
-                new BigDecimal("110"),new BigDecimal("112"),ts,ts.plusSeconds(1))));
+                new BigDecimal("110"),new BigDecimal("112"),ts,ts.plusSeconds(1),
+                23000L, 300L, 550L, 65L)));
         var rows=CustomerPaperFnoMarketController.select(
             List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
             chain(),live,true,false);
@@ -125,6 +126,10 @@ class CustomerPaperFnoMarketControllerTest {
         assertThat(call.ltp()).isEqualByComparingTo("111");
         assertThat(call.previousClose()).isEqualByComparingTo("105");
         assertThat(call.openInterest()).isEqualTo(4001L);
+        assertThat(call.volume()).isEqualTo(23000L);
+        assertThat(call.bidQuantity()).isEqualTo(300L);
+        assertThat(call.askQuantity()).isEqualTo(550L);
+        assertThat(call.lastTradedQuantity()).isEqualTo(65L);
         assertThat(call.delta()).isEqualByComparingTo(".4");
         assertThat(call.theta()).isEqualByComparingTo("-3.5");
         assertThat(call.iv()).isEqualByComparingTo(".18");
@@ -161,13 +166,19 @@ class CustomerPaperFnoMarketControllerTest {
             new UpstoxFnoV3LiveFeedService.DisplayQuote(
                 CE, new BigDecimal("111"), new BigDecimal("105"), 4001L,
                 null, null, null, null, null,
-                null, null, ts, ts.plusSeconds(1))));
+                null, null, ts, ts.plusSeconds(1),
+                18000L, 300L, 200L, 20L)));
         var rows = CustomerPaperFnoMarketController.selectDiscovery(
             List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
             chain(), live, true);
         assertThat(rows).hasSize(1);
         assertThat(rows.getFirst().call().ltp()).isEqualByComparingTo("111");
         assertThat(rows.getFirst().call().openInterest()).isEqualTo(4001L);
+        assertThat(rows.getFirst().call().volume()).isEqualTo(18000L);
+        assertThat(rows.getFirst().call().lastTradedQuantity()).isEqualTo(20L);
+        // Display-only contract intentionally has no executable depth.
+        assertThat(rows.getFirst().call().bidQuantity()).isNull();
+        assertThat(rows.getFirst().call().askQuantity()).isNull();
         assertThat(rows.getFirst().call().quoteFresh()).isTrue();
         assertThat(rows.getFirst().call().paperEligible()).isFalse();
         assertThat(rows.getFirst().call().bid()).isNull();
