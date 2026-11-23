@@ -31,7 +31,7 @@ def contract(key,kind,strike=None):
     return obj
 
 def candle():
-    return ("2025-04-21T09:15:00+05:30",110.,111.,109.,110.5,300,120)
+    return ("2025-04-21T00:00:00+05:30",110.,111.,109.,110.5,300,120)
 
 class BulkTest(unittest.TestCase):
     def setUp(self):
@@ -138,8 +138,45 @@ class BulkTest(unittest.TestCase):
                 sink.conn.execute("UPDATE fno_history_receipts SET committed_at=1")
                 p.cleanup_expired_cache(sink)
                 self.assertEqual(sink.count(),0)
+                self.assertEqual(sink.conn.execute(
+                    "SELECT COUNT(*) FROM fno_immutable_candle_receipt"
+                    ).fetchone()[0],0)
             finally:
                 sink.close()
+        finally:
+            q.close()
+
+    def test_full_owner_expiry_purges_immutable_receipts_too(self):
+        q=core.MetadataQueue(self.path/"queue.sqlite")
+        try:
+            q.plan(KEYF,"day",date(2025,4,20),EXP,rights=p.grant(),today=DAY)
+            batch=q.claim(now=1)
+            db_path=self.path/"cache.sqlite"
+            sink=SQLiteHistoricalCandleSink(db_path,grant=p.grant(),
+                verifier=p.verify_scope,today=lambda:DAY)
+            try:
+                sink.upsert(batch,[candle()],batch.dedupe_key)
+                self.assertEqual(sink.conn.execute(
+                    "SELECT COUNT(*) FROM fno_immutable_candle_receipt"
+                    ).fetchone()[0],1)
+            finally:
+                sink.close()
+            with patch.object(p,"BASE_DIR",self.path),patch.object(
+                    p,"DATA_DB",db_path),patch.object(
+                    p,"today",lambda:date(2026,11,29)):
+                self.assertEqual(p.expire_private_cache(),
+                    "OWNER_SCOPE_EXPIRED_CACHE_CLEARED")
+            import sqlite3
+            with sqlite3.connect(db_path) as db:
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM fno_historical_candles"
+                    ).fetchone()[0],0)
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM fno_history_receipts"
+                    ).fetchone()[0],0)
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM fno_immutable_candle_receipt"
+                    ).fetchone()[0],0)
         finally:
             q.close()
 
