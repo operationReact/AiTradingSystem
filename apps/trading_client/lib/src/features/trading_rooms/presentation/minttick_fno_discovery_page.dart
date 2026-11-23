@@ -203,6 +203,85 @@ class MintTickFnoDiscoveryFacts {
   }
 }
 
+/// Analytics based on a complete, rights-approved option-chain snapshot.
+/// No metric here is a live underlying quote, entry signal or order permission.
+class MintTickFnoTerminalAnalytics {
+  static num? nearestStrike(CustomerFnoMarket market, num? reference) {
+    if (reference == null || market.strikes.isEmpty) return null;
+    num result = market.strikes.first.strikePrice;
+    for (final row in market.strikes) {
+      if ((row.strikePrice - reference).abs() <
+          (result - reference).abs()) result = row.strikePrice;
+    }
+    return result;
+  }
+
+  static num? priceChange(CustomerFnoChainSnapshotIndicator? source) =>
+      source?.referencePriceChange;
+  static num? priceChangePct(CustomerFnoChainSnapshotIndicator? source) =>
+      source?.referencePriceChangePct;
+
+  static num? oiChangePct(CustomerFnoChainSnapshotIndicator? source) =>
+      source?.openInterestChangePct;
+
+  static bool completeOi(CustomerFnoMarket market) =>
+      market.displayRightsVerified && market.strikes.isNotEmpty &&
+      market.strikes.every((row) =>
+        row.call != null && row.put != null &&
+        market.chainSnapshotIndicators[row.call!.instrumentKey]?.openInterest != null &&
+        market.chainSnapshotIndicators[row.put!.instrumentKey]?.openInterest != null);
+
+  static double? pcr(CustomerFnoMarket market) {
+    if (!completeOi(market)) return null;
+    var calls = 0;
+    var puts = 0;
+    for (final row in market.strikes) {
+      calls += market.chainSnapshotIndicators[row.call!.instrumentKey]!.openInterest!;
+      puts += market.chainSnapshotIndicators[row.put!.instrumentKey]!.openInterest!;
+    }
+    return calls > 0 ? puts / calls : null;
+  }
+
+  /// OI-weighted intrinsic payout minimum. Model estimate, not provider
+  /// reported max pain or predictive support/resistance.
+  static num? estimatedMaxPain(CustomerFnoMarket market) {
+    if (!completeOi(market)) return null;
+    final values = market.strikes;
+    var hasOi = false;
+    num? selected;
+    double? minPayout;
+    for (final candidate in values) {
+      var payout = 0.0;
+      for (final row in values) {
+        final call = market.chainSnapshotIndicators[row.call!.instrumentKey]!.openInterest!;
+        final put = market.chainSnapshotIndicators[row.put!.instrumentKey]!.openInterest!;
+        hasOi = hasOi || call > 0 || put > 0;
+        payout += math.max(0, candidate.strikePrice - row.strikePrice) * call +
+            math.max(0, row.strikePrice - candidate.strikePrice) * put;
+      }
+      if (minPayout == null || payout < minPayout) {
+        minPayout = payout;
+        selected = candidate.strikePrice;
+      }
+    }
+    return hasOi ? selected : null;
+  }
+
+  static num? atmIv(CustomerFnoMarket market, num? reference) {
+    final nearest = nearestStrike(market, reference);
+    if (nearest == null) return null;
+    for (final row in market.strikes) {
+      if (row.strikePrice != nearest ||
+          row.call == null || row.put == null) continue;
+      final call = market.chainSnapshotIndicators[row.call!.instrumentKey]?.iv;
+      final put = market.chainSnapshotIndicators[row.put!.instrumentKey]?.iv;
+      if (call == null || put == null || call < 0 || put < 0) return null;
+      return (call + put) / 2;
+    }
+    return null;
+  }
+}
+
 class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     with WidgetsBindingObserver {
   String? _roomId;
