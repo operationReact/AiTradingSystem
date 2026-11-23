@@ -130,6 +130,10 @@ def classify(status, raw):
         status_label = data["status"]
         if status_label == "MARKET_CLOSED" and fresh:
             raise ValueError("FRESH_TICKS_OUTSIDE_SESSION")
+        if status_label == "FRESH_QUOTES" and fresh == 0:
+            raise ValueError("FALSE_FRESH_QUOTES_STATUS")
+        if status_label == "NO_FRESH_QUOTES" and fresh:
+            raise ValueError("FALSE_MISSING_QUOTES_STATUS")
         return (
             MARKER + "status=" + status_label +
             ";strikes=" + str(len(strikes)) +
