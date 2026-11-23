@@ -146,11 +146,11 @@ public class UpstoxFnoV3LiveFeedService {
      * The operator MUST verify each input against the fresh Upstox BOD master
      * before invoking this method. No arbitrary customer key reaches here.
      */
-    public synchronized Status subscribeAdditionalListed(List<String> verifiedKeys) {
+    synchronized Status subscribeAdditionalListed(List<String> verifiedKeys) {
         if (verifiedKeys == null || verifiedKeys.isEmpty()
                 || verifiedKeys.size() > MAX_INCREMENTAL_KEYS
                 || verifiedKeys.stream().anyMatch(
-                    k -> k == null || !k.matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}"))
+                    k -> k == null || !k.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}"))
                 || verifiedKeys.stream().distinct().count() != verifiedKeys.size()) {
             throw new IllegalArgumentException("UPSTOX_FNO_INVALID_LISTED_SUBSCRIPTIONS");
         }
