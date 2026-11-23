@@ -76,6 +76,11 @@ public class UpstoxFnoV3LiveFeedService {
     private volatile boolean retryScheduled;
     private volatile long connectionAttemptId;
 
+    /** Preserve the legacy private-service constructor for offline operators. */
+    public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source) {
+        this(source, false);
+    }
+
     @Autowired
     public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source,
             @Value("${minttick.upstox-fno.plus-full-capacity-verified:false}")
