@@ -34,6 +34,7 @@ public final class NewsFeaturePolicy {
         EXCLUDED_ANALYSIS_FAILED,
         EXCLUDED_EXPIRED,
         EXCLUDED_LOW_CONFIDENCE,
+        EXCLUDED_INVALID_SCORE,
         EXCLUDED_UNCERTAIN
     }
 
@@ -82,6 +83,14 @@ public final class NewsFeaturePolicy {
         if (c.confidence() == null || c.materiality() == null || c.directionScore() == null
             || c.confidence().compareTo(MIN_CONFIDENCE) < 0) {
             return Status.EXCLUDED_LOW_CONFIDENCE;
+        }
+        // Treat all model-produced scores as untrusted, including persisted/legacy rows.
+        // Invalid ranges must never flip aggregate direction or produce a net outside [-1, 1].
+        if (c.confidence().compareTo(BigDecimal.ONE) > 0
+            || c.materiality().signum() <= 0
+            || c.materiality().compareTo(BigDecimal.ONE) > 0
+            || c.directionScore().abs().compareTo(BigDecimal.ONE) > 0) {
+            return Status.EXCLUDED_INVALID_SCORE;
         }
         if (c.contradiction() || c.ambiguity()) return Status.EXCLUDED_UNCERTAIN;
         return Status.INCLUDED;
