@@ -10,27 +10,22 @@ class CustomerFnoUniverseRepository {
   Future<CustomerFnoUniverseStatus> status() async =>
       CustomerFnoUniverseStatus.decode(await api.getJson('$_root/status'));
 
-  Future<CustomerFnoUniversePage> contracts({String? type, int page = 0}) async =>
-      CustomerFnoUniversePage.decode(await api.getJson(
-        '$_root/contracts',
-        query: {
-          'page': '$page',
-          'size': '50',
-          if (type != null) 'type': type,
-        },
-      ));
+  Future<CustomerFnoUniversePage> contracts({String? type, int page = 0}) async {
+    final params = <String, String>{'page': '$page', 'size': '50'};
+    if (type != null) params['type'] = type;
+    return CustomerFnoUniversePage.decode(
+      await api.getJson('$_root/contracts', query: params));
+  }
 
   Future<CustomerFnoUniversePage> search(
-      String query, {String? type, int page = 0}) async =>
-      CustomerFnoUniversePage.decode(await api.getJson(
-        '$_root/search',
-        query: {
-          'q': query,
-          'page': '$page',
-          'size': '50',
-          if (type != null) 'type': type,
-        },
-      ));
+      String query, {String? type, int page = 0}) async {
+    final params = <String, String>{
+      'q': query, 'page': '$page', 'size': '50',
+    };
+    if (type != null) params['type'] = type;
+    return CustomerFnoUniversePage.decode(
+      await api.getJson('$_root/search', query: params));
+  }
 }
 
 class CustomerFnoUniverseStatus {
