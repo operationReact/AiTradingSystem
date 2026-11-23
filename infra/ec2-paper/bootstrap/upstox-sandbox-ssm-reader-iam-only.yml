@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  MintTick Upstox non-funded sandbox ONLY. New dedicated GitHub OIDC IAM role
+  for exact sandbox SecureString; no production API, broker execution IAM,
+  EC2 mutation, or other SSM parameters. Create as a separate stack.
+Resources:
+  UpstoxSandboxGithubSsmReader:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: minttick-upstox-sandbox-ssm-reader
+      Description: Only dev GitHub workflow may read exact Upstox sandbox token
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                # Exact customized OIDC subject used by existing dev SSM workflows.
+                "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+      Policies:
+        - PolicyName: minttick-upstox-sandbox-ssm-exact-reader
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadOnlyExactSandboxTokenMumbai
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/sandbox/access-token
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: ap-south-1
+      Tags:
+        - Key: Application
+          Value: minttick
+        - Key: Environment
+          Value: upstox-sandbox
+        - Key: Capability
+          Value: ssm-single-parameter-reader
+Outputs:
+  SandboxReaderRoleArn:
+    Description: GitHub Actions role permitted to fetch only sandbox token
+    Value: !GetAtt UpstoxSandboxGithubSsmReader.Arn
