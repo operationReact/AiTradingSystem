@@ -515,7 +515,7 @@ public class UpstoxFnoV3LiveFeedService {
             local.checkedAt(), false);
     }
 
-    private StreamingCounts localStreamingCoverage() {
+    StreamingCounts localStreamingCoverage() {
         Instant now = clock.instant();
         String socketState = state;
         if (!wanted || destroyed || !"CONNECTED".equals(socketState)
