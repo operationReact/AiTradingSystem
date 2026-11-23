@@ -845,28 +845,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     );
   }
 
-  Widget _expiryRow(BuildContext context) {
-    if (_expiries.isEmpty) {
-      return MintTickSurface(child: Text('No verified upcoming expiry calendar.',
-          style: Theme.of(context).textTheme.bodySmall));
-    }
-    return SizedBox(height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _expiries.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final date = _expiries[index];
-          return ChoiceChip(
-            key: ValueKey('fno-discovery-expiry-${_ymd(date)}'),
-            label: Text(_ymd(date)),
-            selected: _expiry == date,
-            onSelected: _loading ? null : (_) => _loadMarket(date),
-          );
-        },
-      ));
-  }
-
   Widget _chain(BuildContext context, CustomerFnoMarket? market,
       DateTime now) {
     final c = Theme.of(context).colorScheme;
