@@ -162,7 +162,7 @@ public class FnoFuturesContractRegistry {
      */
     /** Exact-key identity lookup, guarded by source rights and master age. */
     public Optional<UpstoxFnoInstrumentUniverse.Contract> listedInstrument(String key) {
-        if (key == null || !key.matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}"))
+        if (key == null || !key.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}"))
             return Optional.empty();
         var status = universeStatus();
         if (!("LOADED".equals(status.state()) ||
