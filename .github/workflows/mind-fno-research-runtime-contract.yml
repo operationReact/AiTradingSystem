@@ -5,8 +5,10 @@ on:
     paths:
       - 'scripts/mind/check_fno_research_runtime.py'
       - 'scripts/mind/check_fno_capability_runtime.py'
+      - 'scripts/mind/check_fno_market_snapshot.py'
       - 'scripts/mind/test_check_fno_research_runtime.py'
       - 'scripts/mind/test_check_fno_capability_runtime.py'
+      - 'scripts/mind/test_check_fno_market_snapshot.py'
       - '.github/workflows/mind-fno-research-runtime-contract.yml'
       - '.github/workflows/mind-live-verify.yml'
   push:
@@ -14,8 +16,10 @@ on:
     paths:
       - 'scripts/mind/check_fno_research_runtime.py'
       - 'scripts/mind/check_fno_capability_runtime.py'
+      - 'scripts/mind/check_fno_market_snapshot.py'
       - 'scripts/mind/test_check_fno_research_runtime.py'
       - 'scripts/mind/test_check_fno_capability_runtime.py'
+      - 'scripts/mind/test_check_fno_market_snapshot.py'
       - '.github/workflows/mind-fno-research-runtime-contract.yml'
 permissions:
   contents: read
@@ -30,6 +34,7 @@ jobs:
       - name: Run sanitized F&O research response unit tests
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py
+          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py scripts/mind/check_fno_market_snapshot.py
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_research_runtime.py' -v
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_capability_runtime.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_market_snapshot.py' -v
