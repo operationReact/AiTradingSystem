@@ -372,6 +372,16 @@ public class UpstoxFnoV3LiveFeedService {
      * Bounded exchange-timed display quotes for the separate customer snapshot
      * collector. This exposes no rights and never grants execution eligibility.
      */
+    /**
+     * Read-only subscription identity proof for Mintick Mind coverage checks.
+     * A subscription is NOT a fresh quote, source entitlement or order grant.
+     */
+    public boolean hasActiveFnoSubscription(String key) {
+        return UpstoxFnoV3FeedCodec.validKey(key) &&
+            wanted && !destroyed && "CONNECTED".equals(state) &&
+            subscribed.contains(key);
+    }
+
     public List<DisplayQuote> eligibleDisplaySnapshot() {
         if (!wanted || destroyed || !"CONNECTED".equals(state)
                 || !regularNseSession(clock.instant())) return List.of();

@@ -113,7 +113,8 @@ public final class UpstoxFuturesInstrumentMaster {
         return n == null || !n.isTextual() ? null : n.asText();
     }
 
-    private static byte[] readBounded(InputStream raw) throws IOException {
+    // Shared bounded gzip/plain reader for futures and the full CE/PE universe.
+    static byte[] readBounded(InputStream raw) throws IOException {
         PushbackInputStream in = new PushbackInputStream(raw, 2);
         int b1 = in.read();
         int b2 = in.read();

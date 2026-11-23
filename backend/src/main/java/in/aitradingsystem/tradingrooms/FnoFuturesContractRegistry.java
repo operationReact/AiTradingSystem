@@ -2,6 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.provider.upstox.FuturesInstrumentMasterFetcher;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster;
+import in.aitradingsystem.provider.upstox.UpstoxFnoInstrumentUniverse;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
 import java.io.ByteArrayInputStream;
 import java.time.Clock;
@@ -33,6 +34,17 @@ public class FnoFuturesContractRegistry {
 
     public record NearFar(FuturesContract near, FuturesContract far) {}
 
+    /** Full BOD identities, not V3 subscriptions, prices or order permissions. */
+    public record UniverseSnapshot(Instant fetchedAt, String sha256,
+                                   UpstoxFnoInstrumentUniverse.Catalog catalog) {}
+
+    public record UniverseStatus(String state, String lastFailure,
+            Instant fetchedAt, String sha256, int contracts,
+            int futures, int calls, int puts, int underlyings) {}
+
+    public record UniverseResult(UniverseStatus status, int totalMatches,
+            List<UpstoxFnoInstrumentUniverse.Contract> contracts) {}
+
     public record Status(String state, String lastFailure, Instant fetchedAt, String sha256,
                          int currentFutRows, int underlyings) {}
 
@@ -41,6 +53,9 @@ public class FnoFuturesContractRegistry {
     private final boolean discoveryVerified;
     private volatile Snapshot snapshot;
     private volatile String lastFailure;
+    private volatile UniverseSnapshot universeSnapshot;
+    private volatile String universeFailure;
+    private volatile Instant lastRefreshAttempt = Instant.EPOCH;
 
     @Autowired
     public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
@@ -60,24 +75,59 @@ public class FnoFuturesContractRegistry {
         refresh();
     }
 
+    /**
+     * A post-close deploy must not wait until the next 08:30 BOD job before
+     * the universe exists. Bootstrap once on startup, with a 30-minute retry
+     * floor if the public file is temporarily unavailable. Never fetch data
+     * without the existing independently authorized discovery feature flag.
+     * Does not touch, start or stop the live WebSocket.
+     */
+    @Scheduled(
+        initialDelayString = "${minttick.fno-research.master-bootstrap-delay-ms:15000}",
+        fixedDelayString = "${minttick.fno-research.master-bootstrap-check-ms:1800000}")
+    public synchronized void bootstrapIfNeeded() {
+        if (!discoveryVerified) return;
+        Instant now = clock.instant();
+        var current = universeSnapshot;
+        boolean freshToday = current != null && universeFailure == null &&
+            current.fetchedAt().atZone(IST).toLocalDate()
+                .equals(now.atZone(IST).toLocalDate());
+        if (freshToday || now.isBefore(lastRefreshAttempt.plus(
+                java.time.Duration.ofMinutes(30)))) return;
+        refresh();
+    }
+
     public synchronized void refresh() {
         if (!discoveryVerified) {
             lastFailure = "CONTRACT_DISCOVERY_NOT_VERIFIED";
+            universeFailure = "CONTRACT_DISCOVERY_NOT_VERIFIED";
             return;
         }
         Instant now = clock.instant();
+        lastRefreshAttempt = now;
         try {
             var fetched = fetcher.fetch();
             LocalDate today = now.atZone(IST).toLocalDate();
             List<FuturesContract> contracts = UpstoxFuturesInstrumentMaster.parse(
-                new ByteArrayInputStream(gunzipIfNeeded(fetched.bytes())), today);
+                new ByteArrayInputStream(fetched.bytes()), today);
             var index = UpstoxFuturesInstrumentMaster.index(contracts);
             snapshot = new Snapshot(now, fetched.sha256(), contracts.size(), index);
             lastFailure = null;
+            // One signed source file / digest for both futures and options.
+            // A CE/PE schema problem cannot corrupt a good FUT snapshot.
+            try {
+                var universe = UpstoxFnoInstrumentUniverse.parse(
+                    new ByteArrayInputStream(fetched.bytes()), today);
+                universeSnapshot = new UniverseSnapshot(now, fetched.sha256(), universe);
+                universeFailure = null;
+            } catch (Exception malformedOptions) {
+                universeFailure = "FNO_UNIVERSE_UNVERIFIED_SCHEMA";
+            }
         } catch (Exception e) {
             // Only stable codes are kept; provider bodies and exception text are not.
             lastFailure = e instanceof UpstoxFuturesInstrumentMaster.MalformedInstrumentMasterException
                 ? "INSTRUMENT_MASTER_MALFORMED" : "INSTRUMENT_MASTER_FETCH_FAILED";
+            universeFailure = "INSTRUMENT_MASTER_FETCH_FAILED";
         }
     }
 
@@ -107,6 +157,53 @@ public class FnoFuturesContractRegistry {
         return new Status(state, lastFailure, s == null ? null : s.fetchedAt(),
             s == null ? null : s.sha256(), s == null ? 0 : s.currentFutRows(),
             s == null ? 0 : s.byUnderlying().size());
+    }
+
+    public UniverseStatus universeStatus() {
+        UniverseSnapshot s = universeSnapshot;
+        var c = s == null ? null : s.catalog();
+        boolean expired = s != null &&
+            (clock.instant().isBefore(s.fetchedAt()) ||
+                clock.instant().isAfter(s.fetchedAt().plus(java.time.Duration.ofHours(36))));
+        String state = !discoveryVerified ? "DISCOVERY_NOT_VERIFIED"
+            : s == null ? "NOT_LOADED"
+            : expired ? "STALE_SNAPSHOT"
+            : universeFailure == null ? "LOADED" : "STALE_LAST_REFRESH_FAILED";
+        return new UniverseStatus(state, universeFailure,
+            s == null ? null : s.fetchedAt(),
+            s == null ? null : s.sha256(),
+            c == null ? 0 : c.size(),
+            c == null ? 0 : c.futures(),
+            c == null ? 0 : c.calls(),
+            c == null ? 0 : c.puts(),
+            c == null ? 0 : c.underlyings());
+    }
+
+    /**
+     * Safe paginated discovery; returns no contracts when the independent
+     * discovery entitlement is absent or the daily file is too old. The
+     * caller must not turn this into quote freshness or order permission.
+     */
+    /** Exact-key identity lookup, guarded by source rights and master age. */
+    public Optional<UpstoxFnoInstrumentUniverse.Contract> listedInstrument(String key) {
+        if (key == null || !key.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}"))
+            return Optional.empty();
+        var status = universeStatus();
+        if (!("LOADED".equals(status.state()) ||
+                "STALE_LAST_REFRESH_FAILED".equals(status.state())))
+            return Optional.empty();
+        return Optional.ofNullable(universeSnapshot.catalog().byInstrumentKey().get(key));
+    }
+
+    public UniverseResult universe(String underlyingKey, LocalDate expiry,
+            String type, int page, int pageSize) {
+        UniverseStatus state = universeStatus();
+        if (!("LOADED".equals(state.state()) ||
+                "STALE_LAST_REFRESH_FAILED".equals(state.state())))
+            return new UniverseResult(state, 0, List.of());
+        UpstoxFnoInstrumentUniverse.Catalog c = universeSnapshot.catalog();
+        var rows = c.query(underlyingKey, expiry, type, page, pageSize);
+        return new UniverseResult(state, rows.total(), rows.contracts());
     }
 
     private static byte[] gunzipIfNeeded(byte[] bytes) throws java.io.IOException {
