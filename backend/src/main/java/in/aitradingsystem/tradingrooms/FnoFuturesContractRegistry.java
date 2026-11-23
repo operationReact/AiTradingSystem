@@ -59,7 +59,19 @@ public class FnoFuturesContractRegistry {
 
     @Autowired
     public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
-            @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean discoveryVerified) {
+            @Value("${minttick.fno-research.contract-discovery-verified:false}")
+            boolean discoveryVerified,
+            @Value("${minttick.upstox-fno.display-rights-verified:false}")
+            boolean displayRightsVerified) {
+        // Mirror customer F&O discovery: independently verified display rights
+        // INCLUDE listed identity discovery. This does not confer retention,
+        // training, subscription, broker or LIVE order rights.
+        this(fetcher, Clock.systemUTC(),
+            discoveryVerified || displayRightsVerified);
+    }
+
+    public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
+            boolean discoveryVerified) {
         this(fetcher, Clock.systemUTC(), discoveryVerified);
     }
 
@@ -204,6 +216,17 @@ public class FnoFuturesContractRegistry {
         UpstoxFnoInstrumentUniverse.Catalog c = universeSnapshot.catalog();
         var rows = c.query(underlyingKey, expiry, type, page, pageSize);
         return new UniverseResult(state, rows.total(), rows.contracts());
+    }
+
+    /** Search over the already-loaded provider file; never perform a provider GET. */
+    public UniverseResult universeSearch(String query, String type,
+            int page, int pageSize) {
+        UniverseStatus state = universeStatus();
+        if (!("LOADED".equals(state.state()) ||
+                "STALE_LAST_REFRESH_FAILED".equals(state.state())))
+            return new UniverseResult(state, 0, List.of());
+        var result = universeSnapshot.catalog().search(query, type, page, pageSize);
+        return new UniverseResult(state, result.total(), result.contracts());
     }
 
     private static byte[] gunzipIfNeeded(byte[] bytes) throws java.io.IOException {

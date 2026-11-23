@@ -68,6 +68,32 @@ class CustomerFnoUniverseControllerTest {
     }
 
     @Test
+    void ownerCanSearchStockFuturesWithoutAnyBrokerOrLiveDataGrant() {
+        var registry = mock(FnoFuturesContractRegistry.class);
+        var status = new FnoFuturesContractRegistry.UniverseStatus(
+            "LOADED", null, Instant.parse("2026-11-23T03:00:00Z"),
+            "official-sha", 2, 1, 1, 0, 2);
+        var future = new UpstoxFnoInstrumentUniverse.Contract(
+            "NSE_FO|999", "NSE_EQ|INE002A01018", "RELIANCE",
+            "RELIANCE FUT DEC", "FUT", LocalDate.of(2026, 12, 1),
+            BigDecimal.ZERO, 250, new BigDecimal("5"),
+            new BigDecimal("100000"), false);
+        when(registry.universeSearch("reliance", "FUT", 0, 50)).thenReturn(
+            new FnoFuturesContractRegistry.UniverseResult(status, 1,
+                List.of(future)));
+        var controller = new CustomerFnoUniverseController(registry);
+        var result = controller.search(customer(), "reliance", "FUT", 0, 50);
+        assertThat(result.getBody()).isNotNull();
+        assertThat(result.getBody().contracts()).containsExactly(future);
+        assertThat(result.getBody().hasRealtimeQuotes()).isFalse();
+        assertThat(result.getBody().liveOrderAuthorized()).isFalse();
+        assertThat(result.getHeaders().getCacheControl()).contains("no-store");
+        assertThatThrownBy(() -> controller.search(null,
+            "reliance", "FUT", 0, 50))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void oversizedOrUnverifiedUniverseQueryFailsBeforeRegistryAccess() {
         var registry = mock(FnoFuturesContractRegistry.class);
         var controller = new CustomerFnoUniverseController(registry);

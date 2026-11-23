@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../data/customer_paper_fno_repository.dart';
 import '../data/customer_fno_discovery_repository.dart';
+import '../data/customer_fno_universe_repository.dart';
+import 'minttick_fno_universe_panel.dart';
 import '../domain/trading_room_draft.dart';
 import 'minttick_customer_widgets.dart';
 
@@ -586,6 +588,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         _chain(context, market, now),
       ] else if (_section == 'Movers') ...[
         _movers(context, market, now),
+      ] else if (_section == 'Universe') ...[
+        MintTickFnoUniversePanel(
+          repository: CustomerFnoUniverseRepository(widget.discovery.api)),
       ] else ...[
         _roomPicker(context, _room),
         const SizedBox(height: 8),
@@ -836,7 +841,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final c = Theme.of(context).colorScheme;
     return SizedBox(height: 43,
       child: Row(children: [
-        for (final name in const ['Chain', 'Movers', 'Trade'])
+        for (final name in const ['Chain', 'Movers', 'Universe', 'Trade'])
           Expanded(child: InkWell(
             key: ValueKey('fno-discovery-tab-${name.toLowerCase()}'),
             onTap: () => setState(() => _section = name),
