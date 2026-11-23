@@ -1,0 +1,79 @@
+name: Upstox F&O sandbox-only order lifecycle contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/upstox_fno_sandbox_lifecycle.py'
+      - 'scripts/tests/test_upstox_fno_sandbox_lifecycle.py'
+      - '.github/workflows/upstox-fno-sandbox-contract.yml'
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Only SANDBOX_ONLY authorizes the non-funded provider test'
+        required: true
+        type: choice
+        options: [DO_NOT_EXECUTE, SANDBOX_ONLY]
+      instrument_key:
+        description: 'Source-verified NSE_FO sandbox instrument key'
+        required: true
+        type: string
+      quantity:
+        description: 'Broker units, not lots'
+        required: true
+        type: number
+      price:
+        description: 'Positive LIMIT order price aligned to contract tick'
+        required: true
+        type: string
+      tick:
+        description: 'Contract minimum tick, e.g. 0.05'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  local-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run zero-network sandbox contract tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py
+          python3 -m unittest discover -s scripts/tests -p test_upstox_fno_sandbox_lifecycle.py -v
+          python3 scripts/upstox_fno_sandbox_lifecycle.py
+
+  provider-sandbox:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.confirmation == 'SANDBOX_ONLY'
+    needs: local-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    environment: broker-sandbox
+    env:
+      UPSTOX_SANDBOX_TOKEN: ${{ secrets.UPSTOX_SANDBOX_TOKEN }}
+      SANDBOX_INSTRUMENT_KEY: ${{ inputs.instrument_key }}
+      SANDBOX_QUANTITY: ${{ inputs.quantity }}
+      SANDBOX_PRICE: ${{ inputs.price }}
+      SANDBOX_TICK: ${{ inputs.tick }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute ONLY Upstox non-funded sandbox, no production fallback
+        run: |
+          set -euo pipefail
+          if [ -z "$UPSTOX_SANDBOX_TOKEN" ]; then
+            echo 'SANDBOX_TOKEN_NOT_CONFIGURED'
+            exit 1
+          fi
+          python3 scripts/upstox_fno_sandbox_lifecycle.py --execute-sandbox \
+            --instrument-key "$SANDBOX_INSTRUMENT_KEY" \
+            --quantity "$SANDBOX_QUANTITY" \
+            --price "$SANDBOX_PRICE" \
+            --tick "$SANDBOX_TICK"
