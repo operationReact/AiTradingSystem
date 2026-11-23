@@ -173,12 +173,12 @@ public final class CustomerFnoDiscoveryController {
         }
         var stream = feed.getIfAvailable();
         boolean open = sessionCalendar.isInsideFnoSession(now);
-        // A closed-market read may use independently authorized retained/REST
-        // last trades; no live socket is needed and no order authority is granted.
-        if (open && (!feedConfigured || stream == null)) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "F&O exchange feed unavailable");
-        }
+        // Market discovery must remain available to owners with verified display
+        // rights even while AUTO is STOPPED or the V3 feed is unconfigured.
+        // Never start/take over a socket; without V3 the board is read-only
+        // (NO_FRESH_QUOTES) and only independently sourced V2 chain metadata
+        // may appear, with no live or PAPER execution eligibility.
+        var liveStream = open && feedConfigured ? stream : null;
         // REST chain is a contract-identity source only; NEVER use its
         // prices, timestamps, Greeks or OI as executable V3 observations.
         // Repeated 5-second customer polling only reads fresh V3 observations.
@@ -192,7 +192,7 @@ public final class CustomerFnoDiscoveryController {
                 "F&O source provenance unavailable");
         }
         var liveStrikes = CustomerPaperFnoMarketController.selectDiscovery(
-            contracts, chain, stream, open);
+            contracts, chain, liveStream, liveStream != null && open);
         boolean fresh = liveStrikes.stream().anyMatch(s ->
             s.call().quoteFresh() || s.put().quoteFresh());
         // Order eligibility is never restored by retained snapshots.
@@ -258,7 +258,15 @@ public final class CustomerFnoDiscoveryController {
         var lastByKey = new java.util.HashMap<String,
             CustomerFnoLastTradeSnapshotStore.LastTrade>();
         var store = lastTrades;
-        if (store != null) lastByKey.putAll(store.latestAll(keys));
+        if (store != null) {
+            try {
+                lastByKey.putAll(store.latestAll(keys));
+            } catch (RuntimeException snapshotUnavailable) {
+                // An unavailable read-only snapshot table must not suppress
+                // separately authorized Upstox REST last trades or listed contracts.
+                // Never treat an absent snapshot as a fresh/executable quote.
+            }
+        }
 
         // REST full quotes contain actual last-trade times, including previous
         // session values. Independent permission is mandatory, and REST data

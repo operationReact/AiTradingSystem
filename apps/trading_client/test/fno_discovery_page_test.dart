@@ -127,6 +127,40 @@ class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
       });
 }
 
+/// Missing AUTO feed is not permission to hide a separately authorized
+/// source-listed V2 chain, nor permission to treat it as a trade quote.
+class _OpenNoV3Discovery extends _ChainSnapshotDiscovery {
+  @override
+  Future<CustomerFnoDiscoveryCapability> capability() async =>
+      CustomerFnoDiscoveryCapability.decode({
+        'displayRightsVerified': true,
+        'contractDiscoveryVerified': true,
+        'feedConfigured': false,
+        'sourceReady': true,
+        'marketOpen': true,
+        'status': 'FNO_V3_FEED_UNAVAILABLE',
+        'streamState': 'UNAVAILABLE',
+        'freshExchangeTimedQuotes': 0,
+        'latestFreshExchangeTradeAt': null,
+      });
+
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async {
+    final source = await super.market(expiry);
+    return CustomerFnoMarket(
+      underlyingKey: source.underlyingKey,
+      expiry: source.expiry,
+      status: 'NO_FRESH_QUOTES',
+      snapshotAt: source.snapshotAt,
+      displayRightsVerified: source.displayRightsVerified,
+      liveOrderEnabled: false,
+      strikes: source.strikes,
+      underlyingReferenceSpot: source.underlyingReferenceSpot,
+      chainSnapshotIndicators: source.chainSnapshotIndicators,
+    );
+  }
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -362,6 +396,28 @@ void main() {
     expect(find.text('IV · chain snapshot'), findsWidgets);
     expect(find.text('0.21'), findsWidgets);
     expect(find.text('Chain retrieved'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('open market without V3 still shows rights-gated V2 reference chain',
+      (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _OpenNoV3Discovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('NIFTY option chain'), findsWidgets);
+    expect(find.text('121.50'), findsWidgets);
+    // Backend-side contract identity remains read-only and no V3 tick is
+    // manufactured by the Flutter client.
+    expect(find.textContaining('NO FRESH QUOTES'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
