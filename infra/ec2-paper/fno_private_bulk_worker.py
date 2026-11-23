@@ -257,10 +257,15 @@ def cleanup_expired_cache(sink):
         old=[r[0] for r in sink.conn.execute(
             "SELECT batch_hash FROM fno_history_receipts WHERE committed_at<?",
             (oldest,))]
+        has_immutable=bool(sink.conn.execute("""
+            SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='fno_immutable_candle_receipt'
+            """).fetchone())
         for hashvalue in old:
             sink.conn.execute("DELETE FROM fno_historical_candles WHERE batch_hash=?",(hashvalue,))
             sink.conn.execute("DELETE FROM fno_history_receipts WHERE batch_hash=?",(hashvalue,))
-            sink.conn.execute("DELETE FROM fno_immutable_candle_receipt WHERE batch_hash=?",(hashvalue,))
+            if has_immutable:
+                sink.conn.execute("DELETE FROM fno_immutable_candle_receipt WHERE batch_hash=?",(hashvalue,))
         sink.conn.execute("COMMIT")
     except BaseException:
         sink.conn.execute("ROLLBACK")
