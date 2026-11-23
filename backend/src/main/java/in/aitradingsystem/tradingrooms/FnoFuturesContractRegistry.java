@@ -160,6 +160,17 @@ public class FnoFuturesContractRegistry {
      * discovery entitlement is absent or the daily file is too old. The
      * caller must not turn this into quote freshness or order permission.
      */
+    /** Exact-key identity lookup, guarded by source rights and master age. */
+    public Optional<UpstoxFnoInstrumentUniverse.Contract> listedInstrument(String key) {
+        if (key == null || !key.matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}"))
+            return Optional.empty();
+        var status = universeStatus();
+        if (!("LOADED".equals(status.state()) ||
+                "STALE_LAST_REFRESH_FAILED".equals(status.state())))
+            return Optional.empty();
+        return Optional.ofNullable(universeSnapshot.catalog().byInstrumentKey().get(key));
+    }
+
     public UniverseResult universe(String underlyingKey, LocalDate expiry,
             String type, int page, int pageSize) {
         UniverseStatus state = universeStatus();
