@@ -1,7 +1,6 @@
 package in.aitradingsystem.tradingrooms;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
@@ -19,7 +18,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.env.MockEnvironment;
-import org.springframework.web.server.ResponseStatusException;
 
 class CustomerFnoDiscoveryOffHoursTest {
     private static final String NIFTY = "NSE_INDEX|Nifty 50";
@@ -183,12 +181,21 @@ class CustomerFnoDiscoveryOffHoursTest {
     }
 
     @Test
-    void openMarketStillRequiresLiveFeed() {
-        when(source.enabled()).thenReturn(true);
+    void openMarketWithoutV3FeedStillShowsAuthorizedReadOnlyListedChain() {
+        var expiry = mockListedMetadata();
         when(calendar.isInsideFnoSession(any(Instant.class))).thenReturn(true);
-        var expiry = LocalDate.now(ZoneId.of("Asia/Kolkata")).plusDays(1);
-        assertThatThrownBy(() -> controller(true).internalMarket(expiry))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("F&O exchange feed unavailable");
+        var result = controller(true).internalMarket(expiry);
+        assertThat(result.status()).isEqualTo("NO_FRESH_QUOTES");
+        assertThat(result.strikes()).hasSize(1);
+        assertThat(result.strikes().getFirst().call().ltp()).isNull();
+        assertThat(result.strikes().getFirst().call().quoteFresh()).isFalse();
+        assertThat(result.strikes().getFirst().call().paperEligible()).isFalse();
+        assertThat(result.strikes().getFirst().call().bid()).isNull();
+        assertThat(result.chainSnapshotIndicators().get(CE).ltp())
+            .isEqualByComparingTo("999");
+        verify(feed).getIfAvailable();
+        verifyNoMoreInteractions(feed);
+        // Never claim an off-hours REST last trade is a fresh open-market tick.
+        verify(source, never()).listedFnoLastTrades(anyList());
     }
 }
