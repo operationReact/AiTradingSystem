@@ -68,8 +68,9 @@ jobs:
       - name: Validate read-only F&O runtime evidence parser with no network
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mind/check_fno_research_runtime.py
+          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py
           python3 -m unittest discover -s scripts/mind -p 'test_check_fno_research_runtime.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_capability_runtime.py' -v
 
       - name: Authenticated Mind reads and denials (per-run token, never printed)
         # The token is minted for this run only (Cognito access/ID tokens last 15 minutes). No long-lived
@@ -160,6 +161,26 @@ jobs:
             fail=1
           fi
           rm -f "$fno_file"
+          # Probe customer F&O capability and listed expiry readiness even
+          # after market close. Each authenticated GET returns only a sanitized
+          # flags/counters receipt; no raw provider/quote/customer data leaves
+          # this job. Does not change market data rights or trading flags.
+          for kind in capability expiries; do
+            fno_body="$RUNNER_TEMP/mind_fno_${kind}_runtime.json"
+            if fno_status="$(curl -sS -o "$fno_body" -w '%{http_code}' --max-time 20 \
+                "${auth[@]}" -H 'Accept: application/json' \
+                -H 'User-Agent: MintTick-Mind-FNO-ReadOnly/1.0' \
+                -H 'Cache-Control: no-store' \
+                "https://api.minttick.com/api/customer/markets/fno/$kind")"; then
+              if ! python3 scripts/mind/check_fno_capability_runtime.py "$kind" "$fno_status" "$fno_body"; then
+                echo "FAIL authenticated F&O $kind contract"; fail=1
+              fi
+            else
+              echo "MIND_FNO_DIAG:TRANSPORT_UNAVAILABLE"
+              fail=1
+            fi
+            rm -f "$fno_body"
+          done
           for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
             if [ "$code" = 404 ]; then echo "PASS authenticated $path -> 404"; else echo "FAIL authenticated $path -> $code"; fail=1; fi
