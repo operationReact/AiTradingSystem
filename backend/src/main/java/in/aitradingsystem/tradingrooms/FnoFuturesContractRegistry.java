@@ -85,7 +85,7 @@ public class FnoFuturesContractRegistry {
             var fetched = fetcher.fetch();
             LocalDate today = now.atZone(IST).toLocalDate();
             List<FuturesContract> contracts = UpstoxFuturesInstrumentMaster.parse(
-                new ByteArrayInputStream(gunzipIfNeeded(fetched.bytes())), today);
+                new ByteArrayInputStream(fetched.bytes()), today);
             var index = UpstoxFuturesInstrumentMaster.index(contracts);
             snapshot = new Snapshot(now, fetched.sha256(), contracts.size(), index);
             lastFailure = null;
