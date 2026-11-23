@@ -101,6 +101,9 @@ class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
       CustomerFnoMarket.decode({
         'underlyingKey': 'NSE_INDEX|Nifty 50',
         'expiry': '2026-11-23',
+        // Upstox chain supplies this reference; closed-market ATM uses it
+        // only to locate the strike, never as an executable live spot quote.
+        'underlyingReferenceSpot': 25300,
         'source': 'UPSTOX_ANALYTICS',
         'status': 'MARKET_CLOSED',
         'snapshotAt': DateTime.now().toUtc().toIso8601String(),
@@ -114,6 +117,7 @@ class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
         'chainSnapshotIndicators': {
           'NSE_FO|NIFTY_25300_CE': {
             'ltp': 121.5,
+            'closePrice': 112.0,
             'bid': 121.0,
             'ask': 122.0,
             'openInterest': 5200,
@@ -124,6 +128,14 @@ class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
             'gamma': 0.002,
             'theta': -2.5,
             'vega': 3.2,
+          },
+          'NSE_FO|NIFTY_25300_PE': {
+            'ltp': 90.0,
+            'closePrice': 95.0,
+            'openInterest': 2600,
+            'previousOpenInterest': 2500,
+            'iv': 0.23,
+            'delta': -0.45,
           },
         },
       });
@@ -401,7 +413,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
-    expect(find.textContaining('Market closed · displayed prices are not live'), findsWidgets);
+    expect(find.textContaining('Market closed · prices are not live'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -420,7 +432,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
-    expect(find.textContaining('Market closed · displayed prices are not live'), findsWidgets);
+    expect(find.textContaining('Market closed · prices are not live'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -438,10 +450,8 @@ void main() {
     ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
-    await tester.pump();
     final contract = find.byKey(
-        const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_CE'));
+        const ValueKey('fno-chain-leg-NSE_FO|NIFTY_25300_CE'));
     await tester.ensureVisible(contract);
     await tester.tap(contract);
     await tester.pumpAndSettle();
@@ -470,10 +480,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
     await tester.pump();
-    expect(find.text('Listed Options'), findsWidgets);
+    expect(find.text('Market activity'), findsWidgets);
     expect(find.byKey(const ValueKey('minttick-options-smartlist-highest-oi')),
         findsOneWidget);
-    expect(find.textContaining('Provider snapshot'), findsOneWidget);
+    expect(find.textContaining('Source-backed V2 reference'), findsOneWidget);
     expect(find.text('5.2K'), findsWidgets);
     await tester.ensureVisible(find.byKey(
         const ValueKey('minttick-options-smartlist-top-traded')));
@@ -597,10 +607,57 @@ void main() {
     expect(find.text('CALL · CE'), findsOneWidget);
     expect(find.text('PUT · PE'), findsOneWidget);
     expect(find.text('STRIKE'), findsWidgets);
-    expect(tester.widgetList<SingleChildScrollView>(
-      find.byType(SingleChildScrollView)).where(
-        (w) => w.scrollDirection == Axis.horizontal), isEmpty);
+    expect(find.byKey(const ValueKey('fno-chain-mode-price')), findsOneWidget);
+    // The metric selector may scroll, but CE/strike/PE quote rows must fit.
+    expect(find.byKey(const ValueKey('fno-chain-expand-strikes')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('V2 reference price moves, OI changes and Greeks are visible '
+      'without granting executable quotes', (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms, discovery: _ChainSnapshotDiscovery()),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('0.50'), findsOneWidget); // complete-chain OI PCR
+    expect(find.text('25300'), findsWidgets); // OI-derived max pain
+    expect(find.text('0.22'), findsOneWidget); // ATM IV mean
+    expect(find.textContaining('+9.50'), findsWidgets);
+    expect(find.textContaining('+8.5%'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('fno-chain-mode-oi')));
+    await tester.pump();
+    expect(find.textContaining('+400'), findsWidgets);
+    expect(find.textContaining('+8.3%'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('fno-chain-mode-greeks')));
+    await tester.pump();
+    expect(find.text('0.500'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-chain-mode-depth')));
+    await tester.pump();
+    expect(find.text('121.00'), findsOneWidget);
+    expect(find.textContaining('Ask 122.00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('snapshot metrics fail closed on incomplete OI and missing reference',
+      () {
+    final now = DateTime.now().toUtc();
+    final base = _liveMarket([
+      _strike(25200, 300, 100),
+      _strike(25300, 150, 140),
+      _strike(25400, 60, 200),
+    ]);
+    expect(MintTickFnoTerminalAnalytics.pcr(base), isNull);
+    expect(MintTickFnoTerminalAnalytics.estimatedMaxPain(base), isNull);
+    expect(MintTickFnoTerminalAnalytics.atmIv(base, null), isNull);
+    expect(MintTickFnoDiscoveryFacts.referencePriceMovers(
+        base, now, 'CE', positive: true), isEmpty);
   });
 
   group('ATM estimate and freshness', () {

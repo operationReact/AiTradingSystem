@@ -181,6 +181,32 @@ class MintTickFnoDiscoveryFacts {
     return List.unmodifiable(legs);
   }
 
+  /// Closed-market V2 reference percentage movers are kept separate from
+  /// exchange-timed LIVE movers. No V2 observation can authorize execution.
+  static List<CustomerFnoLeg> referencePriceMovers(
+      CustomerFnoMarket market, DateTime now, String side,
+      {required bool positive}) {
+    final at = market.snapshotAt?.toUtc();
+    final utc = now.toUtc();
+    if (!market.displayRightsVerified || at == null || at.isAfter(utc) ||
+        utc.difference(at) > const Duration(minutes: 5)) {
+      return const [];
+    }
+    final all = optionLegs(market, side).where((leg) {
+      final delta = market.chainSnapshotIndicators[leg.instrumentKey]
+          ?.referencePriceChangePct;
+      return delta != null && (positive ? delta > 0 : delta < 0);
+    }).toList();
+    all.sort((a, b) {
+      final deltaA = market.chainSnapshotIndicators[a.instrumentKey]!
+          .referencePriceChangePct!;
+      final deltaB = market.chainSnapshotIndicators[b.instrumentKey]!
+          .referencePriceChangePct!;
+      return positive ? deltaB.compareTo(deltaA) : deltaA.compareTo(deltaB);
+    });
+    return List.unmodifiable(all);
+  }
+
   /// No underlying spot/reference is NOT permission to render hundreds of
   /// rows or invent an ATM. Start at the middle of the listed strike range
   /// until the user explicitly selects Show all.
@@ -203,12 +229,96 @@ class MintTickFnoDiscoveryFacts {
   }
 }
 
+/// Analytics based on a complete, rights-approved option-chain snapshot.
+/// No metric here is a live underlying quote, entry signal or order permission.
+class MintTickFnoTerminalAnalytics {
+  static num? nearestStrike(CustomerFnoMarket market, num? reference) {
+    if (reference == null || market.strikes.isEmpty) return null;
+    num result = market.strikes.first.strikePrice;
+    for (final row in market.strikes) {
+      if ((row.strikePrice - reference).abs() <
+          (result - reference).abs()) {
+        result = row.strikePrice;
+      }
+    }
+    return result;
+  }
+
+  static num? priceChange(CustomerFnoChainSnapshotIndicator? source) =>
+      source?.referencePriceChange;
+  static num? priceChangePct(CustomerFnoChainSnapshotIndicator? source) =>
+      source?.referencePriceChangePct;
+
+  static num? oiChangePct(CustomerFnoChainSnapshotIndicator? source) =>
+      source?.openInterestChangePct;
+
+  static bool completeOi(CustomerFnoMarket market) =>
+      market.displayRightsVerified && market.strikes.isNotEmpty &&
+      market.strikes.every((row) =>
+        row.call != null && row.put != null &&
+        market.chainSnapshotIndicators[row.call!.instrumentKey]?.openInterest != null &&
+        market.chainSnapshotIndicators[row.put!.instrumentKey]?.openInterest != null);
+
+  static double? pcr(CustomerFnoMarket market) {
+    if (!completeOi(market)) return null;
+    var calls = 0;
+    var puts = 0;
+    for (final row in market.strikes) {
+      calls += market.chainSnapshotIndicators[row.call!.instrumentKey]!.openInterest!;
+      puts += market.chainSnapshotIndicators[row.put!.instrumentKey]!.openInterest!;
+    }
+    return calls > 0 ? puts / calls : null;
+  }
+
+  /// OI-weighted intrinsic payout minimum. Model estimate, not provider
+  /// reported max pain or predictive support/resistance.
+  static num? estimatedMaxPain(CustomerFnoMarket market) {
+    if (!completeOi(market)) return null;
+    final values = market.strikes;
+    var hasOi = false;
+    num? selected;
+    double? minPayout;
+    for (final candidate in values) {
+      var payout = 0.0;
+      for (final row in values) {
+        final call = market.chainSnapshotIndicators[row.call!.instrumentKey]!.openInterest!;
+        final put = market.chainSnapshotIndicators[row.put!.instrumentKey]!.openInterest!;
+        hasOi = hasOi || call > 0 || put > 0;
+        payout += math.max(0, candidate.strikePrice - row.strikePrice) * call +
+            math.max(0, row.strikePrice - candidate.strikePrice) * put;
+      }
+      if (minPayout == null || payout < minPayout) {
+        minPayout = payout;
+        selected = candidate.strikePrice;
+      }
+    }
+    return hasOi ? selected : null;
+  }
+
+  static num? atmIv(CustomerFnoMarket market, num? reference) {
+    final nearest = nearestStrike(market, reference);
+    if (nearest == null) return null;
+    for (final row in market.strikes) {
+      if (row.strikePrice != nearest ||
+          row.call == null || row.put == null) {
+        continue;
+      }
+      final call = market.chainSnapshotIndicators[row.call!.instrumentKey]?.iv;
+      final put = market.chainSnapshotIndicators[row.put!.instrumentKey]?.iv;
+      if (call == null || put == null || call < 0 || put < 0) return null;
+      return (call + put) / 2;
+    }
+    return null;
+  }
+}
+
 class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     with WidgetsBindingObserver {
   String? _roomId;
   String _section = 'Chain';
   String _optionSide = 'ALL';
   String _smartlistKind = 'Highest OI';
+  String _chainView = 'Price';
   String _search = '';
   bool _showAllStrikes = false;
   bool _loading = false;
@@ -451,10 +561,15 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         : _smartlistKind == 'Highest OI'
             ? MintTickFnoDiscoveryFacts.highestOpenInterest(
                 market, now, _optionSide)
-            : MintTickFnoDiscoveryFacts.snapshotLeaders(
-                market, now, _optionSide,
-                metric: _smartlistKind == 'Top traded'
-                    ? 'VOLUME' : 'OI_GAIN');
+            : _smartlistKind == 'Price gainers' ||
+              _smartlistKind == 'Price losers'
+                ? MintTickFnoDiscoveryFacts.referencePriceMovers(
+                    market, now, _optionSide,
+                    positive: _smartlistKind == 'Price gainers')
+                : MintTickFnoDiscoveryFacts.snapshotLeaders(
+                    market, now, _optionSide,
+                    metric: _smartlistKind == 'Top traded'
+                        ? 'VOLUME' : 'OI_GAIN');
     final smartlist = smartlistPool
         .where((leg) => searchKeys.contains(leg.instrumentKey))
         .take(5).toList();
@@ -518,19 +633,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           _sideToggle('PE', 'Puts'),
         ]),
         const SizedBox(height: 12),
-        Text('Listed Options',
+        Text('Market activity',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
-        _optionsList(context, market, listed, now),
-        const SizedBox(height: 16),
-        Text('Options Smartlists',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
+        const SizedBox(height: 6),
         SingleChildScrollView(scrollDirection: Axis.horizontal,
           child: Row(children: [
-            for (final kind in const ['Highest OI', 'Top traded', 'OI gainers'])
+            for (final kind in const [
+              'Highest OI', 'OI gainers', 'Top traded',
+              'Price gainers', 'Price losers'
+            ])
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ChoiceChip(
@@ -541,21 +653,29 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                   onSelected: (_) => setState(() => _smartlistKind = kind),
                 )),
           ])),
-        if (smartlist.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('Provider snapshot · read only',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant))),
+        const SizedBox(height: 4),
+        Text('Source-backed V2 reference rankings; not live trade signals',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        if (_search.trim().isNotEmpty) ...[
+          Text('Search results', style: Theme.of(context).textTheme.titleSmall),
+          _optionsList(context, market, listed, now),
+          const SizedBox(height: 12),
+        ],
         _optionsList(context, market, smartlist, now,
           emptyText: _smartlistKind == 'Highest OI'
               ? 'Verified open-interest counts unavailable.'
               : _smartlistKind == 'Top traded'
                   ? 'Verified traded volume unavailable.'
-                  : 'Verified OI changes unavailable.',
+                  : _smartlistKind == 'OI gainers'
+                      ? 'Verified OI changes unavailable.'
+                      : 'Reference close or premium data unavailable.',
           compact: true),
-        const SizedBox(height: 14),
-        _movers(context, market, now),
+        if (market != null && market.hasFreshQuotes) ...[
+          const SizedBox(height: 12),
+          _movers(context, market, now),
+        ],
       ] else if (_section == 'Universe') ...[
         MintTickFnoUniversePanel(
           repository: CustomerFnoUniverseRepository(widget.discovery.api)),
@@ -733,7 +853,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                        _chainSnapshot(market, leg, now) != null))
                     Text(_fresh(market, leg, now)
                         ? _changeText(leg.priceChangePct)
-                        : _displayQuote(market, leg, now) ? 'Last' : 'Snapshot',
+                        : _chainSnapshot(market, leg, now)
+                                    ?.referencePriceChangePct != null
+                            ? 'Ref ${_signedPct(_chainSnapshot(
+                                market, leg, now)!.referencePriceChangePct)}'
+                            : _displayQuote(market, leg, now) ? 'Last'
+                                : 'Snapshot',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: style.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
@@ -851,84 +976,158 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   Widget _chain(BuildContext context, CustomerFnoMarket? market,
       DateTime now) {
     final c = Theme.of(context).colorScheme;
-    final type = Theme.of(context).textTheme;
     if (market == null) {
       return _panel(context, 'NIFTY option chain', 'Exchange-listed contracts',
         const Text('No verified option contracts available for this expiry.'));
     }
-    final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
-    final near = atm ?? market.underlyingReferenceSpot;
+    final freshAtm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
+    final reference = freshAtm ?? market.underlyingReferenceSpot;
+    final displayAtm = MintTickFnoTerminalAnalytics.nearestStrike(market, reference);
     final strikes = MintTickFnoDiscoveryFacts.visibleStrikes(
-      market.strikes, near, showAll: _showAllStrikes,
+      market.strikes, reference, showAll: _showAllStrikes,
       radius: _windowRadius);
-    final hiddenCount = market.strikes.length - strikes.length;
-
+    final hidden = market.strikes.length - strikes.length;
+    final retrieved = market.snapshotAt;
+    final snapshotRecent = market.displayRightsVerified &&
+        retrieved != null && !retrieved.isAfter(now) &&
+        now.difference(retrieved) <= const Duration(minutes: 5);
+    final pcr = snapshotRecent ? MintTickFnoTerminalAnalytics.pcr(market) : null;
+    final pain = snapshotRecent
+        ? MintTickFnoTerminalAnalytics.estimatedMaxPain(market) : null;
+    final iv = snapshotRecent
+        ? MintTickFnoTerminalAnalytics.atmIv(market, reference) : null;
     return _panel(context, 'NIFTY option chain',
-      '${_ymd(market.expiry)} · ${market.strikes.length} listed strikes',
+      '${_ymd(market.expiry)} · ${market.strikes.length} strikes',
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (near != null)
-          Text(atm == null
-              ? 'Near ${_strike(near)} · provider reference'
-              : 'ATM ≈ ${_strike(atm)} · estimated from fresh option prices',
-            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-        Padding(
-          padding: const EdgeInsets.only(top: 3, bottom: 10),
-          child: Text(
-            market.status == 'MARKET_CLOSED'
-                ? 'Market closed · displayed prices are not live'
-                : market.hasFreshQuotes
-                    ? 'Fresh prices marked by color; other values may be snapshots'
-                    : 'Reference prices · not executable quotes',
-            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant),
-          ),
+        Row(children: [
+          Expanded(child: Text(reference == null
+              ? 'Spot reference unavailable'
+              : '${freshAtm != null ? 'Estimated ATM' : 'Near reference'} '
+                  '${_strike(reference)}',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+              color: c.onSurfaceVariant))),
+          Text(market.hasFreshQuotes
+              ? 'V3 / V2' : 'V2 reference',
+            style: TextStyle(fontSize: 10,
+              fontWeight: FontWeight.w700, color: c.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: Text(market.status == 'MARKET_CLOSED'
+              ? 'Market closed · prices are not live'
+              : market.hasFreshQuotes
+                  ? 'Exchange-timed LTP where verified'
+                  : 'Not executable · snapshot only',
+            style: TextStyle(fontSize: 10.5, color: c.onSurfaceVariant))),
+          if (retrieved != null)
+            Text('Fetched ${_shortTime(retrieved)}',
+              style: TextStyle(fontSize: 10, color: c.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          _metricTile(context, 'PCR · OI', pcr == null
+              ? '—' : pcr.toStringAsFixed(2)),
+          const SizedBox(width: 7),
+          _metricTile(context, 'Max pain · est.',
+              pain == null ? '—' : _strike(pain)),
+          const SizedBox(width: 7),
+          _metricTile(context, 'ATM IV · ref',
+              iv == null ? '—' : _decimal(iv)),
+        ]),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final metric in const ['Price', 'OI', 'Greeks', 'Depth'])
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  key: ValueKey('fno-chain-mode-${metric.toLowerCase()}'),
+                  selected: _chainView == metric,
+                  visualDensity: VisualDensity.compact,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  label: Text(metric, style: const TextStyle(fontSize: 11)),
+                  onSelected: (_) => setState(() => _chainView = metric),
+                ),
+              ),
+          ]),
         ),
-        // All five columns fit the available phone width. More metrics
-        // belong in the contract details sheet, not off-screen columns.
+        const SizedBox(height: 8),
         _chainHeader(context),
         for (final strike in strikes)
-          _chainRow(context, market, strike, atm, now),
+          _chainRow(context, market, strike, displayAtm, now),
         if (market.strikes.length > strikes.length || _showAllStrikes)
           Align(alignment: Alignment.centerRight,
-            child: TextButton(
+            child: TextButton.icon(
               key: const ValueKey('fno-chain-expand-strikes'),
               onPressed: () => setState(() => _showAllStrikes = !_showAllStrikes),
-              child: Text(_showAllStrikes
-                  ? 'Show near ATM'
-                  : 'Show all ${market.strikes.length} strikes ($hiddenCount more)'),
+              icon: Icon(_showAllStrikes ? Icons.center_focus_strong
+                  : Icons.unfold_more, size: 16),
+              label: Text(_showAllStrikes
+                  ? 'Near ATM'
+                  : 'All ${market.strikes.length} strikes ($hidden more)'),
             )),
+        const SizedBox(height: 2),
+        Text('Tap a premium to inspect quote source, IV, OI, spread and Greeks. '
+            'Calculated PCR and Max Pain require complete V2 OI coverage.',
+          style: TextStyle(fontSize: 10, color: c.onSurfaceVariant)),
       ]));
+  }
+
+  Widget _metricTile(BuildContext context, String label, String value) {
+    final c = Theme.of(context).colorScheme;
+    return Expanded(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+      decoration: BoxDecoration(
+        color: c.surfaceContainerLow,
+        border: Border.all(color: c.outlineVariant.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 9.5, color: c.onSurfaceVariant)),
+        const SizedBox(height: 2),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: _tabular.copyWith(fontSize: 13,
+            fontWeight: FontWeight.w800)),
+      ]),
+    ));
   }
 
   Widget _chainHeader(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: c.onSurfaceVariant, fontWeight: FontWeight.w700, fontSize: 10);
-    Widget heading(String label, int flex, {bool center = false}) =>
-        Expanded(flex: flex, child: Text(label,
-          textAlign: center ? TextAlign.center : TextAlign.right,
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: style));
+    final secondary = switch (_chainView) {
+      'OI' => 'OI / ΔOI · ref',
+      'Greeks' => 'Δ / IV',
+      'Depth' => 'BID / ASK',
+      _ => 'LTP / CHANGE',
+    };
     return Column(children: [
+      Row(children: [
+        Expanded(flex: 5, child: Text('CALL · CE',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+            color: c.onSurfaceVariant))),
+        Expanded(flex: 3, child: Text('STRIKE',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11,
+            fontWeight: FontWeight.w800, color: c.onSurface))),
+        Expanded(flex: 5, child: Text('PUT · PE',
+          textAlign: TextAlign.right,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+            color: c.onSurfaceVariant))),
+      ]),
       Padding(
-        padding: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
-          Expanded(flex: 5, child: Text('CALL · CE',
-            textAlign: TextAlign.center, style: style)),
-          Expanded(flex: 3, child: Text('STRIKE',
-            textAlign: TextAlign.center,
-            style: style?.copyWith(color: c.onSurface))),
-          Expanded(flex: 5, child: Text('PUT · PE',
-            textAlign: TextAlign.center, style: style)),
+          Expanded(flex: 5, child: Text(secondary,
+            style: TextStyle(fontSize: 9, color: c.onSurfaceVariant))),
+          const Spacer(flex: 3),
+          Expanded(flex: 5, child: Text(secondary,
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 9, color: c.onSurfaceVariant))),
         ]),
       ),
-      Row(children: [
-        heading('OI', 2),
-        heading('LTP', 3),
-        heading('STRIKE', 3, center: true),
-        heading('LTP', 3),
-        heading('OI', 2),
-      ]),
-      Divider(color: c.outlineVariant, height: 11),
+      Divider(color: c.outlineVariant, height: 8),
     ]);
   }
 
@@ -938,72 +1137,127 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final isAtm = atm != null && strike.strikePrice == atm;
     final callItm = atm != null && strike.strikePrice < atm;
     final putItm = atm != null && strike.strikePrice > atm;
-    final call = strike.call;
-    final put = strike.put;
     return Container(
       decoration: BoxDecoration(
         color: isAtm ? c.primary.withValues(alpha: .10) : null,
         border: Border(bottom: BorderSide(
-          color: c.outlineVariant.withValues(alpha: .42), width: .5))),
+          color: c.outlineVariant.withValues(alpha: .45), width: .5))),
       child: Row(children: [
-        Expanded(flex: 2, child: _chainCell(context, market, call, now,
-          text: call == null ? '—' : _shortCount(
-            _displayOpenInterest(market, call, now)), itm: callItm)),
-        Expanded(flex: 3, child: _chainCell(context, market, call, now,
-          text: _chainLtp(market, call, now),
-          strong: true, itm: callItm)),
+        Expanded(flex: 5, child: _chainLegCell(
+          context, market, strike.call, now, isCall: true, itm: callItm)),
         Expanded(flex: 3, child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 1),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 1),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (isAtm) Text('ATM', style: TextStyle(color: c.primary,
-              fontSize: 9, fontWeight: FontWeight.w800)),
+            if (isAtm)
+              Text('ATM', style: TextStyle(
+                color: c.primary, fontSize: 9, fontWeight: FontWeight.w800)),
             Text(_strike(strike.strikePrice),
               textAlign: TextAlign.center, maxLines: 1,
-              style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w800,
-                fontFeatures: [FontFeature.tabularFigures()])),
+              style: _tabular.copyWith(
+                fontSize: 12, fontWeight: FontWeight.w800)),
           ]),
         )),
-        Expanded(flex: 3, child: _chainCell(context, market, put, now,
-          text: _chainLtp(market, put, now),
-          strong: true, itm: putItm)),
-        Expanded(flex: 2, child: _chainCell(context, market, put, now,
-          text: put == null ? '—' : _shortCount(
-            _displayOpenInterest(market, put, now)), itm: putItm)),
+        Expanded(flex: 5, child: _chainLegCell(
+          context, market, strike.put, now, isCall: false, itm: putItm)),
       ]),
     );
   }
 
-  String _chainLtp(CustomerFnoMarket market, CustomerFnoLeg? leg,
-      DateTime now) {
-    if (leg == null) return '—';
-    if (_displayQuote(market, leg, now)) return _amount(leg.ltp);
-    return _amount(_chainSnapshot(market, leg, now)?.ltp);
-  }
-
-  Widget _chainCell(BuildContext context, CustomerFnoMarket market,
-      CustomerFnoLeg? leg, DateTime now, {required String text,
-      bool strong = false, bool itm = false}) {
+  Widget _chainLegCell(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoLeg? leg, DateTime now, {
+      required bool isCall, required bool itm}) {
     final c = Theme.of(context).colorScheme;
-    final fresh = leg != null && _fresh(market, leg, now);
-    final pct = fresh ? leg.priceChangePct : null;
-    final color = strong && pct != null
-        ? pct < 0 ? c.error : pct > 0 ? c.primary : c.onSurface
-        : strong ? c.onSurface : c.onSurfaceVariant;
+    if (leg == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Text('—', textAlign: TextAlign.center));
+    }
+    final alignment = isCall ? Alignment.centerLeft : Alignment.centerRight;
+    final textAlign = isCall ? TextAlign.left : TextAlign.right;
+    final chain = _chainSnapshot(market, leg, now);
+    final fresh = _fresh(market, leg, now);
+    final visible = _displayQuote(market, leg, now);
+    final price = visible ? leg.ltp : chain?.ltp;
+    // An independently timestamped retained last trade may still have a
+    // valid previous close after market close, but it is not a live quote.
+    final hasTradeComparison = visible && leg.ltp != null &&
+        leg.previousClose != null && leg.previousClose! > 0;
+    final change = hasTradeComparison
+        ? leg.ltp! - leg.previousClose! : chain?.referencePriceChange;
+    final changePct = hasTradeComparison
+        ? (change! * 100 / leg.previousClose!)
+        : chain?.referencePriceChangePct;
+    // For an OI/ΔOI pair, both figures must belong to the same V2
+    // observation. A newer V3 OI cannot be combined with an older V2 ΔOI
+    // without misleading traders about the implied change.
+    final oi = chain?.openInterest ?? _displayOpenInterest(market, leg, now);
+    final oiDiff = chain?.openInterestChange;
+    final delta = fresh && leg.delta != null ? leg.delta : chain?.delta;
+    final iv = fresh && leg.iv != null ? leg.iv : chain?.iv;
+    final bid = fresh && leg.bid != null ? leg.bid : chain?.bid;
+    final ask = fresh && leg.ask != null ? leg.ask : chain?.ask;
+    final primary = switch (_chainView) {
+      'OI' => _shortCount(oi),
+      'Greeks' => _decimal(delta, places: 3),
+      'Depth' => _amount(bid),
+      _ => _amount(price),
+    };
+    final secondary = switch (_chainView) {
+      'OI' => oiDiff == null ? 'ΔOI —'
+          : '${_signedShort(oiDiff)}  ${_signedPct(chain?.openInterestChangePct)}',
+      'Greeks' => 'IV ${_decimal(iv)}',
+      'Depth' => 'Ask ${_amount(ask)}',
+      _ => change == null || changePct == null ? 'Δ —'
+          : '${_signedAmount(change)}  ${_signedPct(changePct)}',
+    };
+    final changeColor = switch (_chainView) {
+      'OI' => oiDiff,
+      'Price' => change,
+      _ => null,
+    };
+    final movementColor = changeColor == null ? c.onSurfaceVariant
+        : changeColor > 0 ? c.primary
+        : changeColor < 0 ? c.error : c.onSurfaceVariant;
     return InkWell(
-      onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
+      key: ValueKey('fno-chain-leg-${leg.instrumentKey}'),
+      onTap: () => _showLeg(context, market, leg, now),
       child: Container(
-        color: itm ? c.primary.withValues(alpha: .045) : null,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
-        child: Text(text,
-          textAlign: TextAlign.right, maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: _tabular.copyWith(
-            fontSize: 11.5, fontWeight:
-              strong ? FontWeight.w800 : FontWeight.w500, color: color)),
+        alignment: alignment,
+        color: itm ? c.primary.withValues(alpha: .035) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 9),
+        child: Column(
+          crossAxisAlignment: isCall ? CrossAxisAlignment.start :
+              CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min, children: [
+          Text(primary, textAlign: textAlign, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _tabular.copyWith(
+              fontSize: 13.5, fontWeight: FontWeight.w800,
+              color: c.onSurface)),
+          const SizedBox(height: 3),
+          Text(secondary, textAlign: textAlign, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _tabular.copyWith(
+              fontSize: 9.7, fontWeight: FontWeight.w700,
+              color: movementColor)),
+        ]),
       ),
     );
+  }
+
+  static String _signedAmount(num? number) {
+    if (number == null || !number.isFinite) return '—';
+    return '${number >= 0 ? '+' : ''}${number.toStringAsFixed(2)}';
+  }
+
+  static String _signedShort(num? number) {
+    if (number == null || !number.isFinite) return '—';
+    return '${number >= 0 ? '+' : '−'}${_shortCount(number.abs())}';
+  }
+
+  static String _signedPct(num? number) {
+    if (number == null || !number.isFinite) return '—';
+    return '${number >= 0 ? '+' : ''}${number.toStringAsFixed(1)}%';
   }
 
   void _showLeg(BuildContext context, CustomerFnoMarket market,
@@ -1016,6 +1270,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
     final pct = fresh ? leg.priceChangePct : null;
+    final snapshotDelta = chain?.referencePriceChange;
+    final snapshotPct = chain?.referencePriceChangePct;
+    final oiDelta = chain?.openInterestChange;
+    final oiDeltaPct = chain?.openInterestChangePct;
+    final refBid = fresh && leg.bid != null ? leg.bid : chain?.bid;
+    final refAsk = fresh && leg.ask != null ? leg.ask : chain?.ask;
+    final spread = refBid != null && refAsk != null && refAsk >= refBid
+        ? refAsk - refBid : null;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1045,13 +1307,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 _price(visible ? leg.ltp : chain?.ltp)),
             _sheetRow(sheetContext, 'Change since previous close',
                 pct == null ? '—' : _changeText(pct)),
+            if (chain != null) ...[
+              _sheetRow(sheetContext, 'V2 provider close · reference',
+                  _price(chain.closePrice)),
+              _sheetRow(sheetContext, 'V2 premium change · reference',
+                  snapshotDelta == null || snapshotPct == null
+                      ? '—' : '${_signedAmount(snapshotDelta)} '
+                          '(${_signedPct(snapshotPct)})'),
+              _sheetRow(sheetContext, 'Change in OI · V2 reference',
+                  _signedShort(oiDelta)),
+              _sheetRow(sheetContext, 'Change in OI % · V2 reference',
+                  _signedPct(oiDeltaPct)),
+            ],
             _sheetRow(sheetContext,
                 fresh && leg.bid != null ? 'Bid' : 'Bid · chain snapshot',
                 _price(fresh && leg.bid != null ? leg.bid : chain?.bid)),
             _sheetRow(sheetContext,
                 fresh && leg.ask != null ? 'Ask' : 'Ask · chain snapshot',
                 _price(fresh && leg.ask != null ? leg.ask : chain?.ask)),
-            _sheetRow(sheetContext, 'Previous close',
+            _sheetRow(sheetContext, 'Bid–ask spread',
+                spread == null ? '—' : _price(spread)),
+            _sheetRow(sheetContext, 'Previous close · V3',
                 _price(visible ? leg.previousClose : null)),
             _sheetRow(sheetContext,
                 fresh && leg.openInterest != null
@@ -1102,14 +1378,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
             const SizedBox(height: 12),
             if (chain != null) ...[
-              Text('Chain snapshot values are indicative and cannot be used '
-                  'as executable quotes or proof of a recent trade.',
+              Text('V2 price change compares provider close_price with '
+                  'V2 LTP. It is reference-only, not an exchange-timed '
+                  'live change or executable quote.',
                 style: type.bodySmall),
               const SizedBox(height: 8),
             ],
             Text('Browsing never sends an order. Order entry happens only in '
                 'your trading terminal after risk checks and confirmation.',
               style: type.bodySmall),
+            if (_room != null && widget.onOpenRoom != null) ...[
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                key: const ValueKey('fno-contract-open-room'),
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  widget.onOpenRoom?.call(_room!);
+                },
+                icon: const Icon(Icons.candlestick_chart_rounded, size: 18),
+                label: const Text('Open room to review trade'),
+              ),
+            ],
           ]),
       )),
     );

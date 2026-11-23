@@ -275,7 +275,7 @@ public final class CustomerFnoDiscoveryController {
                     positive(quote.askPrice()), quote.openInterest(),
                     quote.volume(), quote.previousOpenInterest(),
                     quote.iv(), quote.delta(), quote.theta(), quote.gamma(),
-                    quote.vega()));
+                    quote.vega(), quote.closePrice()));
             }
         }
         return java.util.Map.copyOf(result);

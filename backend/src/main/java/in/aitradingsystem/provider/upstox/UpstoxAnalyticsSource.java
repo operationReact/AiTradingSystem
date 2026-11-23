@@ -213,7 +213,18 @@ public final class UpstoxAnalyticsSource {
                                  BigDecimal bidPrice, BigDecimal askPrice,
                                  long volume, long openInterest, long previousOpenInterest,
                                  BigDecimal iv, BigDecimal delta, BigDecimal gamma,
-                                 BigDecimal theta, BigDecimal vega) {}
+                                 BigDecimal theta, BigDecimal vega,
+                                 BigDecimal closePrice) {
+        // Older data-source fixtures remain source-only: no invented reference close.
+        public FnoOptionQuote(String instrumentKey, BigDecimal ltp,
+                BigDecimal bidPrice, BigDecimal askPrice,
+                long volume, long openInterest, long previousOpenInterest,
+                BigDecimal iv, BigDecimal delta, BigDecimal gamma,
+                BigDecimal theta, BigDecimal vega) {
+            this(instrumentKey, ltp, bidPrice, askPrice, volume, openInterest,
+                    previousOpenInterest, iv, delta, gamma, theta, vega, null);
+        }
+    }
 
     public record FnoOptionStrike(LocalDate expiry, String underlyingKey,
                                   BigDecimal strikePrice, BigDecimal underlyingSpotPrice,
@@ -436,7 +447,7 @@ public final class UpstoxAnalyticsSource {
         }
     }
 
-    private static FnoOptionQuote fnoQuote(JsonNode option) {
+    static FnoOptionQuote fnoQuote(JsonNode option) {
         if (!option.isObject()) throw new IllegalArgumentException();
         JsonNode market = option.path("market_data");
         if (!market.isObject()) throw new IllegalArgumentException();
@@ -452,7 +463,15 @@ public final class UpstoxAnalyticsSource {
                 iv, fnoOptionalNumber(greeks, "delta"),
                 fnoOptionalNumber(greeks, "gamma"),
                 fnoOptionalNumber(greeks, "theta"),
-                fnoOptionalNumber(greeks, "vega"));
+                fnoOptionalNumber(greeks, "vega"),
+                // Upstox V2 close_price is an HTTP snapshot field, never a
+                // V3 last-trade timestamp or order-executable quote.
+                positiveFnoOptionalNumber(market, "close_price"));
+    }
+
+    private static BigDecimal positiveFnoOptionalNumber(JsonNode row, String field) {
+        BigDecimal value = fnoOptionalNumber(row, field);
+        return value != null && value.signum() > 0 ? value : null;
     }
 
     /**
