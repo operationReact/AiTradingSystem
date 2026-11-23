@@ -107,6 +107,27 @@ class SandboxLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(probe.SandboxError, "SANDBOX_ENDPOINT_NOT_ALLOWED"):
             call("DELETE", "/v3/order/cancel?order_id=abc&url=other", None)
 
+
+    def test_broker_transport_identifies_minttick_not_default_python_urllib(self):
+        # Use the same frozen hostname but DO NOT send any network request.
+        # Regress the header distinction confirmed by live read-only A/B.
+        import urllib.error
+        seen = []
+        class FakeOpener:
+            def open(self, request, timeout):
+                seen.append(request)
+                raise urllib.error.HTTPError(request.full_url, 400, "test", {}, None)
+        with patch.object(probe.urllib.request, "build_opener", return_value=FakeOpener()):
+            call = probe.sandbox_transport("sandbox-fixture-not-a-real-token")
+            with self.assertRaisesRegex(probe.SandboxError, "SANDBOX_HTTP_ERROR_400"):
+                call("POST", "/v3/order/place", {"quantity": 50})
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0].get_method(), "POST")
+        self.assertTrue(seen[0].full_url.startswith("https://api-sandbox.upstox.com/"))
+        self.assertEqual(seen[0].get_header("User-agent"), probe.SANDBOX_USER_AGENT)
+        self.assertNotIn("Python-urllib", probe.SANDBOX_USER_AGENT)
+        self.assertTrue(probe.SANDBOX_USER_AGENT.startswith("MintTick-Upstox-Sandbox/"))
+
     def test_default_cli_performs_no_network_and_explicit_run_needs_token(self):
         out = io.StringIO()
         with patch.dict(os.environ, {"UPSTOX_SANDBOX_TOKEN": ""}), contextlib.redirect_stdout(out):
