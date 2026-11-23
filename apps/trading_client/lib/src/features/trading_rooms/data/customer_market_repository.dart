@@ -420,6 +420,47 @@ abstract interface class CustomerCompanyProfileRepository {
   Future<CustomerCompanyProfile> companyProfile(int instrumentId);
 }
 
+/// Authenticated, source-backed Upstox fundamental section for an exact NSE ISIN.
+class CustomerFundamentalsSection {
+  const CustomerFundamentalsSection({required this.instrumentId, required this.tradingSymbol,
+    required this.isin, required this.section, required this.provider,
+    required this.fetchedAt, required this.data});
+  final int instrumentId;
+  final String tradingSymbol;
+  final String isin;
+  final String section;
+  final String provider;
+  final DateTime fetchedAt;
+  final Object data;
+
+  factory CustomerFundamentalsSection.fromJson(Map<String, dynamic> json) {
+    final id = json['instrumentId'];
+    final isin = json['isin'];
+    final section = json['section'];
+    final symbol = json['tradingSymbol'];
+    final source = json['provider'];
+    final fetched = DateTime.tryParse('${json['fetchedAt'] ?? ''}');
+    final data = json['data'];
+    if (json['contractVersion'] != 'customer.market.fundamentals.v1' ||
+        id is! num || id < 1 || id != id.toInt() ||
+        symbol is! String || !symbol.endsWith('-EQ') ||
+        isin is! String || !RegExp(r'^[A-Z]{2}[A-Z0-9]{9}[0-9]$').hasMatch(isin) ||
+        section is! String || !const {'profile','ratios','income','shareholding'}.contains(section) ||
+        source != 'UPSTOX' || fetched == null ||
+        ((section == 'profile' || section == 'income') && data is! Map<String, dynamic>) ||
+        ((section == 'ratios' || section == 'shareholding') && data is! List)) {
+      throw const FormatException('Invalid verified fundamentals response');
+    }
+    return CustomerFundamentalsSection(instrumentId: id.toInt(), tradingSymbol: symbol,
+      isin: isin, section: section, provider: source as String,
+      fetchedAt: fetched, data: data as Object);
+  }
+}
+
+abstract interface class CustomerFundamentalsRepository {
+  Future<CustomerFundamentalsSection> fundamentals(int instrumentId, String section);
+}
+
 /// Owner-scoped watchlist. Membership is read from the backend, never cached locally.
 class CustomerWatchlistItem {
   const CustomerWatchlistItem({required this.instrumentId, required this.exchange,
@@ -1245,7 +1286,7 @@ abstract interface class CustomerPaginatedMarketRepository {
 class HttpCustomerMarketRepository implements CustomerMarketRepository,
     CustomerLiveMarketRepository, CustomerSnapshotMarketRepository,
     CustomerPaginatedMarketRepository, CustomerCandleRepository,
-    CustomerDetailRepository, CustomerCompanyProfileRepository,
+    CustomerDetailRepository, CustomerCompanyProfileRepository, CustomerFundamentalsRepository,
     CustomerWatchlistRepository, CustomerOverviewRepository,
     CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository,
     CustomerMarketBoardRepository {
@@ -1447,6 +1488,24 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
       throw const FormatException('Company profile instrument identity mismatch');
     }
     return profile;
+  }
+
+  @override
+  Future<CustomerFundamentalsSection> fundamentals(int instrumentId, String section) async {
+    if (instrumentId < 1 || !const {'profile','ratios','income','shareholding'}.contains(section)) {
+      throw ArgumentError('Invalid fundamentals query');
+    }
+    final data = await api.getJson('$_root/fundamentals', query: {
+      'instrumentId': '$instrumentId', 'section': section,
+    }, timeout: const Duration(seconds: 7));
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid fundamentals data');
+    }
+    final result = CustomerFundamentalsSection.fromJson(data);
+    if (result.instrumentId != instrumentId || result.section != section) {
+      throw const FormatException('Fundamentals identity mismatch');
+    }
+    return result;
   }
 
   @override

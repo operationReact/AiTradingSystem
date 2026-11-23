@@ -218,12 +218,37 @@ public class UpstoxApiClient {
         return get(token, "/v2/order/history?tag=" + tag);
     }
 
+    /**
+     * Official Upstox Company Fundamentals API. Only fixed section names and
+     * exact validated ISINs are accepted. Never accept a caller-supplied URL.
+     * Financial figures are forwarded only after broker success validation.
+     */
+    public JsonNode fundamentals(String token, String isin, String section) {
+        if (isin == null || !isin.matches("[A-Z]{2}[A-Z0-9]{9}[0-9]")) {
+            throw new UpstoxProviderException("UPSTOX_FUNDAMENTAL_ISIN_INVALID");
+        }
+        String base = "/v2/fundamentals/" + isin + "/";
+        String path = switch (section) {
+            case "profile" -> base + "profile";
+            case "ratios" -> base + "key-ratios";
+            case "income" -> base + "income-statement?type=consolidated&time_period=quarterly";
+            case "shareholding" -> base + "share-holdings";
+            default -> throw new UpstoxProviderException("UPSTOX_FUNDAMENTAL_SECTION_INVALID");
+        };
+        // Keep a fundamental read within the private API Gateway's 7s limit.
+        return get(token, path, true);
+    }
+
     private JsonNode get(String token, String fixedPath) {
+        return get(token, fixedPath, false);
+    }
+
+    private JsonNode get(String token, String fixedPath, boolean bounded) {
         if (token == null || token.isBlank()) {
             throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
         }
         try {
-            String payload = http.get()
+            String payload = (bounded ? tokenHttp : http).get()
                 .uri(fixedPath)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)

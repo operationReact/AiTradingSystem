@@ -59,6 +59,9 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   Timer? _quoteTimer;
 
   CustomerCompanyProfile? _company;
+  Map<String, CustomerFundamentalsSection> _fundamentals = {};
+  bool _fundamentalsLoading = false;
+  bool _fundamentalsFailed = false;
   CustomerDayDetail? _detail;
   bool _detailFailed = false;
   bool _detailLoading = false;
@@ -72,6 +75,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   bool get _hasSnapshotRepo => widget.repository is CustomerSnapshotMarketRepository;
   bool get _hasDetailRepo => widget.repository is CustomerDetailRepository;
   bool get _hasCompanyRepo => widget.repository is CustomerCompanyProfileRepository;
+  bool get _hasFundamentalsRepo => widget.repository is CustomerFundamentalsRepository && widget.stock.exchange == 'NSE';
   bool get _hasWatchRepo => widget.repository is CustomerWatchlistRepository;
 
   @override
@@ -80,6 +84,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     _loadCandles();
     if (_hasDetailRepo) _loadDetail();
     if (_hasCompanyRepo) _loadCompany();
+    if (_hasFundamentalsRepo) _loadFundamentals();
     if (_hasWatchRepo) _loadWatchlist();
     if (_hasSnapshotRepo) {
       _pollQuote();
@@ -201,6 +206,47 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       // Keep trustworthy catalogue identity visible while classified sources
       // or a newer read-only company endpoint are unavailable.
     }
+  }
+
+  Future<void> _loadFundamentals() async {
+    final CustomerFundamentalsRepository? repo =
+        widget.repository is CustomerFundamentalsRepository
+            ? widget.repository as CustomerFundamentalsRepository : null;
+    if (repo == null || _fundamentalsLoading || widget.stock.exchange != 'NSE') {
+      return;
+    }
+    setState(() {
+      _fundamentalsLoading = true;
+      _fundamentalsFailed = false;
+    });
+    const sections = ['profile', 'ratios', 'income', 'shareholding'];
+    final answers = await Future.wait<(String, CustomerFundamentalsSection?)>(
+      sections.map((section) async {
+        try {
+          final response = await repo.fundamentals(widget.stock.id, section);
+          if (response.instrumentId != widget.stock.id ||
+              response.tradingSymbol != widget.stock.tradingSymbol ||
+              response.section != section) {
+            return (section, null);
+          }
+          return (section, response);
+        } catch (_) {
+          return (section, null);
+        }
+      }),
+    );
+    if (!mounted) return;
+    final accepted = <String, CustomerFundamentalsSection>{};
+    for (final (section, response) in answers) {
+      if (response != null) {
+        accepted[section] = response;
+      }
+    }
+    setState(() {
+      _fundamentals = accepted;
+      _fundamentalsFailed = _fundamentals.isEmpty;
+      _fundamentalsLoading = false;
+    });
   }
 
   Future<void> _loadDetail() async {
@@ -357,6 +403,10 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           _chartBlock(theme),
           const SizedBox(height: 12),
           _companyBlock(theme),
+          if (_hasFundamentalsRepo) ...[
+            const SizedBox(height: 12),
+            _fundamentalsBlock(theme),
+          ],
           const SizedBox(height: 12),
           _statsBlock(theme),
           const SizedBox(height: 16),
@@ -490,7 +540,12 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     final scheme = theme.colorScheme;
     final stock = widget.stock;
     final company = _company;
+    final rawProfile = _fundamentals['profile']?.data;
+    final profile = rawProfile is Map<String, dynamic> ? rawProfile : null;
+    final upstreamSector = _visibleString(profile?['sector']);
     final facts = <(String, String)>[
+      if (company?.industry == null && upstreamSector != null)
+        ('Sector', upstreamSector),
       if (company?.industry != null) ('Industry', company!.industry!),
       if (company?.sizeSegment != null)
         ('Index size', company!.sizeSegment!),
@@ -512,6 +567,18 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           const SizedBox(height: 5),
           Text(stock.name, style: theme.textTheme.bodyMedium
               ?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+        if (_visibleString(profile?['company_profile']) != null) ...[
+          const SizedBox(height: 6),
+          Material(color: Colors.transparent, child: ExpansionTile(
+            title: const Text('About company'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            children: [
+              Text(_visibleString(profile?['company_profile'])!,
+                style: theme.textTheme.bodySmall),
+            ],
+          )),
         ],
         const SizedBox(height: 12),
         LayoutBuilder(builder: (context, constraints) => Wrap(
@@ -565,6 +632,149 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
             ),
           ]),
         ],
+      ],
+    ));
+  }
+
+  String? _visibleString(Object? raw) {
+    if (raw is! String) return null;
+    final value = raw.trim();
+    if (value.isEmpty || const {'-', '—', 'N/A', 'NA', 'null'}.contains(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  Widget _fundamentalsBlock(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    if (_fundamentals.isEmpty) {
+      return MintTickSurface(child: Row(children: [
+        Expanded(child: Text(_fundamentalsLoading
+          ? 'Loading company fundamentals'
+          : _fundamentalsFailed ? 'Fundamentals unavailable' : 'Company fundamentals',
+          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
+        if (!_fundamentalsLoading && _fundamentalsFailed)
+          TextButton(onPressed: _loadFundamentals, child: const Text('Retry')),
+      ]));
+    }
+    final ratiosData = _fundamentals['ratios']?.data;
+    final incomeData = _fundamentals['income']?.data;
+    final holdingData = _fundamentals['shareholding']?.data;
+    final profileData = _fundamentals['profile']?.data;
+    final ratios = <(String, String)>[];
+    if (ratiosData is List) {
+      for (final raw in ratiosData) {
+        if (raw is! Map<String, dynamic>) continue;
+        final name = _visibleString(raw['name']);
+        final value = _visibleString(raw['company_value']);
+        if (name != null && value != null &&
+            const {'P/E', 'P/B', 'ROA', 'ROE', 'ROCE', 'EV/EBITDA'}.contains(name)) {
+          ratios.add((name, value));
+        }
+      }
+    }
+    final income = <(String, String)>[];
+    if (incomeData is Map<String, dynamic> && incomeData['units_in'] == 'crore' &&
+        incomeData['income_statement'] is List) {
+      const labels = {'revenue': 'Revenue', 'operating_profit': 'Operating profit',
+        'net_profit': 'Net profit'};
+      for (final raw in incomeData['income_statement'] as List) {
+        if (raw is! Map<String, dynamic>) continue;
+        final category = raw['category'];
+        final history = raw['history'];
+        if (category is! String || !labels.containsKey(category) ||
+            history is! List || history.isEmpty || history.first is! Map<String, dynamic>) {
+          continue;
+        }
+        final current = history.first as Map<String, dynamic>;
+        final value = current['value'];
+        final period = _visibleString(current['period']);
+        if (value is num && value.isFinite && period != null) {
+          income.add((labels[category]!, '₹$value Cr · $period'));
+        }
+      }
+    }
+    final owners = <(String, String)>[];
+    if (holdingData is List) {
+      const labels = {'promoters': 'Promoters', 'fii': 'FII',
+        'other_dii': 'Other DII', 'mutual_funds': 'Mutual funds',
+        'retail_and_other': 'Retail / other'};
+      for (final raw in holdingData) {
+        if (raw is! Map<String, dynamic>) continue;
+        final category = raw['category'];
+        final history = raw['history'];
+        if (category is! String || !labels.containsKey(category) ||
+            history is! List || history.isEmpty || history.first is! Map<String, dynamic>) {
+          continue;
+        }
+        final current = history.first as Map<String, dynamic>;
+        final value = current['value'];
+        final period = _visibleString(current['period']);
+        if (value is num && value.isFinite && value >= 0 && value <= 100 && period != null) {
+          owners.add((labels[category]!, '$value% · $period'));
+        }
+      }
+    }
+    final profile = profileData is Map<String, dynamic> ? profileData : null;
+    final sectorCap = profile?['sector_market_cap_inr'];
+    final sectorCapText = sectorCap is Map<String, dynamic> &&
+        sectorCap['unit'] == 'crore'
+        ? _visibleString(sectorCap['formatted']) : null;
+    return MintTickSurface(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: Text('Fundamentals', key: const ValueKey('stock-fundamentals'),
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
+          Tooltip(message: 'Read-only Upstox company data, ISIN matched',
+            child: Icon(Icons.verified_outlined, size: 17, color: scheme.primary)),
+        ]),
+        if (ratios.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text('Key ratios', style: theme.textTheme.labelMedium),
+          const SizedBox(height: 6),
+          _fundamentalFacts(theme, ratios, 'stock-fundamental-ratios'),
+        ],
+        if (sectorCapText != null) ...[
+          const SizedBox(height: 8),
+          Text('Sector market cap · $sectorCapText',
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+        if (income.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Material(color: Colors.transparent, child: ExpansionTile(
+            key: const ValueKey('stock-fundamental-income'),
+            title: const Text('Quarterly financials'), tilePadding: EdgeInsets.zero,
+            children: [_fundamentalFacts(theme, income, 'stock-income-facts')])),
+        ],
+        if (owners.isNotEmpty) ...[
+          Material(color: Colors.transparent, child: ExpansionTile(
+            key: const ValueKey('stock-fundamental-shareholding'),
+            title: const Text('Shareholding'), tilePadding: EdgeInsets.zero,
+            children: [_fundamentalFacts(theme, owners, 'stock-ownership-facts')])),
+        ],
+      ],
+    ));
+  }
+
+  Widget _fundamentalFacts(ThemeData theme, List<(String, String)> facts, String key) {
+    final scheme = theme.colorScheme;
+    return LayoutBuilder(builder: (context, bounds) => Wrap(
+      key: ValueKey(key),
+      spacing: 12, runSpacing: 12,
+      children: [
+        for (final (label, value) in facts)
+          SizedBox(width: (bounds.maxWidth - 12) / 2,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 3),
+                Text(value, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
       ],
     ));
   }
