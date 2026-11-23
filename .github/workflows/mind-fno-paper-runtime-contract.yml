@@ -1,0 +1,31 @@
+name: MintTick F&O PAPER read-only runtime audit tests
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/mind/audit_fno_paper_runtime.py'
+      - 'scripts/mind/test_audit_fno_paper_runtime.py'
+      - '.github/workflows/mind-fno-paper-runtime-contract.yml'
+      - '.github/workflows/mind-live-verify.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/mind/audit_fno_paper_runtime.py'
+      - 'scripts/mind/test_audit_fno_paper_runtime.py'
+      - '.github/workflows/mind-fno-paper-runtime-contract.yml'
+permissions:
+  contents: read
+jobs:
+  offline-no-broker-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify no-network PAPER room audit contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mind/audit_fno_paper_runtime.py
+          python3 -m unittest discover -s scripts/mind -p test_audit_fno_paper_runtime.py -v
