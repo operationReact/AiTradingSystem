@@ -85,18 +85,14 @@ class MarketReadinessTests(unittest.TestCase):
             {"liveOrderEnabled":True},
             {"source":"SYNTHETIC"},
             {"strikes":[]},
-            {"status":"LIVE_QUOTES"},
+            {"status":"FRESH_QUOTES"},
             {"chainSnapshotIndicators":{"NSE_FO|INJECTED":{"ltp":108}}},
         ]
         for changes in cases:
             with self.subTest(changes=changes):
                 receipt,ok=audit.classify(200,market(**changes))
-                # LIVE_QUOTES with a fresh=false leg is a valid transport status
-                if changes=={"status":"LIVE_QUOTES"}:
-                    self.assertTrue(ok)
-                else:
-                    self.assertFalse(ok)
-                    self.assertIn("INVALID_MARKET_RESPONSE",receipt)
+                self.assertFalse(ok)
+                self.assertIn("INVALID_MARKET_RESPONSE",receipt)
                 self.assertNotIn("DO_NOT_LOG",receipt)
         m=json.loads(market())
         m["strikes"][0]["call"]["quoteFresh"]=True
