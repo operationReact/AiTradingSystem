@@ -135,7 +135,7 @@ public final class UpstoxFnoAutoWatchlistExpansion {
             lastState = "WAITING_FOR_CONNECTED_SOCKET";
             return;
         }
-        if (status.subscriptions() >= UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS) {
+        if (status.subscriptions() >= feed.subscriptionLimit()) {
             lastState = "CAPACITY_REACHED";
             return;
         }
@@ -172,7 +172,7 @@ public final class UpstoxFnoAutoWatchlistExpansion {
             var keys = UpstoxFnoListedSubscriptionPlanner.plan(
                 rows, snapshot, underlying, expiry, today,
                 Math.min(UpstoxFnoV3LiveFeedService.MAX_INCREMENTAL_KEYS,
-                    UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS -
+                    feed.subscriptionLimit() -
                         status.subscriptions()));
             if (keys.isEmpty()) {
                 lastState = "NO_MATCHED_CURRENT_CONTRACTS";
