@@ -165,7 +165,7 @@ public final class UpstoxFnoAutoMarketFeed {
             // budget remains 64 keys / one AUTO-owned socket; no dynamic
             // takeover or subscription modification of an active connection.
             var keys = planUpcomingExpiryKeys(source, listing.expiries(), today);
-            if (keys.isEmpty() || keys.size() > UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS) {
+            if (keys.isEmpty() || keys.size() > UpstoxFnoV3LiveFeedService.MAX_INITIAL_SUBSCRIPTIONS) {
                 state = "NO_MATCHING_CONTRACTS";
                 return;
             }
@@ -199,7 +199,7 @@ public final class UpstoxFnoAutoMarketFeed {
                 && !d.isAfter(today.plusDays(90)))
             .distinct().sorted().limit(3).toList();
         if (expiries.isEmpty()) return List.of();
-        final int limit = UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS;
+        final int limit = UpstoxFnoV3LiveFeedService.MAX_INITIAL_SUBSCRIPTIONS;
         final int evenPerExpiry = (limit / expiries.size() / 2) * 2;
         final int leftoverPairs = (limit - evenPerExpiry * expiries.size()) / 2;
         var selected = new ArrayList<String>();
