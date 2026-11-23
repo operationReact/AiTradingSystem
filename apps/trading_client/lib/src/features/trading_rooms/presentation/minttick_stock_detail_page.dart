@@ -694,14 +694,13 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     } else if (detail == null) {
       status = 'Loading day statistics…';
     } else {
-      status = 'Source ${detail.source} · fetched ${_clock(detail.fetchedAt.toLocal())} · '
-          'provider day values, not live ticks.';
+      status = '';
     }
     return MintTickSurface(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          Expanded(child: Text('Day statistics', style: theme.textTheme.titleSmall
+          Expanded(child: Text('Key statistics', style: theme.textTheme.titleSmall
               ?.copyWith(fontWeight: FontWeight.w800))),
           if (_hasDetailRepo) TextButton(
             key: const ValueKey('stock-detail-day-refresh'),
@@ -712,7 +711,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         const SizedBox(height: 10),
         Wrap(spacing: 12, runSpacing: 12, children: [
           for (final (label, text) in tiles)
-            SizedBox(width: 150, child: Column(
+            SizedBox(width: 142, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: theme.textTheme.labelSmall
@@ -722,11 +721,10 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               ],
             )),
         ]),
-        const SizedBox(height: 12),
-        Text(status, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 4),
-        Text('A dash means the provider did not send that value for this stock.',
-          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        if (status.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(status, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
       ],
     ));
   }
