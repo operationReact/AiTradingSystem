@@ -276,6 +276,57 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void mismatchedCrossedOrOutOfOrderV3QuotesNeverCreateVirtualFnoOrders() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var engine=engine(true,true);
+
+        var exchange=NOW.minusSeconds(2);
+        var observed=NOW.minusSeconds(1);
+        var rejected=List.of(
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                "NSE_FO|DIFFERENT",new BigDecimal("99"),new BigDecimal("100"),
+                exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("101"),new BigDecimal("100"),
+                exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,null,new BigDecimal("100"),exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),null,exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("-1"),new BigDecimal("100"),
+                exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),new BigDecimal("100"),
+                exchange,exchange.minusMillis(1)),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),new BigDecimal("100"),
+                null,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),new BigDecimal("100"),
+                exchange,null)
+        );
+        int index=0;
+        for (var invalid:rejected) {
+            when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(invalid));
+            String key="bad_quote_identity_"+index++;
+            assertThatThrownBy(()->tx(()->engine.submit(
+                    owner,paper,key,CONTRACT,EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("quote identity, spread or chronology invalid");
+            assertThat(engine.orders(owner,paper)).isEmpty();
+            assertThat(engine.positions(owner,paper)).isEmpty();
+            assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
+        }
+        assertThat(new CustomerPaperSharedWalletAuditService(jdbc)
+            .inspect(owner,paper).cashAndRealizedPnlReconciled()).isTrue();
+    }
+
+    @Test
     void boundedPaperReconciliationProvesOneLotBuyCloseWithoutMarketOrWalletSideEffects() {
         UUID owner=customer(), stranger=customer();
         UUID paper=room(owner,"PAPER");
