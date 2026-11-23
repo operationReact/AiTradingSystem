@@ -240,6 +240,39 @@ class CustomerMindFnoPaperCycleServiceTest {
     }
 
     @Test
+    void corruptPaperPositionMetadataAndBasisNeverTriggerVirtualSell() {
+        var expiry=LocalDate.of(2026,11,26);
+        var invalid=List.of(
+            new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001","CE",expiry,65,65,0L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001","CE",expiry,65,65,-1L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
+                null,"CE",expiry,65,65,100_000L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001","INVALID",expiry,65,65,100_000L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001","CE",null,65,65,100_000L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001","CE",expiry,0,0,100_000L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001","CE",expiry,10001,10001,100_000L,25_000L,true)
+        );
+        for (var position : invalid) {
+            when(orders.positions(owner,room)).thenReturn(List.of(position));
+            var result=cycle.run(owner,room,auth);
+            assertThat(result.status()).isEqualTo("BLOCKED");
+            assertThat(result.reasonCode()).isEqualTo("UNSUPPORTED_PAPER_POSITION");
+            assertThat(result.action()).isEqualTo("NONE");
+            assertThat(result.liveMoney()).isFalse();
+        }
+        verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+        verifyNoInteractions(jdbc,feed,research);
+        assertThat(CustomerMindFnoPaperCycleService.shouldExit(0L,500_000L,true,true))
+            .isFalse();
+    }
+
+    @Test
     void manualPaperPositionIsHeldNotSoldByMind() {
         var position=new CustomerPaperFnoOrderService.Position(
             "NSE_FO|61001","CE",LocalDate.of(2026,11,26),
