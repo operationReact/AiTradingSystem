@@ -109,6 +109,27 @@ class MarketReadinessTests(unittest.TestCase):
                 self.assertIn(reason,receipt)
                 self.assertNotIn("PRIVATE_DATA",receipt)
 
+    def test_flutter_five_minute_gate_can_hide_valid_v2_reference_prices(self):
+        # Fixture explicitly emulates source-original market snapshot timestamp.
+        old = json.loads(market())
+        old["snapshotAt"] = (NOW - dt.timedelta(minutes=6)).isoformat()
+        receipt, valid = audit.classify(200, json.dumps(old).encode(), NOW)
+        self.assertTrue(valid)
+        self.assertIn("v2ChainLtpIndicators=2", receipt)
+        self.assertIn("flutterVisibleV2Indicators=0", receipt)
+        self.assertIn("snapshotAge=OLDER_5_MIN_UNDER_24H", receipt)
+        new = dict(old)
+        new["snapshotAt"] = (NOW - dt.timedelta(minutes=1)).isoformat()
+        receipt, valid = audit.classify(200, json.dumps(new).encode(), NOW)
+        self.assertTrue(valid)
+        self.assertIn("flutterVisibleV2Indicators=2", receipt)
+        self.assertIn("snapshotAge=WITHIN_5_MIN", receipt)
+        new["snapshotAt"] = (NOW + dt.timedelta(seconds=10)).isoformat()
+        receipt, valid = audit.classify(200, json.dumps(new).encode(), NOW)
+        self.assertTrue(valid)
+        self.assertIn("snapshotAge=FUTURE", receipt)
+        self.assertIn("flutterVisibleV2Indicators=0", receipt)
+
     def test_cli_outputs_only_bounded_aggregate(self):
         with tempfile.TemporaryDirectory() as folder:
             expiry=Path(folder)/"expiry.json"
