@@ -252,6 +252,8 @@ class CustomerMindFnoPaperCycleServiceTest {
             new CustomerPaperFnoOrderService.Position(
                 "NSE_FO|61001","INVALID",expiry,65,65,100_000L,25_000L,true),
             new CustomerPaperFnoOrderService.Position(
+                "NSE_FO|61001",null,expiry,65,65,100_000L,25_000L,true),
+            new CustomerPaperFnoOrderService.Position(
                 "NSE_FO|61001","CE",null,65,65,100_000L,25_000L,true),
             new CustomerPaperFnoOrderService.Position(
                 "NSE_FO|61001","CE",expiry,0,0,100_000L,25_000L,true),
@@ -266,6 +268,10 @@ class CustomerMindFnoPaperCycleServiceTest {
             assertThat(result.action()).isEqualTo("NONE");
             assertThat(result.liveMoney()).isFalse();
         }
+        when(orders.positions(owner,room)).thenReturn(java.util.Collections.singletonList(null));
+        var absent=cycle.run(owner,room,auth);
+        assertThat(absent.reasonCode()).isEqualTo("UNSUPPORTED_PAPER_POSITION");
+        assertThat(absent.action()).isEqualTo("NONE");
         verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
         verifyNoInteractions(jdbc,feed,research);
         assertThat(CustomerMindFnoPaperCycleService.shouldExit(0L,500_000L,true,true))
