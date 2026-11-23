@@ -37,10 +37,18 @@ CustomerFnoMarket _market(DateTime now,
        'put': _leg('61004', 'PE', at: at, oi: fresh ? 600 : null)},
     ],
     'chainSnapshotIndicators': {
-      'NSE_FO|61001': {'openInterest': 400, 'ltp': 110.25},
-      'NSE_FO|61002': {'openInterest': 800, 'ltp': 120.00},
-      'NSE_FO|61003': {'openInterest': 1300, 'ltp': 98.50},
-      'NSE_FO|61004': {'openInterest': 100, 'ltp': 85.75},
+      'NSE_FO|61001': {
+        'openInterest': 400, 'previousOpenInterest': 500,
+        'volume': 300, 'ltp': 110.25},
+      'NSE_FO|61002': {
+        'openInterest': 800, 'previousOpenInterest': 600,
+        'volume': 900, 'ltp': 120.00},
+      'NSE_FO|61003': {
+        'openInterest': 1300, 'previousOpenInterest': 1200,
+        'volume': 600, 'ltp': 98.50},
+      'NSE_FO|61004': {
+        'openInterest': 100, 'previousOpenInterest': 100,
+        'volume': 0, 'ltp': 85.75},
     },
   });
 }
@@ -57,6 +65,38 @@ void main() {
     final puts = MintTickFnoDiscoveryFacts.highestOpenInterest(
         market, now, 'PE');
     expect(puts.first.instrumentKey, 'NSE_FO|61002');
+  });
+
+  test('top traded ranks actual V2 provider volume, excluding zero volume', () {
+    final now = DateTime.now().toUtc();
+    final legs = MintTickFnoDiscoveryFacts.snapshotLeaders(
+        _market(now), now, 'ALL', metric: 'VOLUME');
+    expect(legs.map((leg) => leg.instrumentKey).toList(),
+        ['NSE_FO|61002', 'NSE_FO|61003', 'NSE_FO|61001']);
+    expect(legs.every((leg) => !leg.paperEligible), isTrue);
+  });
+
+  test('OI gainers use positive current-minus-prior V2 OI, not price change', () {
+    final now = DateTime.now().toUtc();
+    final legs = MintTickFnoDiscoveryFacts.snapshotLeaders(
+        _market(now), now, 'ALL', metric: 'OI_GAIN');
+    expect(legs.map((leg) => leg.instrumentKey).toList(),
+        ['NSE_FO|61002', 'NSE_FO|61003']);
+  });
+
+  test('invalid, stale or denied V2 snapshot cannot support volume rankings', () {
+    final now = DateTime.now().toUtc();
+    expect(MintTickFnoDiscoveryFacts.snapshotLeaders(
+        _market(now, displayRights: false), now, 'ALL',
+        metric: 'VOLUME'), isEmpty);
+    expect(MintTickFnoDiscoveryFacts.snapshotLeaders(
+        _market(now, snapshotAge: const Duration(minutes: 6)),
+        now, 'ALL', metric: 'VOLUME'), isEmpty);
+    expect(MintTickFnoDiscoveryFacts.snapshotLeaders(
+        _market(now), now, 'ALL', metric: 'UNKNOWN'), isEmpty);
+    expect(() => CustomerFnoChainSnapshotIndicator.decode({
+      'openInterest': 20, 'previousOpenInterest': 21, 'volume': -1,
+    }), throwsFormatException);
   });
 
   test('V2 chain OI is not ranked after snapshot age exceeds five minutes', () {
