@@ -32,6 +32,8 @@ class UpstoxFnoPlusMultiSocketPoolTest {
             state,0,0,0,0,0,0,0,NOW,false);
     }
     private UpstoxFnoPlusMultiSocketPool pool(boolean rights) {
+        extra.clear();
+        shardStates.clear();
         for (int i=0;i<4;i++) {
             var s = mock(UpstoxFnoV3LiveFeedService.class);
             var ref = new AtomicReference<>(status("STOPPED",0));
