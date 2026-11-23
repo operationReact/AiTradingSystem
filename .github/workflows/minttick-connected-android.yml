@@ -128,6 +128,36 @@ jobs:
           independent="$(tr -d '\r\n' < "$RUNNER_TEMP/independently-verified-signer.sha256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test "$independent" = "$cert"
           echo 'PASS: this dev APK matches release byte digest and pinned signer'
+      - name: Check current GitHub OIDC claims without exposing JWT
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os
+          from urllib.request import Request, urlopen
+          expected = {
+              "repo:operationReact/AiTradingSystem:ref:refs/heads/dev",
+              "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+          }
+          assert os.environ["GITHUB_REF"] == "refs/heads/dev"
+          assert os.environ["GITHUB_REPOSITORY"] == "operationReact/AiTradingSystem"
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+          bearer = os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
+          separator = "&" if "?" in url else "?"
+          request = Request(url + separator + "audience=sts.amazonaws.com",
+                            headers={"Authorization": "Bearer " + bearer})
+          with urlopen(request, timeout=20) as response:
+              token = json.load(response)["value"]
+          payload = token.split(".")[1]
+          claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+          # Never log the JWT, authorization header or the full token payload.
+          subject = claims.get("sub")
+          print("GitHub OIDC subject: " + str(subject))
+          assert claims.get("aud") == "sts.amazonaws.com"
+          assert str(claims.get("repository_id")) == "1433875172"
+          assert str(claims.get("repository_owner_id")) == "215111824"
+          assert subject in expected, "Unexpected OIDC identity; fail closed"
+          PY
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::098859530205:role/minttick-web-github-publish

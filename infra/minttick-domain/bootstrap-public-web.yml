@@ -202,7 +202,11 @@ Resources:
             Condition:
               StringEquals:
                 'token.actions.githubusercontent.com:aud': sts.amazonaws.com
-                'token.actions.githubusercontent.com:sub': 'repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev'
+                # Accept the only two supported GitHub OIDC subject formats
+                # for this exact repository's dev branch; no wildcards.
+                'token.actions.githubusercontent.com:sub':
+                  - 'repo:operationReact/AiTradingSystem:ref:refs/heads/dev'
+                  - 'repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev'
       Policies:
         - PolicyName: minttick-web-publish-scoped
           PolicyDocument:
