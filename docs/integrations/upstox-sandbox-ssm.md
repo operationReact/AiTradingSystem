@@ -54,7 +54,7 @@ limit price and its tick size. Do not use guessed contract keys or lot sizes.
 
 The manually gated `provider-sandbox` job assumes the dedicated OIDC role,
 loads the exact SSM parameter **into one Python process only**, and calls
-only `https://sandbox.upstox.com` for one bounded
+only `https://api-sandbox.upstox.com` for one bounded
 place → modify → cancel order lifecycle. The token is not written to
 `GITHUB_ENV`, output, file, or logged. Missing SSM access, unexpected
 execution context, invalid token, invalid instrument or ambiguous API result
