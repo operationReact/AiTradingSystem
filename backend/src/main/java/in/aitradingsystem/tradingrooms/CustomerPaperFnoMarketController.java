@@ -356,8 +356,8 @@ public class CustomerPaperFnoMarketController {
                 d == null ? null : d.gamma(),
                 d == null ? null : d.vega(),
                 d == null ? null : d.volume(),
-                d == null ? null : d.bidQuantity(),
-                d == null ? null : d.askQuantity(),
+                // No read-only Markets depth is exposed without paired V3 prices.
+                null, null,
                 d == null ? null : d.lastTradedQuantity());
         }
         // Execution-eligible quotes still require strictly validated bid/ask.
