@@ -58,6 +58,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   bool _quoteBusy = false;
   Timer? _quoteTimer;
 
+  CustomerCompanyProfile? _company;
   CustomerDayDetail? _detail;
   bool _detailFailed = false;
   bool _detailLoading = false;
@@ -70,6 +71,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   bool get _hasCandleRepo => widget.repository is CustomerCandleRepository;
   bool get _hasSnapshotRepo => widget.repository is CustomerSnapshotMarketRepository;
   bool get _hasDetailRepo => widget.repository is CustomerDetailRepository;
+  bool get _hasCompanyRepo => widget.repository is CustomerCompanyProfileRepository;
   bool get _hasWatchRepo => widget.repository is CustomerWatchlistRepository;
 
   @override
@@ -77,6 +79,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     super.initState();
     _loadCandles();
     if (_hasDetailRepo) _loadDetail();
+    if (_hasCompanyRepo) _loadCompany();
     if (_hasWatchRepo) _loadWatchlist();
     if (_hasSnapshotRepo) {
       _pollQuote();
@@ -179,6 +182,20 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       setState(() => _quoteFailed = true);
     } finally {
       _quoteBusy = false;
+    }
+  }
+
+  Future<void> _loadCompany() async {
+    final repo = widget.repository;
+    if (repo is! CustomerCompanyProfileRepository) return;
+    try {
+      final profile = await repo.companyProfile(widget.stock.id);
+      if (!mounted || profile.tradingSymbol != widget.stock.tradingSymbol ||
+          profile.exchange != widget.stock.exchange) return;
+      setState(() => _company = profile);
+    } catch (_) {
+      // Keep trustworthy catalogue identity visible while classified sources
+      // or a newer read-only company endpoint are unavailable.
     }
   }
 
@@ -468,7 +485,11 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   Widget _companyBlock(ThemeData theme) {
     final scheme = theme.colorScheme;
     final stock = widget.stock;
+    final company = _company;
     final facts = <(String, String)>[
+      if (company?.industry != null) ('Industry', company!.industry!),
+      if (company?.sizeSegment != null)
+        ('Index size', company!.sizeSegment!),
       ('Symbol', stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')),
       if (stock.exchange.trim().isNotEmpty) ('Exchange', stock.exchange),
       if (stock.exchangeSegment.trim().isNotEmpty) ('Segment', stock.exchangeSegment),
@@ -506,6 +527,40 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               ),
           ],
         )),
+        if (company != null && company.indexMemberships.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: Wrap(spacing: 6, runSpacing: 4, children: [
+              for (final membership in company.indexMemberships)
+                Chip(
+                  key: ValueKey('company-index-${membership.indexCode}'),
+                  label: Text(membership.indexCode),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ])),
+            IconButton(
+              key: const ValueKey('company-source-details'),
+              tooltip: 'Company classification sources',
+              icon: const Icon(Icons.info_outline, size: 18),
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                builder: (sheetContext) => SafeArea(child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: ListView(shrinkWrap: true, children: [
+                    Text('Official index membership',
+                      style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 10),
+                    for (final membership in company.indexMemberships)
+                      ListTile(dense: true,
+                        title: Text(membership.indexCode),
+                        subtitle: Text(
+                          '${membership.source} · ${_istDate(membership.sourceAsOf)}')),
+                  ]),
+                )),
+              ),
+            ),
+          ]),
+        ],
       ],
     ));
   }
