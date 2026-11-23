@@ -80,6 +80,51 @@ class CustomerFnoDiscoveryOffHoursTest {
             unpricedLeg(callKey, "CE"), unpricedLeg(putKey, "PE"));
     }
 
+    private void stubAdditionalExpiry(LocalDate expiry) {
+        when(source.currentFnoOptionContracts(NIFTY, expiry)).thenReturn(List.of(
+            new UpstoxAnalyticsSource.FnoOptionContract(NIFTY, CE, expiry,
+                new BigDecimal("25000"), "CE", 65, new BigDecimal(".05"), "NIFTY 25000 CE"),
+            new UpstoxAnalyticsSource.FnoOptionContract(NIFTY, PE, expiry,
+                new BigDecimal("25000"), "PE", 65, new BigDecimal(".05"), "NIFTY 25000 PE")));
+        when(source.currentFnoOptionChain(NIFTY, expiry)).thenReturn(
+            new UpstoxAnalyticsSource.OptionChainSnapshot("UPSTOX_ANALYTICS",
+                Instant.now(), false, List.of(
+                    new UpstoxAnalyticsSource.FnoOptionStrike(expiry, NIFTY,
+                        new BigDecimal("25000"), new BigDecimal("25010"),
+                        quote(CE), quote(PE)))));
+    }
+
+    @Test
+    void switchingBetweenListedExpiriesReusesEachVerifiedChainWithinTtl() {
+        var first = mockListedMetadata();
+        var later = first.plusDays(7);
+        stubAdditionalExpiry(later);
+        var subject = controller(false);
+        assertThat(subject.internalMarket(first).strikes()).hasSize(1);
+        assertThat(subject.internalMarket(later).strikes()).hasSize(1);
+        assertThat(subject.internalMarket(first).strikes()).hasSize(1);
+        assertThat(subject.internalMarket(later).strikes()).hasSize(1);
+        verify(source, times(1)).currentFnoOptionContracts(NIFTY, first);
+        verify(source, times(1)).currentFnoOptionContracts(NIFTY, later);
+        verify(source, times(1)).currentFnoOptionChain(NIFTY, first);
+        verify(source, times(1)).currentFnoOptionChain(NIFTY, later);
+    }
+
+    @Test
+    void cacheEvictsLeastRecentlyUsedExpiryInsteadOfKeepingAllSourceData() {
+        var first = mockListedMetadata();
+        var subject = controller(false);
+        subject.internalMarket(first);
+        for (int n = 1; n <= 8; n++) {
+            var expiry = first.plusDays(n * 7L);
+            stubAdditionalExpiry(expiry);
+            subject.internalMarket(expiry);
+        }
+        subject.internalMarket(first);
+        verify(source, times(2)).currentFnoOptionContracts(NIFTY, first);
+        verify(source, times(2)).currentFnoOptionChain(NIFTY, first);
+    }
+
     @Test
     void lastTradeLookupPrioritizesNearestSpotInsteadOfLowestStrike() {
         var rows = List.of(
