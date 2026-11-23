@@ -178,6 +178,82 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void expandedSessionReplayBatchesAll256KeysWithoutExceedingCodec64Cap() {
+        var now = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var stream = service(now);
+        try {
+            var first = new java.util.ArrayList<String>();
+            for (int n = 0; n < 64; n++) first.add("NSE_FO|" + (61001 + n));
+            stream.start(first);
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            for (int group = 1; group <= 3; group++) {
+                var add = new java.util.ArrayList<String>();
+                for (int n = 0; n < 64; n++)
+                    add.add("NSE_FO|" + (61001 + group * 64 + n));
+                stream.subscribeAdditionalListed(add);
+            }
+            assertThat(stream.status().subscriptions()).isEqualTo(256);
+            // Simulate the authorized connection's onOpen replay after its
+            // already verified source-plan had expanded to 256 instruments.
+            listener.get().onOpen(socket);
+            var sent = org.mockito.ArgumentCaptor.forClass(ByteBuffer.class);
+            verify(socket, times(8)).sendBinary(sent.capture(), eq(true));
+            var replayed = new java.util.HashSet<String>();
+            var frames = sent.getAllValues();
+            for (int i = 4; i < 8; i++) {
+                String command = new String(frames.get(i).array(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+                assertThat(command).contains("\"method\":\"sub\"",
+                    "\"mode\":\"full\"");
+                var contractKeys = java.util.regex.Pattern
+                    .compile("NSE_FO\\|[0-9]+")
+                    .matcher(command);
+                int batch = 0;
+                while (contractKeys.find()) {
+                    assertThat(replayed.add(contractKeys.group())).isTrue();
+                    batch++;
+                }
+                assertThat(batch).isEqualTo(64);
+            }
+            assertThat(replayed).hasSize(256);
+            assertThat(stream.status().subscriptions()).isEqualTo(256);
+            assertThat(stream.status().state()).isEqualTo("CONNECTED_AWAITING_TICKS");
+            assertThat(stream.eligibleDisplayQuote("NSE_FO|61256")).isEmpty();
+            verify(source, times(1)).authorizeFnoMarketFeedV3();
+            verify(socket, never()).sendClose(anyInt(), anyString());
+        } finally {
+            stream.shutdown();
+        }
+    }
+
+    @Test
+    void expandedReplayFailedSendNeverReportsSocketConnectedOrFresh() {
+        var now = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var stream = service(now);
+        try {
+            stream.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            stream.subscribeAdditionalListed(List.of("NSE_FO|61002"));
+            when(socket.sendBinary(any(ByteBuffer.class), eq(true)))
+                .thenReturn(CompletableFuture.failedFuture(
+                    new IllegalStateException("connection dropped")));
+            listener.get().onOpen(socket);
+            assertThat(stream.status().state()).isEqualTo("RECONNECTING");
+            assertThat(stream.status().subscriptions()).isEqualTo(2);
+            assertThat(stream.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
+            // Both the synchronized reconnect gate and failed-send callback
+            // may abort the same dead socket. Abort is idempotent and safe.
+            verify(socket, atLeastOnce()).abort();
+        } finally {
+            stream.shutdown();
+        }
+    }
+
+    @Test
     void dynamicallyAddsListedContractKeysOnSameConnectedSocketWithoutOrders() {
         var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
         var s = service(current);
