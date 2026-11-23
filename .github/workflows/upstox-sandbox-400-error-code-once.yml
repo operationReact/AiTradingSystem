@@ -1,0 +1,71 @@
+name: Upstox sandbox 400 error-code diagnosis once
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/upstox-sandbox-400-error-code-once.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose-provider-response:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exactly this one-shot change
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-sandbox-400-error-code-once.yml
+          test "$(git diff-tree --no-commit-id --diff-filter=A --name-only -r HEAD)" = "$p"
+          expected="$(printf '%s\n' "$p" 'scripts/tests/test_upstox_fno_sandbox_lifecycle.py' 'scripts/upstox_fno_sandbox_lifecycle.py')"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$expected"
+      - name: Verify no-network tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
+      - name: Assume sandbox-only SSM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox400-${{ github.run_id }}
+      - name: One sandbox test order only with sanitized provider 4XX classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import json
+          import sys
+          sys.path.insert(0, "scripts")
+          import upstox_fno_sandbox_lifecycle as probe
+          import upstox_fno_sandbox_ssm as ssm
+
+          if probe.SANDBOX != "https://api-sandbox.upstox.com" or probe.SANDBOX_USER_AGENT != "MintTick-Upstox-Sandbox/1.0":
+              raise RuntimeError("UNEXPECTED_SANDBOX_HOST_OR_UA")
+          token = ssm.load_sandbox_token()
+          print("SANDBOX_400_PROBE:ONE_NONFUNDED_FUT_ORDER_NO_RETRY")
+          try:
+              result = probe.run_cycle(
+                  probe.sandbox_transport(token),
+                  "NSE_FO|36702", 50, "100.05", "0.05")
+          except probe.SandboxError as exc:
+              print("SANDBOX_400_PROVIDER_CLASS:" + str(exc))
+              raise SystemExit(1)
+          finally:
+              token = None
+          print("SANDBOX_400_LIFECYCLE:" + json.dumps(result, sort_keys=True))
+          if not all(result.get(k) is True for k in ("placed", "modified", "cancelled")):
+              raise SystemExit(2)
+          print("SANDBOX_400_LIFECYCLE_VERIFIED")
+          print("REAL_MONEY_ORDERS:ZERO")
+          PY

@@ -128,6 +128,32 @@ class SandboxLifecycleTests(unittest.TestCase):
         self.assertNotIn("Python-urllib", probe.SANDBOX_USER_AGENT)
         self.assertTrue(probe.SANDBOX_USER_AGENT.startswith("MintTick-Upstox-Sandbox/"))
 
+
+    def test_provider_400_exposes_only_documented_code_never_message(self):
+        import urllib.error
+        import io
+        response = b'{"status":"error","errors":[{"errorCode":"UDAPI100011","message":"secret account token in invalidValue"}]}'
+        class FakeOpener:
+            def open(self, request, timeout):
+                raise urllib.error.HTTPError(request.full_url, 400, "bad request",
+                                              {}, io.BytesIO(response))
+        with patch.object(probe.urllib.request, "build_opener", return_value=FakeOpener()):
+            call = probe.sandbox_transport("sandbox-fixture-not-a-real-token")
+            with self.assertRaisesRegex(probe.SandboxError, "^SANDBOX_HTTP_ERROR_400_UDAPI100011$") as caught:
+                call("POST", "/v3/order/place", {"quantity": 50})
+        self.assertNotIn("secret", str(caught.exception))
+        self.assertNotIn("account", str(caught.exception))
+        self.assertNotIn("invalidValue", str(caught.exception))
+
+    def test_provider_rejects_arbitrary_error_fields_from_logs(self):
+        import urllib.error
+        import io
+        error = urllib.error.HTTPError(
+            "https://api-sandbox.upstox.com/v3/order/place",
+            400, "invalid", {},
+            io.BytesIO(b'{"errors":[{"errorCode":"token-unsafe","message":"do not log"}]}'))
+        self.assertEqual(probe._safe_provider_error_code(error), "")
+
     def test_default_cli_performs_no_network_and_explicit_run_needs_token(self):
         out = io.StringIO()
         with patch.dict(os.environ, {"UPSTOX_SANDBOX_TOKEN": ""}), contextlib.redirect_stdout(out):
