@@ -47,6 +47,7 @@ class UpstoxFnoAutoWatchlistExpansionTest {
     }
 
     private void prepared() {
+        when(feed.subscriptionLimit()).thenReturn(256);
         when(source.enabled()).thenReturn(true);
         when(calendar.isInsideFnoSession(NOW)).thenReturn(true);
         when(feed.status()).thenReturn(status("CONNECTED", 64));

@@ -19,7 +19,7 @@ import java.util.UUID;
 final class UpstoxFnoV3FeedCodec {
     private static final int MAX_FRAME_BYTES = 1024 * 1024;
     // One initial full V3 batch can include >128 contracts at the expanded cap.
-    private static final int MAX_FEEDS = 512;
+    private static final int MAX_FEEDS = 2048;
 
     record Tick(String instrumentKey, Instant tradedAt, Instant feedAt,
                 BigDecimal ltp, BigDecimal bid, BigDecimal ask, Long openInterest,
