@@ -119,6 +119,68 @@ class IndependentCandleE2ETest(unittest.TestCase):
             ValueError,"NO_ELIGIBLE_IMMUTABLE_SOURCE_RECEIPTS"):
             independent.audit(self.path)
 
+    def test_complete_fake_upstox_get_through_worker_to_independent_verifier(self):
+        import json
+        class Reply:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,n):
+                return json.dumps({"status":"success","data":{
+                    "candles":[list(x) for x in candles()]}}).encode()
+        class NoNetwork:
+            def __init__(self):self.calls=0
+            def open(self,request,timeout):
+                self.calls+=1
+                self_url=request.full_url
+                assert self_url.startswith(
+                    "https://api.upstox.com/v2/expired-instruments/historical-candle/")
+                return Reply()
+        opener=NoNetwork()
+        g=grant()
+        provider=adapters.UpstoxExpiredCandles(
+            lambda:"synthetic-no-real-auth-token-"*3,g,lambda _:True,
+            today=lambda:TODAY,opener=opener)
+        queue=core.MetadataQueue(Path(self.tmp.name)/"journal.sqlite")
+        try:
+            self.assertEqual(queue.plan(CONTRACT,"day",FIRST,LAST,
+                                        rights=g,today=TODAY),1)
+            worker=core.BackfillWorker(queue,provider,self.sink,g,
+                pace=core.Pace(1.5,clock=lambda:100.0,sleep=lambda _:None),
+                today=lambda:TODAY)
+            self.assertEqual(worker.run_once(),"DONE")
+            self.assertEqual(opener.calls,1)
+            self.assertEqual(queue.summary()["rows_written"],2)
+            self.assertEqual(independent.audit(self.path)["verifiedCandleRows"],2)
+            self.assertEqual(worker.run_once(),"IDLE")
+            self.assertEqual(opener.calls,1)
+        finally:
+            queue.close()
+
+    def test_worker_quarantines_provider_revision_without_marking_done(self):
+        class StaticProvider:
+            def fetch(self,*args):
+                return core.ProviderReply(200,[list(x) for x in candles()])
+        class ConflictingSink:
+            def upsert(self,*args):
+                raise ValueError("HISTORICAL_PROVIDER_REVISION_DETECTED")
+        queue=core.MetadataQueue(Path(self.tmp.name)/"blocked.sqlite")
+        try:
+            g=grant()
+            queue.plan(CONTRACT,"day",FIRST,LAST,rights=g,today=TODAY)
+            worker=core.BackfillWorker(queue,StaticProvider(),ConflictingSink(),g,
+                pace=core.Pace(1.5,clock=lambda:100.0,sleep=lambda _:None),
+                today=lambda:TODAY)
+            self.assertEqual(worker.run_once(),"BLOCKED")
+            self.assertEqual(queue.summary()["counts"]["BLOCKED"],1)
+            self.assertEqual(queue.summary()["rows_written"],0)
+            self.assertEqual(queue.db.execute(
+                "SELECT reason FROM fno_backfill_jobs").fetchone()[0],
+                "SINK_PROVENANCE_REJECTED")
+            self.assertEqual(worker.run_once(),"IDLE")
+        finally:
+            queue.close()
+
     def test_missing_receipts_cannot_be_reported_as_accepted_storage_roundtrip(self):
         with self.assertRaisesRegex(
             ValueError,"NO_ELIGIBLE_IMMUTABLE_SOURCE_RECEIPTS"):
