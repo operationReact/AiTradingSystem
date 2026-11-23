@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from decimal import Decimal, InvalidOperation
 
-SANDBOX = "https://sandbox.upstox.com"
+SANDBOX = "https://api-sandbox.upstox.com"
 INSTRUMENT = re.compile(r"NSE_FO\|[A-Za-z0-9._-]{1,64}\Z")
 ORDER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _ALLOWED = {("POST", "/v3/order/place"), ("PUT", "/v3/order/modify")}
