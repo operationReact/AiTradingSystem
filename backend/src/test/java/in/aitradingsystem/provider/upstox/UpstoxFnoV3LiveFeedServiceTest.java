@@ -200,8 +200,8 @@ class UpstoxFnoV3LiveFeedServiceTest {
             verify(socket, times(2)).sendBinary(sent.capture(), eq(true));
             assertThat(new String(sent.getAllValues().get(1).array(),
                     java.nio.charset.StandardCharsets.UTF_8))
-                .contains("\\"method\\":\\"sub\\"",
-                    "\\"mode\\":\\"full\\"",
+                .contains("\"method\":\"sub\"",
+                    "\"mode\":\"full\"",
                     "NSE_FO|61002", "NSE_FO|61003")
                 .doesNotContain("NSE_FO|61001");
             // Idempotent: retries cannot duplicate provider subscriptions.
