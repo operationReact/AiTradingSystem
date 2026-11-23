@@ -165,6 +165,33 @@ def run(token: str, get=get_json):
             cap = get(prefix + "/paper/fno/capability", token)
             book = get(prefix + "/paper/fno/reconciliation", token)
             wallet = get(prefix + "/paper/fno/wallet-reconciliation", token)
+            if (not isinstance(cap, dict) or type(cap.get("paperConfigured")) is not bool
+                    or cap.get("liveExecutionAuthorized") is not False):
+                raise ReadOnlyProbeFailure("PAPER_CAPABILITY_INVALID")
+            if not cap["paperConfigured"]:
+                # Both scheduler and PAPER routes can be conditionally absent
+                # when a feature/usage gate is disabled. Report the precise
+                # allowlisted blocker without requesting those absent routes.
+                safe = {"FNO_PAPER_DISABLED", "FNO_V3_FEED_DISABLED",
+                        "DISPLAY_RIGHTS_NOT_VERIFIED",
+                        "PAPER_USE_RIGHTS_NOT_VERIFIED", "ROOM_HORIZON_UNSUPPORTED"}
+                codes = cap.get("blockerCodes")
+                if not isinstance(codes, list) or len(codes) > 20:
+                    raise ReadOnlyProbeFailure("PAPER_BLOCKERS_INVALID")
+                reason = ",".join(sorted(set(x for x in codes if isinstance(x,str) and x in safe))) or "UNCLASSIFIED"
+                if not isinstance(book, dict) or book.get("status") not in (
+                        "NO_FILLS","BOOKKEEPING_MATCHED","INCONSISTENT","INCOMPLETE"):
+                    raise ReadOnlyProbeFailure("PAPER_BOOK_STATUS_INVALID")
+                if (not isinstance(wallet, dict) or
+                        type(wallet.get("cashAndRealizedPnlReconciled")) is not bool):
+                    raise ReadOnlyProbeFailure("PAPER_WALLET_CONTRACT_INVALID")
+                print(MARKER + "state=PAPER_CONFIGURATION_BLOCKED;codes=" + reason +
+                      ";bookStatus=" + book["status"] +
+                      ";cashMatched=" +
+                      str(wallet["cashAndRealizedPnlReconciled"]).lower() +
+                      ";scheduler=NOT_TESTED_DISABLED_GATE;orders=zero" +
+                      ";independentStrategyE2E=false")
+                continue
             state = get(prefix + "/mind/fno/paper-automation", token)
             history = get(prefix + "/mind/fno/paper-automation/history", token)
             print(summarize_room(cap, book, wallet, state, history))

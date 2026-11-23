@@ -84,6 +84,26 @@ class PaperEvidenceTests(unittest.TestCase):
         self.assertIn("ENABLED_BUT_UNSAFE_RUNTIME", output.getvalue())
         self.assertIn("bookStatus=INCONSISTENT", output.getvalue())
 
+    def test_disabled_paper_reports_allowlisted_flag_without_nonexistent_scheduler_get(self):
+        values = fixtures()
+        cap = module.ROOT + "/" + ROOM + "/paper/fno/capability"
+        values[cap]["paperConfigured"] = False
+        values[cap]["status"] = "PAPER_USE_RIGHTS_NOT_VERIFIED"
+        values[cap]["blockerCodes"] = ["PAPER_USE_RIGHTS_NOT_VERIFIED"]
+        requested = []
+        def get(path, token):
+            requested.append(path)
+            return values[path]
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(module.run(TOKEN, get), 0)
+        text = output.getvalue()
+        self.assertIn("state=PAPER_CONFIGURATION_BLOCKED", text)
+        self.assertIn("codes=PAPER_USE_RIGHTS_NOT_VERIFIED", text)
+        self.assertIn("bookStatus=NO_FILLS;cashMatched=true", text)
+        self.assertNotIn("PRIVATE", text)
+        self.assertNotIn(ROOM, text)
+        self.assertFalse(any("paper-automation" in path for path in requested))
+
     def test_no_fill_is_not_counted_as_e2e_and_history_is_only_local_evidence(self):
         values = fixtures()
         history = module.ROOT + "/" + ROOM + "/mind/fno/paper-automation/history"
