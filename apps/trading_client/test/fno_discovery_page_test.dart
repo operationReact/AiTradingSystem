@@ -401,7 +401,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
-    expect(find.textContaining('Last ·'), findsWidgets);
+    expect(find.textContaining('Market closed · displayed prices are not live'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -420,7 +420,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
-    expect(find.textContaining('Last ·'), findsWidgets);
+    expect(find.textContaining('Market closed · displayed prices are not live'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -438,6 +438,8 @@ void main() {
     ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
+    await tester.pump();
     final contract = find.byKey(
         const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_CE'));
     await tester.ensureVisible(contract);
@@ -466,18 +468,20 @@ void main() {
     ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
+    await tester.pump();
     expect(find.text('Listed Options'), findsWidgets);
     expect(find.byKey(const ValueKey('minttick-options-smartlist-highest-oi')),
         findsOneWidget);
     expect(find.textContaining('Provider snapshot'), findsOneWidget);
-    expect(find.text('5200'), findsWidgets);
+    expect(find.text('5.2K'), findsWidgets);
     await tester.ensureVisible(find.byKey(
         const ValueKey('minttick-options-smartlist-top-traded')));
     await tester.tap(find.byKey(
         const ValueKey('minttick-options-smartlist-top-traded')));
     await tester.pump();
-    expect(find.text('34000'), findsWidgets);
-    expect(find.text('Volume'), findsWidgets);
+    expect(find.text('34.0K'), findsWidgets);
+    expect(find.text('VOLUME'), findsWidgets);
     await tester.ensureVisible(find.byKey(
         const ValueKey('minttick-options-smartlist-oi-gainers')));
     await tester.tap(find.byKey(
@@ -529,6 +533,8 @@ void main() {
     expect(find.byKey(const ValueKey('minttick-options-title')), findsOneWidget);
     expect(find.byKey(const ValueKey('minttick-options-index-picker')), findsOneWidget);
     expect(find.textContaining('No verified'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-trade')));
+    await tester.pump();
     expect(find.text('Create F&O room'), findsWidgets);
     final create = find.text('Create F&O room').first;
     await tester.ensureVisible(create);
@@ -555,6 +561,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
     expect(find.byKey(const ValueKey('minttick-options-title')), findsOneWidget);
+    expect(find.text('NIFTY option chain'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
+    await tester.pump();
     expect(find.byKey(const ValueKey('minttick-options-ce')), findsOneWidget);
     expect(find.byKey(const ValueKey('minttick-options-pe')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('minttick-options-pe')));
@@ -563,6 +572,34 @@ void main() {
       find.byKey(const ValueKey('minttick-options-pe'))).selected, isTrue);
     expect(tester.widget<ChoiceChip>(
       find.byKey(const ValueKey('minttick-options-ce'))).selected, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('320dp chain keeps CE and PE visible without horizontal scrolling',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _LiveDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('NIFTY option chain'), findsWidgets);
+    expect(find.text('CALL · CE'), findsOneWidget);
+    expect(find.text('PUT · PE'), findsOneWidget);
+    expect(find.text('STRIKE'), findsWidgets);
+    expect(tester.widgetList<SingleChildScrollView>(
+      find.byType(SingleChildScrollView)).where(
+        (w) => w.scrollDirection == Axis.horizontal), isEmpty);
     expect(tester.takeException(), isNull);
   });
 

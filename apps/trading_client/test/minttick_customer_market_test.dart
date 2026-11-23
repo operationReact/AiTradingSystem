@@ -953,7 +953,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('minttick-options-title')), findsOneWidget);
     expect(find.byKey(const ValueKey('minttick-options-index-picker')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('minttick-options-search')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('DISPLAY RIGHTS NOT VERIFIED'), findsWidgets);
     expect(find.textContaining('No verified option contracts available'), findsWidgets);
     expect(tester.takeException(), isNull);
