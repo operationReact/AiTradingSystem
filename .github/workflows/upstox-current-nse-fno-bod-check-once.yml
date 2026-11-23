@@ -1,0 +1,89 @@
+name: Upstox current BOD NSE F&O contract read-only check (once)
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/upstox-current-nse-fno-bod-check-once.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-current-bod:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify one-shot contract
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-current-nse-fno-bod-check-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Parse official current Upstox NSE BOD JSON.gz without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import datetime
+          import gzip
+          import json
+          import urllib.error
+          import urllib.request
+          from collections import Counter
+          from zoneinfo import ZoneInfo
+
+          url = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz'
+          req = urllib.request.Request(url, headers={'User-Agent': 'MintTick-Upstox-InstrumentAudit/1.0',
+                                                     'Accept': 'application/gzip'})
+          try:
+              with urllib.request.urlopen(req, timeout=25) as response:
+                  blob = response.read(55_000_001)
+          except (OSError, urllib.error.URLError, TimeoutError):
+              print('BOD_DOWNLOAD:UNAVAILABLE')
+              raise SystemExit(1)
+          if len(blob) > 55_000_000:
+              print('BOD_DOWNLOAD:TOO_LARGE')
+              raise SystemExit(1)
+          try:
+              items = json.loads(gzip.decompress(blob))
+          except (OSError, ValueError, TypeError):
+              print('BOD_JSON:INVALID')
+              raise SystemExit(1)
+          if not isinstance(items, list):
+              print('BOD_JSON:NOT_AN_ARRAY')
+              raise SystemExit(1)
+          now = datetime.datetime.now(ZoneInfo('Asia/Kolkata')).date()
+          fno = [x for x in items if isinstance(x, dict) and x.get('segment') == 'NSE_FO']
+          live = []
+          for x in fno:
+              try:
+                  exp = datetime.datetime.fromtimestamp(int(x.get('expiry')) / 1000,
+                              ZoneInfo('Asia/Kolkata')).date()
+              except (TypeError, ValueError, OverflowError, OSError):
+                  continue
+              if exp >= now and (exp - now).days <= 45:
+                  live.append((x, exp))
+          nifties = [(x,d) for x,d in live if x.get('underlying_symbol') in ('NIFTY','NIFTY 50')
+                     and x.get('instrument_type') in ('CE','PE')]
+          nifties.sort(key=lambda pair: (
+              pair[1], abs(float(pair[0].get('strike_price') or 0)-26000)))
+          print('BOD_DOWNLOAD:OK')
+          print('BOD_NSE_FO_TOTAL:' + str(len(fno)))
+          print('BOD_NSE_FO_FUTURE_EXPIRY_45D:' + str(len(live)))
+          print('BOD_NIFTY_ACTIVE_CE_PE_45D:' + str(len(nifties)))
+          print('BOD_DATE_IST:' + now.isoformat())
+          for x,d in nifties[:6]:
+              key = str(x.get('instrument_key',''))
+              sym = str(x.get('trading_symbol',''))
+              if not key.startswith('NSE_FO|') or len(key)>85 or len(sym)>120:
+                  continue
+              print('BOD_CANDIDATE:' + key + ';' + sym + ';expiry=' + d.isoformat() +
+                   ';type=' + str(x.get('instrument_type')) +
+                   ';lot=' + str(x.get('lot_size')) +
+                   ';tick_field=' + str(x.get('tick_size')))
+          print('BROKER_ORDERS:ZERO')
+          PY
