@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +52,7 @@ public final class UpstoxNseEquityIsinSource {
     public record Snapshot(Map<String, String> symbolToIsin, Instant fetchedAt) {}
     public record Parse(Map<String, String> symbolToIsin, int rawRows, int validRows) {}
 
+    @Autowired
     public UpstoxNseEquityIsinSource(ObjectMapper mapper) {
         this(mapper, Clock.systemUTC(), HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
