@@ -142,7 +142,7 @@ public class CustomerMindFnoPaperAutomationService {
                     WHERE room_id=:room AND user_id=:owner
                       AND lease_until=:lease AND enabled=TRUE
                     """).param("room",due.room()).param("owner",due.owner())
-                        .param("lease",due.leaseUntil()).update();
+                        .param("lease",java.sql.Timestamp.from(due.leaseUntil())).update();
             }
         }
     }
@@ -176,8 +176,9 @@ public class CustomerMindFnoPaperAutomationService {
                 :orders,:wallet
             FROM accepted
             """).param("id",UUID.randomUUID()).param("room",due.room())
-            .param("owner",due.owner()).param("lease",due.leaseUntil())
-            .param("at",clock.instant()).param("evaluated",result.evaluatedAt())
+            .param("owner",due.owner()).param("lease",java.sql.Timestamp.from(due.leaseUntil()))
+            .param("at",java.sql.Timestamp.from(clock.instant()))
+            .param("evaluated",java.sql.Timestamp.from(result.evaluatedAt()))
             .param("uncertain",uncertain)
             .param("status",result.status()).param("reason",result.reasonCode())
             .param("action",result.action()).param("strategy",result.strategyId())
@@ -200,7 +201,7 @@ public class CustomerMindFnoPaperAutomationService {
                     AND r.market_scope='FNO' AND r.focus IN ('INTRADAY','SWING')
                     AND w.lease_until=:lease AND w.lease_until>NOW())
                 """).param("owner",due.owner()).param("room",due.room())
-                .param("lease",due.leaseUntil()).query(Boolean.class).single();
+                .param("lease",java.sql.Timestamp.from(due.leaseUntil())).query(Boolean.class).single();
             if(ready)return cycles.runOptedIn(due.owner(),due.room());
             return abstain(now,due.room(),"BLOCKED","ROOM_DISABLED_OR_NOT_ELIGIBLE");
         } catch(RuntimeException failure) {
