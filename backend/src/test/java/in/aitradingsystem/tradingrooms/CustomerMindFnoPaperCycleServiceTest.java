@@ -81,7 +81,7 @@ class CustomerMindFnoPaperCycleServiceTest {
     void futureAndStaleSignalBarsNeverReachPaperOrders() {
         for (Instant invalidClose : List.of(NOW.plusSeconds(60),
                 NOW.minusSeconds(5*86400L))) {
-            reset(research,capability,orders);
+            reset(research,capability);
             var candidate=validWorkerCandidate("strategy.STR-181");
             when(candidate.latestCompletedCloseAt()).thenReturn(invalidClose);
             var result=cycle.runOptedIn(owner,room);
