@@ -71,6 +71,29 @@ public final class UpstoxFnoInstrumentUniverse {
             }
             return new Page(matched, List.copyOf(rows));
         }
+        /** Search the verified local master only: no upstream API requests. */
+        public Page search(String query, String type, int page, int size) {
+            if (query == null || query.isBlank() || query.length() > 64 ||
+                    !query.matches("[A-Za-z0-9 ._-]+") ||
+                    page < 0 || size < 1 || size > MAX_PAGE_SIZE ||
+                    (type != null && !Set.of("FUT", "CE", "PE").contains(type))) {
+                throw new IllegalArgumentException("FNO_UNIVERSE_INVALID_SEARCH");
+            }
+            String needle = query.strip().toUpperCase(java.util.Locale.ROOT);
+            long offset = (long) page * size;
+            int matched = 0;
+            var rows = new ArrayList<Contract>();
+            for (Contract contract : contracts) {
+                if (type != null && !type.equals(contract.type())) continue;
+                if (!contract.underlyingSymbol().toUpperCase(java.util.Locale.ROOT)
+                        .contains(needle) &&
+                    !contract.tradingSymbol().toUpperCase(java.util.Locale.ROOT)
+                        .contains(needle)) continue;
+                if (matched >= offset && rows.size() < size) rows.add(contract);
+                matched++;
+            }
+            return new Page(matched, List.copyOf(rows));
+        }
     }
 
     public record Page(int total, List<Contract> contracts) {}
