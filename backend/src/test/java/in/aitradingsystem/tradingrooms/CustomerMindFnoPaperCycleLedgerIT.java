@@ -159,4 +159,80 @@ class CustomerMindFnoPaperCycleLedgerIT extends AbstractPostgresIT {
         assertThat(wallets.get(owner,room).realizedPnlPaise()).isPositive();
         verify(source,atLeastOnce()).currentFnoOptionContracts(UNDERLYING,EXPIRY);
     }
+
+    @Test
+    void longPutMindSignalUsesVirtualBuyThenStopLossExitWithLedgerReconciliation() {
+        UUID room=fundedRoom();
+        UUID owner=jdbc.sql("SELECT user_id FROM customer_trading_room WHERE id=:room")
+            .param("room",room).query(UUID.class).single();
+
+        var source=mock(UpstoxAnalyticsSource.class);
+        var feed=mock(UpstoxFnoV3LiveFeedService.class);
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING,EXPIRY)).thenReturn(List.of(
+            new UpstoxAnalyticsSource.FnoOptionContract(UNDERLYING,CONTRACT,
+                EXPIRY,new BigDecimal("26000"),"PE",65,new BigDecimal(".05"),
+                "NIFTY TEST LONG PE")));
+        quote(feed,"99.00","100.00");
+
+        var orderEngine=new CustomerPaperFnoOrderService(jdbc,source,feed,
+            calendar,Clock.fixed(NOW,ZoneOffset.UTC),true,true);
+        var recon=new CustomerPaperFnoReconciliationService(jdbc);
+        var walletAudit=new CustomerPaperSharedWalletAuditService(jdbc);
+        var research=mock(CustomerMindFnoResearchController.class);
+        var capabilities=mock(CustomerPaperFnoCapabilityController.class);
+        when(capabilities.internalCapability(owner,room)).thenReturn(
+            new CustomerPaperFnoCapabilityController.Capability(
+                "SOURCE_CHECK_REQUIRED",true,true,false,List.of()));
+        var candidate=mock(CustomerMindFnoResearchController.FnoResearch.class);
+        when(candidate.status()).thenReturn("RESEARCH_CANDIDATE");
+        when(candidate.strategyId()).thenReturn("strategy.STR-182");
+        when(candidate.signal()).thenReturn("BUY_PUT_RESEARCH");
+        when(candidate.quoteSource()).thenReturn("UPSTOX_V3_EXCHANGE_TIMED");
+        when(candidate.exchangeAt()).thenReturn(NOW.minusSeconds(2));
+        when(candidate.observedAt()).thenReturn(NOW.minusSeconds(1));
+        when(candidate.latestCompletedCloseAt()).thenReturn(PREVIOUS_CLOSE);
+        when(candidate.ask()).thenReturn(new BigDecimal("100"));
+        when(candidate.lotSize()).thenReturn(65);
+        when(candidate.instrumentKey()).thenReturn(CONTRACT);
+        when(candidate.expiry()).thenReturn(EXPIRY);
+        when(research.inspectForOwnedPaperWorker()).thenReturn(candidate);
+        var cycle=new CustomerMindFnoPaperCycleService(research,orderEngine,
+            wallets,capabilities,recon,walletAudit,feed,jdbc,
+            Clock.fixed(NOW,ZoneOffset.UTC));
+
+        var entered=tx(()->cycle.runOptedIn(owner,room));
+        assertThat(entered.status()).isEqualTo("FILLED_RECONCILED");
+        assertThat(entered.action()).isEqualTo("ENTER");
+        assertThat(entered.strategyId()).isEqualTo("strategy.STR-182");
+        assertThat(entered.liveMoney()).isFalse();
+        var entries=orderEngine.orders(owner,room);
+        assertThat(entries).hasSize(1);
+        assertThat(entries.getFirst().optionType()).isEqualTo("PE");
+        assertThat(entries.getFirst().side()).isEqualTo("BUY");
+        assertThat(entries.getFirst().quantity()).isEqualTo(65);
+        assertThat(walletAudit.inspect(owner,room).cashAndRealizedPnlReconciled()).isTrue();
+
+        // A falling fresh provider bid puts the option below the virtual -8%
+        // stop; the order service must SELL only the already-owned long put.
+        quote(feed,"90.00","91.00");
+        var exit=tx(()->cycle.runOptedIn(owner,room));
+        assertThat(exit.status()).isEqualTo("FILLED_RECONCILED");
+        assertThat(exit.action()).isEqualTo("EXIT");
+        assertThat(exit.realizedPnlDeltaPaise()).isNegative();
+        assertThat(exit.liveMoney()).isFalse();
+        assertThat(orderEngine.positions(owner,room)).isEmpty();
+        assertThat(orderEngine.orders(owner,room)).hasSize(2);
+        assertThat(orderEngine.orders(owner,room).getLast().side()).isEqualTo("SELL");
+        assertThat(recon.inspect(owner,room).completedRoundTrips()).isEqualTo(1);
+        assertThat(recon.inspect(owner,room).status()).isEqualTo("BOOKKEEPING_MATCHED");
+        assertThat(walletAudit.inspect(owner,room).cashAndRealizedPnlReconciled()).isTrue();
+        assertThat(wallets.get(owner,room).realizedPnlPaise()).isNegative();
+
+        var replay=tx(()->cycle.runOptedIn(owner,room));
+        assertThat(replay.reasonCode()).isEqualTo("MIND_FNO_SIGNAL_ALREADY_TRADED");
+        assertThat(replay.action()).isEqualTo("NONE");
+        assertThat(orderEngine.orders(owner,room)).hasSize(2);
+        verify(source,atLeastOnce()).currentFnoOptionContracts(UNDERLYING,EXPIRY);
+    }
 }
