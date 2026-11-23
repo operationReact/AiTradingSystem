@@ -29,6 +29,8 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
   Timer? _searchDebounce;
   CustomerFnoUniversePage? _result;
   CustomerFnoUniverseStatus? _status;
+  CustomerFnoRealtimeCoverage? _coverage;
+  DateTime? _coverageFetchedAt;
 
   @override
   void initState() {
@@ -45,7 +47,7 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
 
   String? get _sourceType => _type == 'All' ? null : _type;
 
-  Future<void> _load() async {
+  Future<void> _load({bool refreshCoverage = false}) async {
     final generation = ++_generation;
     setState(() {
       _loading = true;
@@ -65,9 +67,25 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
         page = null;
       }
       if (!mounted || generation != _generation) return;
+      CustomerFnoRealtimeCoverage? live = _coverage;
+      final lastCheck = _coverageFetchedAt;
+      if (refreshCoverage || lastCheck == null ||
+          DateTime.now().difference(lastCheck) >= const Duration(seconds:10)) {
+        try {
+          live = await widget.repository.realtimeCoverage();
+          if (!mounted || generation != _generation) return;
+        } catch (_) {
+          // Do not fabricate real time counts or hide a valid BOD catalog
+          // when the separately protected feed-coverage path is unavailable.
+          live = null;
+        }
+        _coverageFetchedAt = DateTime.now();
+      }
+      if (!mounted || generation != _generation) return;
       setState(() {
         _status = status;
         _result = page;
+        _coverage = live;
       });
     } catch (_) {
       if (mounted && generation == _generation) {
@@ -124,7 +142,8 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
           style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
         IconButton(
           key: const ValueKey('fno-universe-refresh'),
-          onPressed: _loading ? null : () => unawaited(_load()),
+          onPressed: _loading ? null
+              : () => unawaited(_load(refreshCoverage: true)),
           tooltip: 'Refresh listed instrument catalogue',
           icon: const Icon(Icons.refresh_rounded, size: 19),
         ),
@@ -146,6 +165,30 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
             : 'Catalog unavailable · ${status.state}',
           style: text.labelSmall?.copyWith(
             color: status.usable ? scheme.onSurfaceVariant : scheme.error)),
+        const SizedBox(height: 7),
+        if (_coverage case final live?) ...[
+          Wrap(spacing: 14, runSpacing: 5, children: [
+            _metric('V3 sub', live.subscribedNseFno.toString()),
+            _metric('Fresh LTP', live.freshExchangeLtp.toString()),
+            _metric('Depth', live.freshTwoSidedDepth.toString()),
+            _metric('OI', live.freshWithOi.toString()),
+            _metric('Vol', live.freshWithVolume.toString()),
+            _metric('Greeks', live.freshWithGreeks.toString()),
+          ]),
+          const SizedBox(height: 5),
+          Text(
+            live.connected && live.catalogContracts > 0
+                ? '${live.subscribedNseFno} / ${live.catalogContracts} subscribed'
+                    ' · ${live.subscribedWithoutFreshLtp} without fresh LTP'
+                : 'V3 ${live.realtimeState} · catalog ${live.catalogState}',
+            key: const ValueKey('fno-universe-realtime-coverage'),
+            style: text.labelSmall?.copyWith(
+              color: live.connected ? scheme.onSurfaceVariant : scheme.error)),
+        ] else
+          Text('V3 coverage unavailable · not verified',
+            key: const ValueKey('fno-universe-realtime-coverage'),
+            style: text.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant)),
         const SizedBox(height: 10),
       ],
       TextField(
