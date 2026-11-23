@@ -67,6 +67,13 @@ class NewsFeaturePolicyTest {
     }
 
     @Test
+    void failedAnalysisIsReportedBeforeUnverifiedMapping() {
+        Candidate c = new Candidate(PUBLISHED, PUBLISHED.plusSeconds(60), "FAILED", "INTRADAY",
+            null, null, null, false, false, false);
+        assertThat(NewsFeaturePolicy.classify(c, ASOF)).isEqualTo(EXCLUDED_ANALYSIS_FAILED);
+    }
+
+    @Test
     void staleItemExpiresByHorizon() {
         Candidate intraday = with(x -> new Candidate(PUBLISHED.minusSeconds(0), x.analysisAvailableAt(),
             x.analysisStatus(), "INTRADAY", x.directionScore(), x.confidence(), x.materiality(),

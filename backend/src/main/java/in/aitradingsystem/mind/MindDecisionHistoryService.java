@@ -1,5 +1,8 @@
 package in.aitradingsystem.mind;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.news.feature.NewsContext;
+import in.aitradingsystem.news.feature.NewsFeaturePolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -23,14 +26,17 @@ public class MindDecisionHistoryService {
         "Only candidates from SUCCEEDED scan runs are listed. PARTIAL and FAILED runs are excluded.",
         "Abstentions and no-signal outcomes are not persisted per decision, so they are not listed.",
         "Scanner rank is not shown because it is not a calibrated confidence.",
-        "A recorded candidate is research evidence only. It places no order and enables no execution.");
+        "A recorded candidate is research evidence only. It places no order and enables no execution.",
+        "News context is an advisory annotation captured at scan time. Null news means it was not recorded for that candidate, not that no news existed.");
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final ObjectMapper mapper;
 
-    public MindDecisionHistoryService(JdbcTemplate jdbc, Clock clock) {
+    public MindDecisionHistoryService(JdbcTemplate jdbc, Clock clock, ObjectMapper mapper) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.mapper = mapper;
     }
 
     public record Decision(String scanRunId, String runCompletedAt, String strategy,
@@ -38,7 +44,11 @@ public class MindDecisionHistoryService {
                            String exchange, String interval, String signalCandleTime,
                            String dataCutoffAt, String candidateFingerprint, List<String> reasons,
                            String decisionPosture, boolean paperOrderSubmitted,
-                           boolean executionEnabled, boolean liveMoney) {}
+                           boolean executionEnabled, boolean liveMoney,
+                           // Always serialized: null is an explicit "not recorded", never an omitted field.
+                           @com.fasterxml.jackson.annotation.JsonInclude(
+                               com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS)
+                           NewsContext news) {}
 
     public record History(String contract, Instant generatedAt, int limit, List<Decision> decisions,
                           List<String> limitations) {}
@@ -51,7 +61,8 @@ public class MindDecisionHistoryService {
                 SELECT r.id AS run_id, r.completed_at AS run_completed_at,
                        c.strategy, c.strategy_config_version, c.catalogue_version,
                        c.trading_symbol, c.exchange, c.interval, c.signal_candle_time,
-                       c.data_cutoff_at, c.candidate_fingerprint, c.reasons
+                       c.data_cutoff_at, c.candidate_fingerprint, c.reasons,
+                       c.news_context::text AS news_context, c.news_context_contract
                   FROM research_scan_candidate c
                   JOIN research_scan_run r ON r.id = c.scan_run_id
                  WHERE r.status = 'SUCCEEDED' AND r.completed_at IS NOT NULL
@@ -77,7 +88,8 @@ public class MindDecisionHistoryService {
                         rs.getString("candidate_fingerprint"),
                         splitReasons(rs.getString("reasons")),
                         "RECORDED_CANDIDATE",
-                        false, false, false);
+                        false, false, false,
+                        parseNews(rs.getString("news_context"), rs.getString("news_context_contract")));
                     return new Row(decision, signalAt, cutoffAt);
                 }, MAX_ROWS);
         // Fail closed in Java too: any row whose lineage is not valid is dropped, never shown.
@@ -96,6 +108,16 @@ public class MindDecisionHistoryService {
     static List<String> splitReasons(String reasons) {
         if (reasons == null || reasons.isBlank()) return List.of();
         return Arrays.stream(reasons.split("\\|")).filter(v -> !v.isBlank()).toList();
+    }
+
+    /** Only the exact stored contract is read. Anything else is shown as not recorded, never as evidence. */
+    NewsContext parseNews(String json, String contract) {
+        if (json == null || json.isBlank() || !NewsFeaturePolicy.CONTRACT.equals(contract)) return null;
+        try {
+            return mapper.readValue(json, NewsContext.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String instant(OffsetDateTime value) {

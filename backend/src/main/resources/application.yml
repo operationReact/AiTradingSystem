@@ -153,6 +153,10 @@ app:
       max-summaries-per-run: ${NEWS_MAX_SUMMARIES_PER_RUN:20}
     summarization:
       enabled: ${NEWS_SUMMARIZATION_ENABLED:false}
+    # Advisory as-of news context on research candidates (#1809). Off by default: no candidate
+    # changes, and no news is read during scans, unless explicitly enabled.
+    mind-context:
+      enabled: ${NEWS_MIND_CONTEXT_ENABLED:false}
     cors-allowed-origins: ${NEWS_CORS_ALLOWED_ORIGINS:http://localhost:5173}
     provider: ${NEWS_ANALYSIS_PROVIDER:NONE}
     gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
