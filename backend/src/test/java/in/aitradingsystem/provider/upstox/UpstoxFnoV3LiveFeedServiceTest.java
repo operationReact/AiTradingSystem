@@ -300,6 +300,50 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void optedInPlusSupplementaryFreshQuoteRoutesThroughExistingMindAccessor() {
+        var marketClock = Clock.fixed(
+            Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var primary = service(marketClock);
+        var pool = mock(UpstoxFnoPlusMultiSocketPool.class);
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<UpstoxFnoPlusMultiSocketPool>
+            provider = mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(pool);
+        primary.setSupplementaryPoolProvider(provider);
+        var key = "NSE_FO|61055";
+        var exchange = marketClock.instant().minusSeconds(1);
+        var display = new UpstoxFnoV3LiveFeedService.DisplayQuote(
+            key, new java.math.BigDecimal("122.5"),null,10000L,
+            null,null,null,null,null,
+            new java.math.BigDecimal("121"),new java.math.BigDecimal("123"),
+            exchange,exchange);
+        var paper = new UpstoxFnoV3LiveFeedService.PaperQuote(
+            key,new java.math.BigDecimal("121"),
+            new java.math.BigDecimal("123"),exchange,exchange);
+        when(pool.eligibleSupplementaryQuote(key)).thenReturn(
+            java.util.Optional.of(display));
+        when(pool.eligibleSupplementaryPaperQuote(key)).thenReturn(
+            java.util.Optional.of(paper));
+        when(pool.hasSupplementarySubscription(key)).thenReturn(true);
+        when(pool.supplementaryCoverage()).thenReturn(
+            new UpstoxFnoV3LiveFeedService.StreamingCounts(
+                "SUPPLEMENTARY",2,1,1,1,1,1,0,marketClock.instant(),false));
+        try {
+            assertThat(primary.eligibleDisplayQuote(key)).contains(display);
+            assertThat(primary.eligiblePaperQuote(key)).contains(paper);
+            assertThat(primary.hasActiveFnoSubscription(key)).isTrue();
+            var coverage=primary.streamingCoverage();
+            assertThat(coverage.subscribedNseFno()).isEqualTo(2);
+            assertThat(coverage.freshExchangeLtp()).isEqualTo(1);
+            assertThat(coverage.freshTwoSidedDepth()).isEqualTo(1);
+            assertThat(coverage.liveOrderAuthorized()).isFalse();
+            verify(source,never()).authorizeFnoMarketFeedV3();
+        } finally {
+            primary.shutdown();
+        }
+    }
+
+    @Test
     void dynamicSubscriptionFailsClosedWhenUnconnectedOrBinarySendFails() {
         var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
         var s = service(current);
