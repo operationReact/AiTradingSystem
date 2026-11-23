@@ -570,7 +570,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         ],
         if (_visibleString(profile?['company_profile']) != null) ...[
           const SizedBox(height: 6),
-          ExpansionTile(
+          Material(color: Colors.transparent, child: ExpansionTile(
             title: const Text('About company'),
             tilePadding: EdgeInsets.zero,
             childrenPadding: EdgeInsets.zero,
@@ -578,7 +578,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               Text(_visibleString(profile?['company_profile'])!,
                 style: theme.textTheme.bodySmall),
             ],
-          ),
+          )),
         ],
         const SizedBox(height: 12),
         LayoutBuilder(builder: (context, constraints) => Wrap(
@@ -742,14 +742,16 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         ],
         if (income.isNotEmpty) ...[
           const SizedBox(height: 8),
-          ExpansionTile(key: const ValueKey('stock-fundamental-income'),
+          Material(color: Colors.transparent, child: ExpansionTile(
+            key: const ValueKey('stock-fundamental-income'),
             title: const Text('Quarterly financials'), tilePadding: EdgeInsets.zero,
-            children: [_fundamentalFacts(theme, income, 'stock-income-facts')]),
+            children: [_fundamentalFacts(theme, income, 'stock-income-facts')])),
         ],
         if (owners.isNotEmpty) ...[
-          ExpansionTile(key: const ValueKey('stock-fundamental-shareholding'),
+          Material(color: Colors.transparent, child: ExpansionTile(
+            key: const ValueKey('stock-fundamental-shareholding'),
             title: const Text('Shareholding'), tilePadding: EdgeInsets.zero,
-            children: [_fundamentalFacts(theme, owners, 'stock-ownership-facts')]),
+            children: [_fundamentalFacts(theme, owners, 'stock-ownership-facts')])),
         ],
       ],
     ));
