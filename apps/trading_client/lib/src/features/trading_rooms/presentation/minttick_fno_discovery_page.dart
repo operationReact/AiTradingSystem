@@ -1161,23 +1161,32 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       CustomerFnoLeg? leg, DateTime now, {
       required bool isCall, required bool itm}) {
     final c = Theme.of(context).colorScheme;
+    if (leg == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Text('—', textAlign: TextAlign.center));
+    }
     final alignment = isCall ? Alignment.centerLeft : Alignment.centerRight;
     final textAlign = isCall ? TextAlign.left : TextAlign.right;
-    final chain = leg == null ? null : _chainSnapshot(market, leg, now);
-    final fresh = leg != null && _fresh(market, leg, now);
-    final visible = leg != null && _displayQuote(market, leg, now);
+    final chain = _chainSnapshot(market, leg, now);
+    final fresh = _fresh(market, leg, now);
+    final visible = _displayQuote(market, leg, now);
     final price = visible ? leg.ltp : chain?.ltp;
-    final change = fresh && leg?.previousClose != null && leg?.ltp != null
-        ? leg!.ltp! - leg.previousClose!
-        : chain?.referencePriceChange;
-    final changePct = fresh ? leg?.priceChangePct
+    // An independently timestamped retained last trade may still have a
+    // valid previous close after market close, but it is not a live quote.
+    final hasTradeComparison = visible && leg.ltp != null &&
+        leg.previousClose != null && leg.previousClose! > 0;
+    final change = hasTradeComparison
+        ? leg.ltp! - leg.previousClose! : chain?.referencePriceChange;
+    final changePct = hasTradeComparison
+        ? (change! * 100 / leg.previousClose!)
         : chain?.referencePriceChangePct;
-    final oi = leg == null ? null : _displayOpenInterest(market, leg, now);
+    final oi = _displayOpenInterest(market, leg, now);
     final oiDiff = chain?.openInterestChange;
-    final delta = fresh && leg?.delta != null ? leg!.delta : chain?.delta;
-    final iv = fresh && leg?.iv != null ? leg!.iv : chain?.iv;
-    final bid = fresh && leg?.bid != null ? leg!.bid : chain?.bid;
-    final ask = fresh && leg?.ask != null ? leg!.ask : chain?.ask;
+    final delta = fresh && leg.delta != null ? leg.delta : chain?.delta;
+    final iv = fresh && leg.iv != null ? leg.iv : chain?.iv;
+    final bid = fresh && leg.bid != null ? leg.bid : chain?.bid;
+    final ask = fresh && leg.ask != null ? leg.ask : chain?.ask;
     final primary = switch (_chainView) {
       'OI' => _shortCount(oi),
       'Greeks' => _decimal(delta, places: 3),
@@ -1201,9 +1210,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         : changeColor > 0 ? c.primary
         : changeColor < 0 ? c.error : c.onSurfaceVariant;
     return InkWell(
-      key: leg == null ? null :
-        ValueKey('fno-chain-leg-${leg.instrumentKey}'),
-      onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
+      key: ValueKey('fno-chain-leg-${leg.instrumentKey}'),
+      onTap: () => _showLeg(context, market, leg, now),
       child: Container(
         alignment: alignment,
         color: itm ? c.primary.withValues(alpha: .035) : null,
