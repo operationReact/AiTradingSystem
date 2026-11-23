@@ -5,7 +5,9 @@ on:
     branches: [dev]
     paths:
       - 'scripts/upstox_fno_sandbox_lifecycle.py'
+      - 'scripts/upstox_fno_sandbox_ssm.py'
       - 'scripts/tests/test_upstox_fno_sandbox_lifecycle.py'
+      - 'scripts/tests/test_upstox_fno_sandbox_ssm.py'
       - '.github/workflows/upstox-fno-sandbox-contract.yml'
   workflow_dispatch:
     inputs:
@@ -45,18 +47,22 @@ jobs:
       - name: Run zero-network sandbox contract tests
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py
-          python3 -m unittest discover -s scripts/tests -p test_upstox_fno_sandbox_lifecycle.py -v
+          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py scripts/upstox_fno_sandbox_ssm.py
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
           python3 scripts/upstox_fno_sandbox_lifecycle.py
 
   provider-sandbox:
+    # Deliberately manual, non-funded test. No push or PR event can reach Upstox.
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.confirmation == 'SANDBOX_ONLY'
     needs: local-contract
     runs-on: ubuntu-24.04
-    timeout-minutes: 4
+    timeout-minutes: 5
     environment: broker-sandbox
+    permissions:
+      contents: read
+      id-token: write
     env:
-      UPSTOX_SANDBOX_TOKEN: ${{ secrets.UPSTOX_SANDBOX_TOKEN }}
+      SANDBOX_CONFIRMATION: ${{ inputs.confirmation }}
       SANDBOX_INSTRUMENT_KEY: ${{ inputs.instrument_key }}
       SANDBOX_QUANTITY: ${{ inputs.quantity }}
       SANDBOX_PRICE: ${{ inputs.price }}
@@ -65,14 +71,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Execute ONLY Upstox non-funded sandbox, no production fallback
+      - name: Assume dedicated least-privilege sandbox SSM reader role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: upstox-sandbox-${{ github.run_id }}
+      - name: Read exact SecureString in memory and test sandbox orders
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$UPSTOX_SANDBOX_TOKEN" ]; then
-            echo 'SANDBOX_TOKEN_NOT_CONFIGURED'
-            exit 1
-          fi
-          python3 scripts/upstox_fno_sandbox_lifecycle.py --execute-sandbox \
+          set +x
+          python3 scripts/upstox_fno_sandbox_ssm.py \
             --instrument-key "$SANDBOX_INSTRUMENT_KEY" \
             --quantity "$SANDBOX_QUANTITY" \
             --price "$SANDBOX_PRICE" \
