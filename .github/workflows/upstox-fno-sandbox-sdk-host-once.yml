@@ -1,0 +1,91 @@
+name: Upstox sandbox F&O official SDK host one-shot lifecycle
+
+# Exactly one run when this file is first introduced on dev. Changing it later
+# cannot repeat the orders because the workflow requires an ADDED file in HEAD.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-fno-sandbox-sdk-host-once.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: minttick-upstox-sandbox-official-sdk-host-20261123
+  cancel-in-progress: false
+
+jobs:
+  sandbox-only-lifecycle:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact newly added one-shot workflow and no other changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          path=.github/workflows/upstox-fno-sandbox-sdk-host-once.yml
+          test "$(git diff-tree --no-commit-id --diff-filter=A --name-only -r HEAD)" = "$path"
+          expected="$(printf '%s\n' "$path" 'docs/integrations/upstox-sandbox-ssm.md' 'scripts/tests/test_upstox_fno_sandbox_lifecycle.py' 'scripts/upstox_fno_sandbox_lifecycle.py')"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$expected"
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$GITHUB_EVENT_NAME" = "push"
+          echo 'SANDBOX_ONE_SHOT_ADDED_FILE:VERIFIED'
+      - name: Run existing zero-network order and credential tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py scripts/upstox_fno_sandbox_ssm.py
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
+      - name: Assume existing sandbox-only SSM reader
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox-lifecycle-${{ github.run_id }}
+      - name: Execute exactly one non-funded sandbox FUT order lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import json
+          import sys
+          sys.path.insert(0, "scripts")
+          import upstox_fno_sandbox_ssm as ssm
+          import upstox_fno_sandbox_lifecycle as probe
+
+          # Upstox OFFICIAL BOD instrument documentation: 071NSETEST
+          # FUT 27 NOV 2036, NSE_FO|36702, lot_size=50, tick_size=5 paise.
+          # Not a real-market instruction or a customer order.
+          instrument = "NSE_FO|36702"
+          quantity = 50
+          price = "100.05"
+          tick = "0.05"
+          if probe.SANDBOX != "https://api-sandbox.upstox.com":
+              raise RuntimeError("SANDBOX_HOST_NOT_FIXED")
+          print("SANDBOX_CONTRACT:OFFICIAL_TEST_FUTURE_NSE_FO")
+          print("SANDBOX_QUANTITY_UNITS:50")
+          print("SANDBOX_TARGET_HOST:SANDBOX_ONLY")
+          try:
+              token = ssm.load_sandbox_token()
+              response = probe.run_cycle(
+                  probe.sandbox_transport(token), instrument, quantity, price, tick
+              )
+          except (ssm.SandboxBootstrapError, probe.SandboxError) as exc:
+              # Only stable failure labels, no provider bodies or secret values.
+              print("SANDBOX_PROVIDER_RESULT:BLOCKED:" + str(exc))
+              raise SystemExit(1)
+          finally:
+              token = None
+          print("SANDBOX_PROVIDER_RESULT:" + json.dumps(response, sort_keys=True))
+          if not all(response.get(x) is True for x in ("placed", "modified", "cancelled")):
+              raise RuntimeError("SANDBOX_LIFECYCLE_INCOMPLETE")
+          print("SANDBOX_REAL_MONEY_ORDERS:ZERO")
+          PY
