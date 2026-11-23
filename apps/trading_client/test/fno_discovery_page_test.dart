@@ -101,6 +101,9 @@ class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
       CustomerFnoMarket.decode({
         'underlyingKey': 'NSE_INDEX|Nifty 50',
         'expiry': '2026-11-23',
+        // Upstox chain supplies this reference; closed-market ATM uses it
+        // only to locate the strike, never as an executable live spot quote.
+        'underlyingReferenceSpot': 25300,
         'source': 'UPSTOX_ANALYTICS',
         'status': 'MARKET_CLOSED',
         'snapshotAt': DateTime.now().toUtc().toIso8601String(),
@@ -410,7 +413,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
-    expect(find.textContaining('Market closed · displayed prices are not live'), findsWidgets);
+    expect(find.textContaining('Market closed · prices are not live'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -429,7 +432,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
-    expect(find.textContaining('Market closed · displayed prices are not live'), findsWidgets);
+    expect(find.textContaining('Market closed · prices are not live'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
