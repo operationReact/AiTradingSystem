@@ -123,6 +123,9 @@ public final class UpstoxFnoPlusMultiSocketPool {
                 || Set.copyOf(listedKeys).size() != listedKeys.size()) {
             throw new IllegalArgumentException("UPSTOX_PLUS_INVALID_LISTED_KEYS");
         }
+        if (!"CONNECTED".equals(primary.status().state())) {
+            throw new IllegalStateException("UPSTOX_PLUS_PRIMARY_SOCKET_NOT_CONNECTED");
+        }
         var existing = status();
         if (existing.locallyTrackedSubscriptions() + listedKeys.size() >
                 MAX_LOCAL_FULL_SUBSCRIPTIONS) {
