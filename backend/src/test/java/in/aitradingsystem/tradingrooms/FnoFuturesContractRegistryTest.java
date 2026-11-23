@@ -30,6 +30,75 @@ class FnoFuturesContractRegistryTest {
         return new FnoFuturesContractRegistry(fetcher, Clock.fixed(NOW, ZoneId.of("UTC")), verified);
     }
 
+    private static byte[] completeSyntheticUniverse() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var rows = (com.fasterxml.jackson.databind.node.ArrayNode)
+            mapper.readTree(Files.readAllBytes(
+                Path.of("src/test/resources/fno/synthetic-futures-instrument-master.json")));
+        for (var row : rows) {
+            if ("NSE_FO".equals(row.path("segment").asText())) {
+                var mutable = (com.fasterxml.jackson.databind.node.ObjectNode) row;
+                mutable.put("tick_size", 5.0);
+                mutable.put("freeze_quantity", 100000.0);
+            }
+        }
+        var put = ((com.fasterxml.jackson.databind.node.ObjectNode) rows.get(3)).deepCopy();
+        put.put("instrument_key", "NSE_FO|SYN2002");
+        put.put("instrument_type", "PE");
+        put.put("trading_symbol", "NIFTY 25000 PE");
+        rows.add(put);
+        return mapper.writeValueAsBytes(rows);
+    }
+
+    @Test
+    void oneSourceFetchProvidesBothFuturesAndCompleteCallPutUniverse() throws Exception {
+        var fetcher = mock(FuturesInstrumentMasterFetcher.class);
+        when(fetcher.fetch()).thenReturn(new FuturesInstrumentMasterFetcher.Fetched(
+            completeSyntheticUniverse(), "verified-digest"));
+        var reg = registry(fetcher, true);
+        reg.refresh();
+        verify(fetcher, times(1)).fetch();
+        assertEquals("LOADED", reg.status().state());
+        var status = reg.universeStatus();
+        assertEquals("LOADED", status.state());
+        assertEquals("verified-digest", status.sha256());
+        assertEquals(4, status.contracts());
+        assertEquals(2, status.futures());
+        assertEquals(1, status.calls());
+        assertEquals(1, status.puts());
+        assertEquals(1, status.underlyings());
+        var call = reg.universe("NSE_INDEX|Nifty 50", null, "CE", 0, 50);
+        assertEquals(1, call.totalMatches());
+        assertEquals("NSE_FO|SYN2001", call.contracts().getFirst().instrumentKey());
+        assertTrue(reg.universe("NSE_INDEX|Nifty 50", null, "PE", 0, 50)
+            .contracts().stream().anyMatch(c -> c.instrumentKey().equals("NSE_FO|SYN2002")));
+    }
+
+    @Test
+    void universeIsNotLoadedWhenSourcePermissionIsNotVerified() throws Exception {
+        var fetcher = mock(FuturesInstrumentMasterFetcher.class);
+        var reg = registry(fetcher, false);
+        reg.refresh();
+        assertEquals("DISCOVERY_NOT_VERIFIED", reg.universeStatus().state());
+        assertEquals(0, reg.universe(null, null, null, 0, 50).totalMatches());
+        verifyNoInteractions(fetcher);
+    }
+
+    @Test
+    void malformedOptionMetadataDoesNotCorruptPreviouslyVerifiedFuturePairs() throws Exception {
+        var fetcher = mock(FuturesInstrumentMasterFetcher.class);
+        when(fetcher.fetch()).thenReturn(new FuturesInstrumentMasterFetcher.Fetched(
+            fixtureGz(), "fut-only"));
+        var reg = registry(fetcher, true);
+        reg.refresh();
+        assertEquals("LOADED", reg.status().state());
+        assertEquals("NOT_LOADED", reg.universeStatus().state());
+        assertEquals("FNO_UNIVERSE_UNVERIFIED_SCHEMA", reg.universeStatus().lastFailure());
+        assertEquals(0, reg.universe(null, null, null, 0, 50).totalMatches());
+        assertTrue(reg.nearFar("NSE_INDEX|Nifty 50",
+            LocalDate.of(2026, 11, 20)).isPresent());
+    }
+
     @Test
     void refreshIsNoOpWithoutVerifiedDiscoveryPermission() throws Exception {
         FuturesInstrumentMasterFetcher fetcher = mock(FuturesInstrumentMasterFetcher.class);
