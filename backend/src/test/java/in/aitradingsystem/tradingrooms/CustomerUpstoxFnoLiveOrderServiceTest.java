@@ -44,6 +44,45 @@ class CustomerUpstoxFnoLiveOrderServiceTest {
     }
 
     @Test
+    void unrelatedPendingBrokerOrdersBlockNewLiveExposure() throws Exception {
+        var otherOpen = mapper.readTree("""
+            [{"instrument_token":"NSE_FO|456","status":"open"},
+             {"instrument_token":"NSE_FO|123","status":"complete"}]
+            """);
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasUnsettledBrokerOrders(otherOpen))
+            .isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasOpenOrder(
+            otherOpen, "NSE_FO|123")).isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasUnsettledBrokerOrders(
+            mapper.readTree("[{\"status\":\"complete\"},{\"status\":\"cancelled\"}]")))
+            .isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasUnsettledBrokerOrders(
+            mapper.readTree("[{\"status\":\"new\"}]"))).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasUnsettledBrokerOrders(
+            mapper.readTree("[{}]"))).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasUnsettledBrokerOrders(null))
+            .isTrue();
+    }
+
+    @Test
+    void existingNfoExposureBlocksNewLiveBuyEvenOnDifferentContract() throws Exception {
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(
+            mapper.readTree("[{\"exchange\":\"NFO\",\"quantity\":65}]"))).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(
+            mapper.readTree("[{\"exchange\":\"NFO\",\"quantity\":-65}]"))).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(
+            mapper.readTree("[{\"exchange\":\"NFO\"}]"))).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(
+            mapper.readTree("[{}]"))).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(
+            mapper.readTree("[{\"exchange\":\"NFO\",\"quantity\":0}]"))).isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(
+            mapper.readTree("[{\"exchange\":\"NSE\",\"quantity\":3}]"))).isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService.hasExistingNfoExposure(null))
+            .isTrue();
+    }
+
+    @Test
     void brokerIntradayOrderCutoffIsConservativeBeforeAutoSquareOff() {
         assertThat(CustomerUpstoxFnoLiveOrderService.insideUpstoxIntradayCutoff(
             java.time.Instant.parse("2026-11-17T09:49:59Z"), "INTRADAY")).isTrue();
