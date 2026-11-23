@@ -231,6 +231,11 @@ public class CustomerUpstoxOAuthService {
     public AccountData orders(UUID user) { return read(user, api::orders); }
     public AccountData staticIps(UUID user) { return read(user, api::staticIps); }
 
+    /** Read-only official fundamentals using the existing linked customer OAuth session. */
+    public AccountData fundamentals(UUID user, String isin, String section) {
+        return read(user, token -> api.fundamentals(token, isin, section));
+    }
+
     public AccountData orderHistoryByTag(UUID owner, String tag) {
         if (tag == null || !tag.matches("[A-Za-z0-9_-]{8,20}")) {
             throw new UpstoxProviderException("UPSTOX_ORDER_TAG_INVALID");
