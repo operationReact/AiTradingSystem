@@ -130,6 +130,42 @@ class CustomerMindFnoPaperAutomationLeaseIT extends AbstractPostgresIT {
     }
 
     @Test
+    void invalidJournalEventRollsBackStateAndDisarmsWorker() {
+        var f=setup();
+        when(cycles.runOptedIn(f.owner(),f.room())).thenReturn(
+            new CustomerMindFnoPaperCycleService.CycleResult(
+                "mind.fno-paper-cycle.v1",SESSION,f.room(),
+                "NO_TRADE","BAD_EVENT","BROKER",
+                null,null,null,null,null,null,null,false));
+        // The event CHECK constraint rejects the INSERT. Its CTE UPDATE
+        // must roll back, and the catch path disables only this exact claim.
+        f.worker().poll();
+        assertThat(journalCount(f.room())).isZero();
+        var state=f.worker().state(f.owner(),f.room());
+        assertThat(state.enabled()).isFalse();
+        assertThat(state.lastStatus()).isEqualTo("UNKNOWN");
+        assertThat(state.lastReason()).isEqualTo("CYCLE_JOURNAL_FAILED");
+    }
+
+    @Test
+    void operatorReEnableDuringOldCycleCannotAcceptOldResult() {
+        var f=setup();
+        doAnswer(call->{
+            assertThat(f.worker().setEnabled(f.owner(),f.room(),false).enabled())
+                .isFalse();
+            assertThat(f.worker().setEnabled(f.owner(),f.room(),true).enabled())
+                .isTrue();
+            return result(f.room());
+        }).when(cycles).runOptedIn(f.owner(),f.room());
+        f.worker().poll();
+        assertThat(journalCount(f.room())).isZero();
+        var state=f.worker().state(f.owner(),f.room());
+        assertThat(state.enabled()).isTrue();
+        assertThat(state.lastStatus()).isNull();
+        assertThat(state.lastReason()).isNull();
+    }
+
+    @Test
     void unknownCycleOutcomeStopsWorkerAndJournalsUnknownOnce() {
         var f=setup();
         when(cycles.runOptedIn(f.owner(),f.room()))
