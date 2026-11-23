@@ -70,6 +70,27 @@ public final class CustomerFnoUniverseController {
                 result.contracts()));
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<Contracts> search(Authentication auth,
+            @RequestParam("q") String query,
+            @RequestParam(value = "type", required = false) String type,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "50") int size) {
+        requireCustomer(auth);
+        if (query == null || query.isBlank() || query.length() > 64 ||
+                !query.matches("[A-Za-z0-9 ._-]+") ||
+                (type != null && !List.of("FUT", "CE", "PE").contains(type)) ||
+                page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Invalid F&O universe search");
+        }
+        var result = registry.universeSearch(query, type, page, size);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(new Contracts("UPSTOX_BOD_INSTRUMENT_MASTER", false, false,
+                result.status(), page, size, result.totalMatches(),
+                result.contracts()));
+    }
+
     private static void requireCustomer(Authentication auth) {
         if (!(auth instanceof JwtAuthenticationToken token) ||
                 token.getAuthorities().stream().noneMatch(
