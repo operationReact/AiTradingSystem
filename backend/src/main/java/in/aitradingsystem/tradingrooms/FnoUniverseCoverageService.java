@@ -50,6 +50,49 @@ public final class FnoUniverseCoverageService {
         this.displayRights = displayRights;
     }
 
+    /**
+     * Source-grounded operational coverage, not a trading recommendation.
+     * Counts only connected, eligible NSE_FO V3 quotes; an account's
+     * subscription entitlement and LIVE order permission remain separate.
+     */
+    public record Summary(String catalogState, String catalogSha,
+            int catalogContracts, String realtimeState,
+            int subscribedNseFno, int freshExchangeLtp,
+            int freshTwoSidedDepth, int subscribedWithoutFreshLtp,
+            int freshWithOi, int freshWithVolume, int freshWithGreeks,
+            Instant checkedAt, boolean liveOrdersAuthorized) {}
+
+    public Summary summary() {
+        Instant now = clock.instant();
+        var universe = registry.universeStatus();
+        String state = !displayRights ? "DISPLAY_RIGHTS_NOT_VERIFIED"
+            : !calendar.isInsideFnoSession(now) ? "MARKET_CLOSED"
+            : "V3_FEED_NOT_CONFIGURED";
+        int subscribed = 0, fresh = 0, depth = 0, missing = 0;
+        int oi = 0, volume = 0, greeks = 0;
+        if (displayRights && calendar.isInsideFnoSession(now)) {
+            var live = feed.getIfAvailable();
+            if (live != null) {
+                var counts = live.streamingCoverage();
+                state = counts.socketState();
+                subscribed = counts.subscribedNseFno();
+                fresh = counts.freshExchangeLtp();
+                depth = counts.freshTwoSidedDepth();
+                missing = counts.withoutFreshLtp();
+                oi = counts.withOi();
+                volume = counts.withVolume();
+                greeks = counts.withGreeks();
+            }
+        }
+        // Never turn a stale/unverified master into a realtime denominator.
+        int catalogContracts = "LOADED".equals(universe.state())
+            ? universe.contracts() : 0;
+        return new Summary(universe.state(),
+            "LOADED".equals(universe.state()) ? universe.sha256() : null,
+            catalogContracts, state, subscribed, fresh, depth, missing,
+            oi, volume, greeks, now, false);
+    }
+
     public Evidence inspect(String instrumentKey) {
         Instant now = clock.instant();
         if (instrumentKey == null ||

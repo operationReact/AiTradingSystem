@@ -21,16 +21,20 @@ public final class CustomerFnoUniverseCoverageController {
         this.coverage = coverage;
     }
 
+    /** Read-only backend vs full listed market coverage, no trading grants. */
+    @GetMapping("/realtime-coverage")
+    public ResponseEntity<FnoUniverseCoverageService.Summary> summary(
+            Authentication authentication) {
+        requireCustomer(authentication);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(coverage.summary());
+    }
+
     @GetMapping("/coverage")
     public ResponseEntity<FnoUniverseCoverageService.Evidence> coverage(
             @RequestParam("instrumentKey") String instrumentKey,
             Authentication authentication) {
-        if (!(authentication instanceof JwtAuthenticationToken token) ||
-                token.getAuthorities().stream().noneMatch(
-                    a -> "ROLE_CUSTOMER".equals(a.getAuthority()))) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
-                "Customer authorization required");
-        }
+        requireCustomer(authentication);
         if (instrumentKey == null || !instrumentKey.matches(
                 "NSE_FO\\|[A-Za-z0-9._-]{1,64}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -38,5 +42,13 @@ public final class CustomerFnoUniverseCoverageController {
         }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(coverage.inspect(instrumentKey));
+    }
+    private static void requireCustomer(Authentication authentication) {
+        if (!(authentication instanceof JwtAuthenticationToken token) ||
+                token.getAuthorities().stream().noneMatch(
+                    a -> "ROLE_CUSTOMER".equals(a.getAuthority()))) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                "Customer authorization required");
+        }
     }
 }

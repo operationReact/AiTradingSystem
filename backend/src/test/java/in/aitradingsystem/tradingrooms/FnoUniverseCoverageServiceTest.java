@@ -139,6 +139,59 @@ class FnoUniverseCoverageServiceTest {
     }
 
     @Test
+    void summaryDistinguishesFortyFiveThousandListedFromActuallyFreshTicks() {
+        when(registry.universeStatus()).thenReturn(
+            new FnoFuturesContractRegistry.UniverseStatus("LOADED", null,
+                NOW.minusSeconds(60), "actual-upstox-master-sha", 45451,
+                667, 22273, 22511, 224));
+        when(calendar.isInsideFnoSession(NOW)).thenReturn(true);
+        when(provider.getIfAvailable()).thenReturn(socket);
+        when(socket.streamingCoverage()).thenReturn(
+            new UpstoxFnoV3LiveFeedService.StreamingCounts(
+                "CONNECTED", 256, 38, 31, 218, 37, 36, 29, NOW, false));
+        var result = subject(true).summary();
+        assertEquals(45451, result.catalogContracts());
+        assertEquals("actual-upstox-master-sha", result.catalogSha());
+        assertEquals(256, result.subscribedNseFno());
+        assertEquals(38, result.freshExchangeLtp());
+        assertEquals(31, result.freshTwoSidedDepth());
+        assertEquals(218, result.subscribedWithoutFreshLtp());
+        assertEquals(29, result.freshWithGreeks());
+        assertFalse(result.liveOrdersAuthorized());
+        verify(socket, never()).stop();
+        verify(socket, never()).start(anyList());
+    }
+
+    @Test
+    void summarySuppressesFreshCountsWhenDisplayRightsAreNotVerified() {
+        when(registry.universeStatus()).thenReturn(
+            new FnoFuturesContractRegistry.UniverseStatus(
+                "DISCOVERY_NOT_VERIFIED", null, null, null,
+                0, 0, 0, 0, 0));
+        var result = subject(false).summary();
+        assertEquals("DISPLAY_RIGHTS_NOT_VERIFIED", result.realtimeState());
+        assertEquals(0, result.subscribedNseFno());
+        assertEquals(0, result.freshExchangeLtp());
+        assertFalse(result.liveOrdersAuthorized());
+        verifyNoInteractions(provider, socket, calendar);
+    }
+
+    @Test
+    void summaryNeverReportsAnExpiredCatalogAsComplete() {
+        when(registry.universeStatus()).thenReturn(
+            new FnoFuturesContractRegistry.UniverseStatus(
+                "STALE_SNAPSHOT", null, NOW.minusSeconds(150000), "old-sha",
+                45451, 667, 22273, 22511, 224));
+        when(calendar.isInsideFnoSession(NOW)).thenReturn(false);
+        var result = subject(true).summary();
+        assertEquals("STALE_SNAPSHOT", result.catalogState());
+        assertEquals(0, result.catalogContracts());
+        assertNull(result.catalogSha());
+        assertEquals("MARKET_CLOSED", result.realtimeState());
+        assertEquals(0, result.subscribedNseFno());
+    }
+
+    @Test
     void invalidOrUnknownKeyCannotTriggerProviderRequests() {
         assertEquals("INVALID_INSTRUMENT_KEY",
             subject(true).inspect("NSE_EQ|INE002A01018").state());
