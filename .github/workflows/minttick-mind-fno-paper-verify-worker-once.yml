@@ -1,0 +1,70 @@
+name: MintTick Mind F&O PAPER verification worker opt-in (one-shot)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-mind-fno-paper-verify-worker-once.yml'
+permissions:
+  contents: read
+jobs:
+  opt-in-virtual-test-only:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      VERIFY_USERNAME: ${{ secrets.MINDTICK_VERIFY_USERNAME }}
+      VERIFY_PASSWORD: ${{ secrets.MINDTICK_VERIFY_PASSWORD }}
+      VERIFY_NEW_PASSWORD: ${{ secrets.MINDTICK_VERIFY_NEW_PASSWORD }}
+      VERIFY_CLIENT_ID: ${{ vars.MINDTICK_VERIFY_COGNITO_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require one-shot exact verified PAPER room worker changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          paths=set(subprocess.check_output(
+            ['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],
+            text=True).splitlines())
+          expected={
+            'scripts/mind/enable_fno_paper_verify_scheduler.py',
+            'scripts/mind/test_enable_fno_paper_verify_scheduler.py',
+            '.github/workflows/minttick-mind-fno-paper-verify-worker-once.yml',
+            '.github/workflows/mind-fno-paper-runtime-contract.yml',
+          }
+          assert paths==expected, "Must be exact reviewed virtual worker opt-in commit"
+          PY
+      - name: Offline strict no-LIVE and no-network checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mind/enable_fno_paper_verify_scheduler.py
+          python3 -m unittest discover -s scripts/mind -p 'test_enable_fno_paper_verify_scheduler.py' -v
+      - name: Obtain short-lived dedicated verification customer access token
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$VERIFY_USERNAME" && test -n "$VERIFY_PASSWORD" && test -n "$VERIFY_CLIENT_ID"
+          umask 077
+          printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
+          printf '%s' "$VERIFY_NEW_PASSWORD" > "$RUNNER_TEMP/verify_new_password"
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" \
+            "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password" \
+            "$RUNNER_TEMP/verify_paper_worker_token"
+          rm -f "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password"
+          test -s "$RUNNER_TEMP/verify_paper_worker_token"
+      - name: Enable only current user's virtual test room Mind PAPER scheduler
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          trap 'rm -f "$RUNNER_TEMP/verify_paper_worker_token"' EXIT
+          python3 scripts/mind/enable_fno_paper_verify_scheduler.py \
+            "$RUNNER_TEMP/verify_paper_worker_token"
+          echo "MIND_FNO_LIVE_MONEY_EXECUTION:NEVER"
+          echo "MIND_FNO_STRATEGY_E2E_STILL_PENDING:TRUE"
