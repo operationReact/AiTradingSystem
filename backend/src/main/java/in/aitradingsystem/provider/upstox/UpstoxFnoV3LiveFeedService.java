@@ -438,6 +438,46 @@ public class UpstoxFnoV3LiveFeedService {
             subscribed.contains(key);
     }
 
+    /**
+     * Bounded, no-key-leakage realtime NSE_FO coverage counters for Mintick
+     * Mind operational monitoring. Counts only the original current V3 socket;
+     * never promotes a successful subscription send into a fresh market tick.
+     * Spot keys, stale LTT, disconnected and closed-session observations do
+     * not count as realtime NSE derivative prices.
+     */
+    public record StreamingCounts(String socketState, int subscribedNseFno,
+            int freshExchangeLtp, int freshTwoSidedDepth,
+            int withoutFreshLtp, int withOi, int withVolume, int withGreeks,
+            Instant checkedAt, boolean liveOrderAuthorized) {}
+
+    public StreamingCounts streamingCoverage() {
+        Instant now = clock.instant();
+        String socketState = state;
+        if (!wanted || destroyed || !"CONNECTED".equals(socketState)
+                || !regularNseSession(now)) {
+            return new StreamingCounts(socketState, 0, 0, 0, 0,
+                0, 0, 0, now, false);
+        }
+        int subscribedNse = 0;
+        int freshLtp = 0, depth = 0, oi = 0, volume = 0, greeks = 0;
+        for (String key : subscribed) {
+            if (!key.startsWith("NSE_FO|")) continue;
+            subscribedNse++;
+            var quote = eligibleDisplayQuote(key);
+            if (quote.isEmpty()) continue;
+            freshLtp++;
+            var q = quote.orElseThrow();
+            if (eligiblePaperQuote(key).isPresent()) depth++;
+            if (q.openInterest() != null) oi++;
+            if (q.volume() != null) volume++;
+            if (q.iv() != null && q.delta() != null &&
+                    q.gamma() != null && q.theta() != null &&
+                    q.vega() != null) greeks++;
+        }
+        return new StreamingCounts(socketState, subscribedNse, freshLtp,
+            depth, subscribedNse - freshLtp, oi, volume, greeks, now, false);
+    }
+
     public List<DisplayQuote> eligibleDisplaySnapshot() {
         if (!wanted || destroyed || !"CONNECTED".equals(state)
                 || !regularNseSession(clock.instant())) return List.of();
