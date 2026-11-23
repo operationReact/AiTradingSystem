@@ -76,6 +76,103 @@ class UpstoxFnoAutoMarketFeedTest {
             null, null, null, null, null);
     }
 
+    private void listedOnePair(LocalDate expiry, String callKey, String putKey) {
+        when(source.currentFnoOptionContracts(UNDERLYING, expiry))
+            .thenReturn(List.of(
+                contractFor(callKey, "CE", expiry, new BigDecimal("25000")),
+                contractFor(putKey, "PE", expiry, new BigDecimal("25000"))));
+        when(source.currentFnoOptionChain(UNDERLYING, expiry))
+            .thenReturn(new UpstoxAnalyticsSource.OptionChainSnapshot(
+                "UPSTOX_ANALYTICS", MARKET, false,
+                List.of(new UpstoxAnalyticsSource.FnoOptionStrike(
+                    expiry, UNDERLYING, new BigDecimal("25000"),
+                    new BigDecimal("25025"),
+                    quote(callKey), quote(putKey)))));
+    }
+
+    private static UpstoxAnalyticsSource.FnoOptionContract contractFor(
+            String key, String side, LocalDate expiry, BigDecimal strike) {
+        return new UpstoxAnalyticsSource.FnoOptionContract(
+            UNDERLYING, key, expiry, strike, side, 65,
+            new BigDecimal("0.05"), "NIFTY " + side);
+    }
+
+    @Test
+    void boundedAutoFeedCoversThreeVerifiedListedExpiriesWithinOneSocket() {
+        eligibleSource();
+        var second = EXPIRY.plusDays(7);
+        var third = EXPIRY.plusDays(14);
+        when(catalog.listing(any(Instant.class))).thenReturn(
+            new CustomerFnoExpiryCatalog.Listing(
+                "VERIFIED", MARKET, List.of(third, EXPIRY, second)));
+        listedOnePair(second, "NSE_FO|201", "NSE_FO|202");
+        listedOnePair(third, "NSE_FO|301", "NSE_FO|302");
+
+        var auto = manager(true);
+        auto.reconcile();
+        verify(service).start(List.of(
+            "NSE_FO|101", "NSE_FO|102",
+            "NSE_FO|201", "NSE_FO|202",
+            "NSE_FO|301", "NSE_FO|302"));
+        assertThat(auto.status().expiry()).isEqualTo(EXPIRY);
+        assertThat(auto.status().autoOwned()).isTrue();
+
+        // Once running, the AUTO manager never replaces an active socket.
+        when(service.status()).thenReturn(status("CONNECTED"));
+        auto.reconcile();
+        verify(service, times(1)).start(anyList());
+        verify(service, never()).stop();
+    }
+
+    @Test
+    void subscriptionPlannerLimitsThreeExpiryBudgetTo64ExactListedKeys() {
+        var expiries = List.of(EXPIRY, EXPIRY.plusDays(7), EXPIRY.plusDays(14));
+        for (int group = 0; group < expiries.size(); group++) {
+            var date = expiries.get(group);
+            var contracts = new java.util.ArrayList<UpstoxAnalyticsSource.FnoOptionContract>();
+            var strikes = new java.util.ArrayList<UpstoxAnalyticsSource.FnoOptionStrike>();
+            for (int index = 0; index < 40; index++) {
+                var strike = BigDecimal.valueOf(25000 + 50L * index);
+                String call = "NSE_FO|" + ((group + 1) * 10000 + index * 2);
+                String put = "NSE_FO|" + ((group + 1) * 10000 + index * 2 + 1);
+                contracts.add(contractFor(call, "CE", date, strike));
+                contracts.add(contractFor(put, "PE", date, strike));
+                strikes.add(new UpstoxAnalyticsSource.FnoOptionStrike(
+                    date, UNDERLYING, strike, new BigDecimal("25500"),
+                    quote(call), quote(put)));
+            }
+            when(source.currentFnoOptionContracts(UNDERLYING, date))
+                .thenReturn(List.copyOf(contracts));
+            when(source.currentFnoOptionChain(UNDERLYING, date))
+                .thenReturn(new UpstoxAnalyticsSource.OptionChainSnapshot(
+                    "UPSTOX_ANALYTICS", MARKET, false, List.copyOf(strikes)));
+        }
+        var plan = UpstoxFnoAutoMarketFeed.planUpcomingExpiryKeys(
+            source, expiries, EXPIRY.minusDays(1));
+        assertThat(plan).hasSize(64).doesNotHaveDuplicates();
+        assertThat(plan.stream().filter(k -> k.startsWith("NSE_FO|1")).count())
+            .isEqualTo(22);
+        assertThat(plan.stream().filter(k -> k.startsWith("NSE_FO|2")).count())
+            .isEqualTo(22);
+        assertThat(plan.stream().filter(k -> k.startsWith("NSE_FO|3")).count())
+            .isEqualTo(20);
+    }
+
+    @Test
+    void unavailableLaterExpiryKeepsVerifiedNearestWithoutNewUnverifiedKeys() {
+        eligibleSource();
+        var second = EXPIRY.plusDays(7);
+        when(catalog.listing(any(Instant.class))).thenReturn(
+            new CustomerFnoExpiryCatalog.Listing(
+                "VERIFIED", MARKET, List.of(EXPIRY, second)));
+        when(source.currentFnoOptionContracts(UNDERLYING, second))
+            .thenThrow(new IllegalStateException("provider later expiry unavailable"));
+        var auto = manager(true);
+        auto.reconcile();
+        verify(service).start(List.of("NSE_FO|101", "NSE_FO|102"));
+        assertThat(auto.status().autoOwned()).isTrue();
+    }
+
     @Test
     void neverReadsBrokerOrStartsWithoutDisplayRights() {
         eligibleSource();
