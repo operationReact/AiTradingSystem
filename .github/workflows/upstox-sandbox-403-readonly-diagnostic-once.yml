@@ -1,0 +1,78 @@
+name: Upstox sandbox 403 read-only credential-format and gateway diagnostic
+
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/upstox-sandbox-403-readonly-diagnostic-once.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require exact one-shot file added
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-sandbox-403-readonly-diagnostic-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Assume SSM sandbox-only reader
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox403-${{ github.run_id }}
+      - name: Classify secret safely and inspect GET-only sandbox gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import re
+          import sys
+          import urllib.request
+          import urllib.error
+
+          sys.path.insert(0, 'scripts')
+          from upstox_fno_sandbox_ssm import load_sandbox_token
+
+          token = load_sandbox_token()
+          if re.fullmatch(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', token):
+              print('SANDBOX_SSM_VALUE_SHAPE:UUID_LIKE_API_KEY_POSSIBLE')
+          elif re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', token):
+              print('SANDBOX_SSM_VALUE_SHAPE:JWT_LIKE_BEARER')
+          else:
+              print('SANDBOX_SSM_VALUE_SHAPE:OPAQUE_BEARER')
+          token = None
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+          req = urllib.request.Request(
+              'https://api-sandbox.upstox.com/v3/order/place',
+              method='GET', headers={'Accept': 'application/json'})
+          try:
+              with opener.open(req, timeout=8) as response:
+                  code, headers = response.status, response.headers
+          except urllib.error.HTTPError as error:
+              code, headers = error.code, error.headers
+          except (OSError, urllib.error.URLError, TimeoutError) as error:
+              print('SANDBOX_READONLY_GET:TRANSPORT_' + type(error).__name__)
+              raise SystemExit(0)
+          print('SANDBOX_READONLY_GET_HTTP:' + str(code))
+          print('SANDBOX_READONLY_GET_CONTENT_TYPE:' + (
+              'JSON' if 'json' in headers.get('Content-Type','').lower() else 'OTHER'))
+          print('SANDBOX_READONLY_GET_GATEWAY:' + (
+              'CLOUDFLARE' if 'cloudflare' in headers.get('Server','').lower() else 'OTHER'))
+          print('SANDBOX_ORDER_REQUESTS:ZERO')
+          PY
