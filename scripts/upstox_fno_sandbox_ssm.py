@@ -44,7 +44,7 @@ def load_sandbox_token() -> str:
         response = subprocess.run(
             command, capture_output=True, text=True, timeout=20, check=False
         )
-    except (OSError, subprocess.TimeoutExpired) from None:
+    except (OSError, subprocess.TimeoutExpired):
         raise SandboxBootstrapError("SANDBOX_SSM_UNAVAILABLE") from None
     if response.returncode != 0:
         # Never print AWS stderr; AWS errors may contain unexpected strings.
