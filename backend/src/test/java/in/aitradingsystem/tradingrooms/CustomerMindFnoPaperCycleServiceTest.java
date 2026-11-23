@@ -93,6 +93,29 @@ class CustomerMindFnoPaperCycleServiceTest {
     }
 
     @Test
+    void nullResearchResponseFailsClosedWithoutAnyPaperOrder() {
+        when(capability.internalCapability(owner,room)).thenReturn(
+            new CustomerPaperFnoCapabilityController.Capability(
+                "SOURCE_CHECK_REQUIRED",true,true,false,List.of()));
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.status()).isEqualTo("BLOCKED");
+        assertThat(result.reasonCode()).isEqualTo("FNO_RESEARCH_RESPONSE_MISSING");
+        assertThat(result.liveMoney()).isFalse();
+        verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+    }
+
+    @Test
+    void quoteOlderThanFifteenSecondsByOneMillisecondIsRejected() {
+        var candidate=validWorkerCandidate("strategy.STR-181");
+        when(candidate.exchangeAt()).thenReturn(NOW.minusSeconds(15).minusMillis(1));
+        when(candidate.observedAt()).thenReturn(NOW.minusSeconds(15));
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.reasonCode()).isEqualTo("FNO_RESEARCH_QUOTE_STALE");
+        assertThat(result.action()).isEqualTo("NONE");
+        verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+    }
+
+    @Test
     void quoteObservationBeforeExchangeTimeIsRejectedEvenIfOtherwiseFresh() {
         var candidate=validWorkerCandidate("strategy.STR-181");
         when(candidate.exchangeAt()).thenReturn(NOW.minusSeconds(1));
