@@ -205,10 +205,10 @@ class UpstoxFnoV3LiveFeedServiceTest {
             for (int i = 4; i < 8; i++) {
                 String command = new String(frames.get(i).array(),
                     java.nio.charset.StandardCharsets.UTF_8);
-                assertThat(command).contains("\\"method\\":\\"sub\\"",
-                    "\\"mode\\":\\"full\\"");
+                assertThat(command).contains("\"method\":\"sub\"",
+                    "\"mode\":\"full\"");
                 var contractKeys = java.util.regex.Pattern
-                    .compile("NSE_FO\\\\|[0-9]+")
+                    .compile("NSE_FO\\|[0-9]+")
                     .matcher(command);
                 int batch = 0;
                 while (contractKeys.find()) {
