@@ -20,6 +20,7 @@ class MindDecisionRecord {
     required this.dataCutoffAt,
     required this.candidateFingerprint,
     required this.reasons,
+    this.news,
   });
 
   final String scanRunId;
@@ -34,6 +35,10 @@ class MindDecisionRecord {
   final DateTime dataCutoffAt;
   final String candidateFingerprint;
   final List<String> reasons;
+
+  /// Advisory as-of news context recorded at scan time. Null means it was not recorded for
+  /// this candidate, which is never shown as "no news".
+  final MindNewsContext? news;
 
   static MindDecisionRecord decode(Object? value) {
     if (value is! Map<String, dynamic>) throw const FormatException('Invalid decision record');
@@ -73,6 +78,7 @@ class MindDecisionRecord {
       dataCutoffAt: cutoff,
       candidateFingerprint: fingerprint,
       reasons: List.unmodifiable(reasons.cast<String>()),
+      news: MindNewsContext.decode(value['news']),
     );
   }
 
@@ -80,6 +86,169 @@ class MindDecisionRecord {
     final parsed = value is String ? DateTime.tryParse(value) : null;
     if (parsed == null) throw const FormatException('Invalid decision timestamp');
     return parsed.toUtc();
+  }
+}
+
+/// Coarse status of one as-of news context. `untrustworthy` means the payload failed strict
+/// validation: it is shown as rejected, never as evidence.
+enum MindNewsStatus {
+  includedEvidence,
+  noIncludedEvidence,
+  noCoverage,
+  unavailable,
+  untrustworthy,
+}
+
+class MindNewsEvidence {
+  const MindNewsEvidence({
+    required this.source,
+    required this.title,
+    required this.url,
+    required this.publishedAt,
+    required this.analysisAvailableAt,
+    required this.validUntil,
+    required this.horizon,
+    required this.status,
+    required this.included,
+    this.sentiment,
+    this.directionScore,
+    this.confidence,
+  });
+
+  final String source;
+  final String title;
+  final String url;
+  final DateTime publishedAt;
+  final DateTime analysisAvailableAt;
+  final DateTime validUntil;
+  final String horizon;
+  final String status;
+  final bool included;
+  final String? sentiment;
+  final double? directionScore;
+  final double? confidence;
+}
+
+class MindNewsContext {
+  const MindNewsContext({
+    required this.status,
+    required this.asOf,
+    required this.netDirection,
+    required this.direction,
+    required this.uncertainty,
+    required this.includedCount,
+    required this.excludedCount,
+    required this.evidence,
+  });
+
+  static const contract = 'news.context.v1';
+  static const _directions = {'POSITIVE', 'NEGATIVE', 'NEUTRAL', 'UNKNOWN'};
+  static const _uncertainties = {'LOW', 'MEDIUM', 'HIGH', 'UNKNOWN'};
+  static const _statuses = {
+    'INCLUDED_EVIDENCE': MindNewsStatus.includedEvidence,
+    'NO_INCLUDED_EVIDENCE': MindNewsStatus.noIncludedEvidence,
+    'NO_COVERAGE': MindNewsStatus.noCoverage,
+    'UNAVAILABLE': MindNewsStatus.unavailable,
+  };
+
+  final MindNewsStatus status;
+  final DateTime? asOf;
+  /// Confidence- and materiality-weighted evidence direction in [-1, 1]; null without evidence.
+  final double? netDirection;
+  final String direction;
+  final String uncertainty;
+  final int includedCount;
+  final int excludedCount;
+  final List<MindNewsEvidence> evidence;
+
+  /// Null when the field is absent (not recorded). Malformed input is `untrustworthy`.
+  static MindNewsContext? decode(Object? value) {
+    if (value == null) return null;
+    try {
+      return _strict(value);
+    } catch (_) {
+      return const MindNewsContext(
+        status: MindNewsStatus.untrustworthy,
+        asOf: null,
+        netDirection: null,
+        direction: 'UNKNOWN',
+        uncertainty: 'UNKNOWN',
+        includedCount: 0,
+        excludedCount: 0,
+        evidence: [],
+      );
+    }
+  }
+
+  static MindNewsContext _strict(Object value) {
+    if (value is! Map<String, dynamic> || value['contract'] != contract) {
+      throw const FormatException('Unknown news contract');
+    }
+    final status = _statuses[value['status']];
+    final direction = value['direction'];
+    final uncertainty = value['uncertainty'];
+    final net = value['netDirection'];
+    final included = value['includedCount'];
+    final excluded = value['excludedCount'];
+    final rows = value['evidence'];
+    final asOf = DateTime.tryParse(value['asOf']?.toString() ?? '');
+    if (status == null || asOf == null || direction is! String || !_directions.contains(direction) ||
+        uncertainty is! String || !_uncertainties.contains(uncertainty) ||
+        included is! int || excluded is! int || included < 0 || excluded < 0 ||
+        rows is! List || (net != null && net is! num) ||
+        (net is num && (net < -1 || net > 1))) {
+      throw const FormatException('Untrustworthy news context');
+    }
+    // Unknown must never become directional: direction is UNKNOWN exactly when no net exists.
+    final hasNet = net is num;
+    if (hasNet == (direction == 'UNKNOWN')) throw const FormatException('Direction contradicts evidence');
+    if (status == MindNewsStatus.includedEvidence && (!hasNet || included == 0)) {
+      throw const FormatException('Included status without included evidence');
+    }
+    return MindNewsContext(
+      status: status,
+      asOf: asOf.toUtc(),
+      netDirection: hasNet ? net.toDouble() : null,
+      direction: direction,
+      uncertainty: uncertainty,
+      includedCount: included,
+      excludedCount: excluded,
+      evidence: List.unmodifiable(rows.map(_evidence)),
+    );
+  }
+
+  static MindNewsEvidence _evidence(Object? value) {
+    if (value is! Map<String, dynamic>) throw const FormatException('Invalid news evidence');
+    final source = value['source'];
+    final title = value['title'];
+    final url = value['url'];
+    final horizon = value['horizon'];
+    final status = value['status'];
+    final included = value['included'];
+    final published = DateTime.tryParse(value['publishedAt']?.toString() ?? '');
+    final available = DateTime.tryParse(value['analysisAvailableAt']?.toString() ?? '');
+    final validUntil = DateTime.tryParse(value['validUntil']?.toString() ?? '');
+    final score = value['directionScore'];
+    final confidence = value['confidence'];
+    if (source is! String || title is! String || url is! String || horizon is! String ||
+        status is! String || included is! bool || published == null || available == null ||
+        validUntil == null || (score != null && score is! num) || (confidence != null && confidence is! num)) {
+      throw const FormatException('Invalid news evidence');
+    }
+    return MindNewsEvidence(
+      source: source,
+      title: title,
+      url: url,
+      publishedAt: published.toUtc(),
+      analysisAvailableAt: available.toUtc(),
+      validUntil: validUntil.toUtc(),
+      horizon: horizon,
+      status: status,
+      included: included,
+      sentiment: value['sentiment'] is String ? value['sentiment'] as String : null,
+      directionScore: score is num ? score.toDouble() : null,
+      confidence: confidence is num ? confidence.toDouble() : null,
+    );
   }
 }
 

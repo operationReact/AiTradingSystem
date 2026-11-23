@@ -14,6 +14,62 @@ class MindDecisionHistoryPanel extends StatefulWidget {
   State<MindDecisionHistoryPanel> createState() => _MindDecisionHistoryPanelState();
 }
 
+/// Compact, advisory news impact for one candidate. Evidence direction is not a trade
+/// recommendation and never changes the candidate's posture. Every state is explicit: absent
+/// context is "not recorded", never "no news".
+class _NewsImpact extends StatelessWidget {
+  const _NewsImpact({required this.news, super.key});
+
+  final MindNewsContext? news;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = Theme.of(context).textTheme;
+    final n = news;
+    if (n == null) {
+      return Text(
+        'News impact: not recorded for this candidate. This is not the same as no news.',
+        style: type.labelSmall);
+    }
+    switch (n.status) {
+      case MindNewsStatus.untrustworthy:
+        return Text('News impact: stored news context failed validation and is not used.',
+          style: type.labelSmall);
+      case MindNewsStatus.unavailable:
+        return Text('News impact: lookup was unavailable at scan time. Nothing is inferred.',
+          style: type.labelSmall);
+      case MindNewsStatus.includedEvidence:
+      case MindNewsStatus.noIncludedEvidence:
+      case MindNewsStatus.noCoverage:
+        break;
+    }
+    final direction = n.netDirection == null
+        ? 'unknown (no included evidence)'
+        : '${n.direction.toLowerCase()} (net ${n.netDirection!.toStringAsFixed(2)})';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('NEWS IMPACT · ADVISORY · NOT A TRADE SIGNAL', style: type.labelSmall),
+        Text(
+          'Evidence direction: $direction · uncertainty ${n.uncertainty.toLowerCase()} · '
+          'included ${n.includedCount} · excluded ${n.excludedCount} · '
+          'as of ${n.asOf?.toIso8601String() ?? '—'}',
+          style: type.bodySmall),
+        if (n.status == MindNewsStatus.noCoverage)
+          Text('No analyzed article mentioned this instrument as of the signal.',
+            style: type.bodySmall),
+        for (final e in n.evidence.take(3))
+          Text(
+            '${e.source}: ${e.title} · published ${e.publishedAt.toIso8601String()} · '
+            'analyzed ${e.analysisAvailableAt.toIso8601String()} · '
+            'valid until ${e.validUntil.toIso8601String()} · '
+            '${e.included ? 'included' : 'excluded (${e.status.toLowerCase()})'}',
+            style: type.labelSmall),
+      ],
+    );
+  }
+}
+
 class _MindDecisionHistoryPanelState extends State<MindDecisionHistoryPanel> {
   late Future<MindDecisionHistory> _request;
   String _query = '';
@@ -84,6 +140,9 @@ class _MindDecisionHistoryPanelState extends State<MindDecisionHistoryPanel> {
                       Text(
                         'Reasons: ${d.reasons.isEmpty ? 'none recorded' : d.reasons.join(', ')}',
                         style: type.bodySmall),
+                      _NewsImpact(
+                        key: ValueKey('mind-news-impact-${d.candidateFingerprint}'),
+                        news: d.news),
                       Text(
                         'Fingerprint ${d.candidateFingerprint.length > 12 ? d.candidateFingerprint.substring(0, 12) : d.candidateFingerprint}…'
                         '${d.catalogueVersion == null ? '' : ' · catalogue ${d.catalogueVersion}'}',
