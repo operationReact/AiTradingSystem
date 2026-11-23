@@ -1,0 +1,91 @@
+name: MintTick F&O virtual PAPER-only host activation (one-shot)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-virtual-paper-host-enable-once.yml'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+jobs:
+  enable-virtual-paper-only:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    env:
+      VERIFY_USERNAME: ${{ secrets.MINDTICK_VERIFY_USERNAME }}
+      VERIFY_PASSWORD: ${{ secrets.MINDTICK_VERIFY_PASSWORD }}
+      VERIFY_NEW_PASSWORD: ${{ secrets.MINDTICK_VERIFY_NEW_PASSWORD }}
+      VERIFY_CLIENT_ID: ${{ vars.MINDTICK_VERIFY_COGNITO_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require reviewed exact one-shot PAPER-only change
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          paths=set(subprocess.check_output(
+              ['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],
+              text=True).splitlines())
+          expected={
+            'infra/ec2-paper/fno_virtual_paper_enable.py',
+            'scripts/tests/test_fno_virtual_paper_enable.py',
+            '.github/workflows/minttick-fno-virtual-paper-host-enable-once.yml',
+          }
+          assert paths==expected, "PAPER activation must be exact reviewed one-shot commit"
+          script=Path('infra/ec2-paper/fno_virtual_paper_enable.py').read_text()
+          assert 'LIVE_ORDER_FLAG_UNCHANGED_DISABLED' in script
+          assert 'SCHEDULER_OPT_IN_UNCHANGED' in script
+          assert 'ROLLBACK_HEALTH_UNVERIFIED' in script
+          PY
+      - name: Test fail-closed virtual PAPER host activation without AWS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_virtual_paper_enable.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_virtual_paper_enable.py' -v
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: fno-virtual-paper-only-${{ github.run_id }}
+          role-duration-seconds: 900
+      - name: Activate precisely two virtual F&O PAPER flags on verified private EC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_virtual_paper_enable.py runner
+          echo "FNO_VIRTUAL_PAPER_REAL_MONEY_ORDERS:ZERO"
+          echo "FNO_VIRTUAL_PAPER_SCHEDULER_OPT_IN:UNCHANGED"
+      - name: Obtain short-lived dedicated verification customer access token
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$VERIFY_USERNAME" && test -n "$VERIFY_PASSWORD" && test -n "$VERIFY_CLIENT_ID"
+          umask 077
+          printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
+          printf '%s' "$VERIFY_NEW_PASSWORD" > "$RUNNER_TEMP/verify_new_password"
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" \
+            "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password" \
+            "$RUNNER_TEMP/verify_paper_token"
+          rm -f "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password"
+          test -s "$RUNNER_TEMP/verify_paper_token"
+      - name: Confirm activated PAPER capability and one afterhours virtual NO-ORDER cycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          trap 'rm -f "$RUNNER_TEMP/verify_paper_token"' EXIT
+          python3 scripts/mind/bootstrap_fno_paper_verify_room.py \
+            "$RUNNER_TEMP/verify_paper_token" --closed-market-paper-cycle
+          echo "FNO_VIRTUAL_PAPER_OWNER_LIVE_ORDERS:ZERO"
+          echo "FNO_VIRTUAL_PAPER_43_STRATEGY_E2E:NOT_YET_VERIFIED"
