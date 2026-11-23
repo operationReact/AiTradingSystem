@@ -8,7 +8,6 @@ import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
 import 'minttick_interactive_candle_chart.dart';
-import 'minttick_stock_detail_mock_sections.dart';
 
 const _quotePoll = Duration(seconds: 2);
 const _verifiedCandlePoll = Duration(seconds: 30);
@@ -59,6 +58,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   bool _quoteBusy = false;
   Timer? _quoteTimer;
 
+  CustomerCompanyProfile? _company;
   CustomerDayDetail? _detail;
   bool _detailFailed = false;
   bool _detailLoading = false;
@@ -71,6 +71,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   bool get _hasCandleRepo => widget.repository is CustomerCandleRepository;
   bool get _hasSnapshotRepo => widget.repository is CustomerSnapshotMarketRepository;
   bool get _hasDetailRepo => widget.repository is CustomerDetailRepository;
+  bool get _hasCompanyRepo => widget.repository is CustomerCompanyProfileRepository;
   bool get _hasWatchRepo => widget.repository is CustomerWatchlistRepository;
 
   @override
@@ -78,6 +79,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     super.initState();
     _loadCandles();
     if (_hasDetailRepo) _loadDetail();
+    if (_hasCompanyRepo) _loadCompany();
     if (_hasWatchRepo) _loadWatchlist();
     if (_hasSnapshotRepo) {
       _pollQuote();
@@ -183,6 +185,24 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     }
   }
 
+  Future<void> _loadCompany() async {
+    final CustomerCompanyProfileRepository? repo =
+        widget.repository is CustomerCompanyProfileRepository
+            ? widget.repository as CustomerCompanyProfileRepository : null;
+    if (repo == null) return;
+    try {
+      final profile = await repo.companyProfile(widget.stock.id);
+      if (!mounted || profile.tradingSymbol != widget.stock.tradingSymbol ||
+          profile.exchange != widget.stock.exchange) {
+        return;
+      }
+      setState(() => _company = profile);
+    } catch (_) {
+      // Keep trustworthy catalogue identity visible while classified sources
+      // or a newer read-only company endpoint are unavailable.
+    }
+  }
+
   Future<void> _loadDetail() async {
     final CustomerDetailRepository? repo = widget.repository is CustomerDetailRepository
         ? widget.repository as CustomerDetailRepository
@@ -285,7 +305,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           Row(children: [
-            MintTickEquityAvatar(tradingSymbol: stock.tradingSymbol, companyName: stock.name, size: 52),
+            MintTickEquityAvatar(tradingSymbol: stock.tradingSymbol, companyName: stock.name, size: 44),
             const SizedBox(width: 12),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,7 +355,9 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           ],
           const SizedBox(height: 12),
           _chartBlock(theme),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          _companyBlock(theme),
+          const SizedBox(height: 12),
           _statsBlock(theme),
           const SizedBox(height: 16),
           _depthBlock(theme),
@@ -349,12 +371,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               key: const ValueKey('stock-detail-watchlist-error'),
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.error)),
           ],
-          const SizedBox(height: 16),
-          MintTickStockDetailMockSections(symbol: stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')),
-          const SizedBox(height: 16),
-          Text('Prices are shown only when verified LIVE by MintTick’s backend. Chart bars are '
-              'stored historical candles, not live ticks. Information only, not investment advice.',
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+
         ],
       )),
     );
@@ -469,6 +486,89 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     );
   }
 
+  Widget _companyBlock(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final stock = widget.stock;
+    final company = _company;
+    final facts = <(String, String)>[
+      if (company?.industry != null) ('Industry', company!.industry!),
+      if (company?.sizeSegment != null)
+        ('Index size', company!.sizeSegment!),
+      ('Symbol', stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')),
+      if (stock.exchange.trim().isNotEmpty) ('Exchange', stock.exchange),
+      if (stock.exchangeSegment.trim().isNotEmpty) ('Segment', stock.exchangeSegment),
+      if (stock.instrumentType.trim().isNotEmpty)
+        ('Security', stock.instrumentType == 'EQ' ? 'Equity' : stock.instrumentType),
+      if (stock.lotSize > 0) ('Lot size', '${stock.lotSize}'),
+      if (stock.tickSize != null && stock.tickSize! > 0)
+        ('Tick size', '₹${stock.tickSize}'),
+    ];
+    return MintTickSurface(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Company information', key: const ValueKey('stock-detail-company-info'),
+          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        if (stock.name.trim().isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(stock.name, style: theme.textTheme.bodyMedium
+              ?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+        const SizedBox(height: 12),
+        LayoutBuilder(builder: (context, constraints) => Wrap(
+          spacing: 12, runSpacing: 12,
+          children: [
+            for (final (label, value) in facts)
+              SizedBox(width: (constraints.maxWidth - 12) / 2,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 2),
+                    Text(value, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+          ],
+        )),
+        if (company != null && company.indexMemberships.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: Wrap(spacing: 6, runSpacing: 4, children: [
+              for (final membership in company.indexMemberships)
+                Chip(
+                  key: ValueKey('company-index-${membership.indexCode}'),
+                  label: Text(membership.indexCode),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ])),
+            IconButton(
+              key: const ValueKey('company-source-details'),
+              tooltip: 'Company classification sources',
+              icon: const Icon(Icons.info_outline, size: 18),
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                builder: (sheetContext) => SafeArea(child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: ListView(shrinkWrap: true, children: [
+                    Text('Official index membership',
+                      style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 10),
+                    for (final membership in company.indexMemberships)
+                      ListTile(dense: true,
+                        title: Text(membership.indexCode),
+                        subtitle: Text(
+                          '${membership.source} · ${_istDate(membership.sourceAsOf)}')),
+                  ]),
+                )),
+              ),
+            ),
+          ]),
+        ],
+      ],
+    ));
+  }
+
   Widget _chartBlock(ThemeData theme) {
     final scheme = theme.colorScheme;
     final candles = _candles;
@@ -516,111 +616,118 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
                 : const Duration(hours: 3));
     final chartBehindTrade = last != null && tradeAt != null &&
         (_timeframe == 2 ? !alignedTrade : intervalLag);
-
     final selected = candles != null && candles.isNotEmpty
         ? candles[math.max(0, math.min(candles.length - 1, _selectedCandle ?? candles.length - 1))]
         : null;
+
     return MintTickSurface(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: 320, child: Semantics(
+        SizedBox(height: 300, child: Semantics(
           label: candles == null || candles.isEmpty
               ? 'Stored candle chart: no data for this range'
               : 'Stored candle chart with ${candles.length} bars',
           child: body,
         )),
-        if (_timeframe == 2 && _dailyRange >= 4) ...[
-          const SizedBox(height: 6),
-          Text('Monthly OHLCV aggregated from verified stored daily candles. '
-              'Missing historical sessions remain unfilled.',
-              key: const ValueKey('stock-detail-monthly-disclaimer'),
-              style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-        ],
         if (selected != null) ...[
           const SizedBox(height: 8),
-          Text(
-            '${_istDate(selected.candleTime)}   O ₹${selected.open.toStringAsFixed(2)}  '
-            'H ₹${selected.high.toStringAsFixed(2)}  '
-            'L ₹${selected.low.toStringAsFixed(2)}  '
-            'C ₹${selected.close.toStringAsFixed(2)}',
-            key: const ValueKey('stock-detail-chart-ohlc'),
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurface),
-          ),
-          Text('Volume ${selected.volume} · Tap a candle to inspect',
-              key: const ValueKey('stock-detail-chart-volume'),
-              style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          Text(_istDate(selected.candleTime),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 5),
+          Wrap(key: const ValueKey('stock-detail-chart-ohlc'),
+            spacing: 14, runSpacing: 6, children: [
+              _ohlcValue(theme, 'O', selected.open),
+              _ohlcValue(theme, 'H', selected.high),
+              _ohlcValue(theme, 'L', selected.low),
+              _ohlcValue(theme, 'C', selected.close),
+            ]),
+          const SizedBox(height: 4),
+          Text('Vol ${_compactQuantity(selected.volume)}',
+            key: const ValueKey('stock-detail-chart-volume'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
         ],
-        if (last != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Last stored bar · ${_istDate(last.candleTime)} '
-            '${_clock(last.candleTime.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
-            key: const ValueKey('stock-chart-last-bar-time'),
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          if (tradeAt != null) Text(
-            'Latest exchange trade · ${_istDate(tradeAt)} '
-            '${_clock(tradeAt.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
-            key: const ValueKey('stock-chart-last-trade-time'),
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          if (chartBehindTrade) Text(
-            'Historical chart is behind the latest exchange trade. '
-            'No missing candles have been invented.',
-            key: const ValueKey('stock-chart-coverage-warning'),
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
-          ),
-          if (_candlePageTruncated) Text(
-            'History window is truncated by the source page limit.',
-            key: const ValueKey('stock-chart-truncated-warning'),
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
-          ),
-          if (_candleRefreshFailed) Text(
-            'Candle refresh failed · displaying previously verified history',
-            key: const ValueKey('stock-chart-refresh-warning'),
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
-          ),
-        ],
-        const SizedBox(height: 8),
         Row(children: [
           Expanded(child: Text(
-            last == null
-                ? 'No verified history for this selection'
-                : 'Historical · ${candles!.length} bars · fetched ${_clock(last.fetchedAt.toLocal())}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            last == null ? 'No verified history' : 'Historical · ${candles!.length} bars',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
           )),
-          if (last != null) IconButton(
+          if (chartBehindTrade || _candlePageTruncated || _candleRefreshFailed)
+            Tooltip(
+              message: 'Historical data needs attention. Open chart details.',
+              child: Icon(Icons.warning_amber_rounded, size: 18, color: scheme.error),
+            ),
+          IconButton(
             key: const ValueKey('stock-chart-provenance'),
-            tooltip: 'Historical data provenance',
+            tooltip: 'Chart data details',
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.info_outline, size: 18),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              builder: (sheetContext) => SafeArea(
+            onPressed: last == null ? null : () => showModalBottomSheet<void>(
+              context: context, isScrollControlled: true,
+              builder: (sheetContext) => SafeArea(child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.68,
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Historical candle provenance',
-                          style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 12),
-                      SelectableText('Source: ${last.source}'),
-                      SelectableText('Fetched: ${last.fetchedAt.toLocal()}'),
-                      const SizedBox(height: 8),
-                      const Text('Stored OHLCV is not a live exchange feed. '
-                          'Missing sessions are not filled or interpolated.'),
-                    ],
-                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: ListView(children: [
+                    Text('Chart data details', style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 14),
+                    Text('Historical · ${candles!.length} bars'),
+                    const SizedBox(height: 8),
+                    if (_timeframe == 2 && _dailyRange >= 4)
+                      Text('Monthly OHLCV aggregated from verified stored daily candles. '
+                          'Missing historical sessions remain unfilled.',
+                        key: const ValueKey('stock-detail-monthly-disclaimer')),
+                    Text('Last stored bar · ${_istDate(last.candleTime)} '
+                        '${_clock(last.candleTime.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
+                      key: const ValueKey('stock-chart-last-bar-time')),
+                    if (tradeAt != null) Text('Latest exchange trade · ${_istDate(tradeAt)} '
+                        '${_clock(tradeAt.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
+                      key: const ValueKey('stock-chart-last-trade-time')),
+                    if (chartBehindTrade) Text(
+                      'Historical chart is behind the latest exchange trade. '
+                      'No missing candles have been invented.',
+                      key: const ValueKey('stock-chart-coverage-warning'),
+                      style: TextStyle(color: scheme.error)),
+                    if (_candlePageTruncated) Text(
+                      'History window is truncated by the source page limit.',
+                      key: const ValueKey('stock-chart-truncated-warning'),
+                      style: TextStyle(color: scheme.error)),
+                    if (_candleRefreshFailed) Text(
+                      'Candle refresh failed · displaying previously verified history',
+                      key: const ValueKey('stock-chart-refresh-warning'),
+                      style: TextStyle(color: scheme.error)),
+                    const SizedBox(height: 12),
+                    SelectableText('Source: ${last.source}'),
+                    SelectableText('Fetched: ${last.fetchedAt.toLocal()}'),
+                    const SizedBox(height: 8),
+                    const Text('Stored candles are historical records, not live ticks. '
+                        'Missing sessions are never filled or interpolated.'),
+                  ]),
                 ),
-              ),
+              )),
             ),
           ),
         ]),
       ],
     ));
+  }
+
+  Widget _ohlcValue(ThemeData theme, String label, num value) {
+    final scheme = theme.colorScheme;
+    return RichText(text: TextSpan(children: [
+      TextSpan(text: '$label ', style: theme.textTheme.labelSmall
+          ?.copyWith(color: scheme.onSurfaceVariant)),
+      TextSpan(text: '₹${value.toStringAsFixed(2)}', style: theme.textTheme.labelSmall
+          ?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w700)),
+    ]));
+  }
+
+  String _compactQuantity(int count) {
+    if (count >= 10000000) return '${(count / 10000000).toStringAsFixed(2)}Cr';
+    if (count >= 100000) return '${(count / 100000).toStringAsFixed(2)}L';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return '$count';
   }
 
   Widget _statsBlock(ThemeData theme) {
@@ -646,14 +753,13 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     } else if (detail == null) {
       status = 'Loading day statistics…';
     } else {
-      status = 'Source ${detail.source} · fetched ${_clock(detail.fetchedAt.toLocal())} · '
-          'provider day values, not live ticks.';
+      status = '';
     }
     return MintTickSurface(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          Expanded(child: Text('Day statistics', style: theme.textTheme.titleSmall
+          Expanded(child: Text('Key statistics', style: theme.textTheme.titleSmall
               ?.copyWith(fontWeight: FontWeight.w800))),
           if (_hasDetailRepo) TextButton(
             key: const ValueKey('stock-detail-day-refresh'),
@@ -664,7 +770,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         const SizedBox(height: 10),
         Wrap(spacing: 12, runSpacing: 12, children: [
           for (final (label, text) in tiles)
-            SizedBox(width: 150, child: Column(
+            SizedBox(width: 142, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: theme.textTheme.labelSmall
@@ -674,11 +780,10 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               ],
             )),
         ]),
-        const SizedBox(height: 12),
-        Text(status, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 4),
-        Text('A dash means the provider did not send that value for this stock.',
-          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        if (status.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(status, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
       ],
     ));
   }

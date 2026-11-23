@@ -347,6 +347,79 @@ abstract interface class CustomerDetailRepository {
   Future<CustomerDayDetail> dayDetail(int instrumentId);
 }
 
+/// Verified index membership from a dated official NSE constituent file.
+class CustomerCompanyMembership {
+  const CustomerCompanyMembership({required this.indexCode,
+    required this.source, required this.sourceAsOf});
+  final String indexCode;
+  final String source;
+  final DateTime sourceAsOf;
+
+  factory CustomerCompanyMembership.fromJson(Map<String, dynamic> json) {
+    final code = json['indexCode'];
+    final source = json['source'];
+    final date = DateTime.tryParse('${json['sourceAsOf'] ?? ''}');
+    if (code is! String || code.isEmpty || source is! String ||
+        source.isEmpty || date == null) {
+      throw const FormatException('Invalid verified company membership');
+    }
+    return CustomerCompanyMembership(indexCode: code,
+      source: source, sourceAsOf: date);
+  }
+}
+
+/// No ratios, market capitalization or company financials are synthesized by this contract.
+class CustomerCompanyProfile {
+  const CustomerCompanyProfile({required this.instrumentId, required this.tradingSymbol,
+    required this.companyName, required this.exchange, required this.securityType,
+    required this.indexMemberships, this.industry, this.sizeSegment});
+  final int instrumentId;
+  final String tradingSymbol;
+  final String companyName;
+  final String exchange;
+  final String securityType;
+  final String? industry;
+  final String? sizeSegment;
+  final List<CustomerCompanyMembership> indexMemberships;
+
+  factory CustomerCompanyProfile.fromJson(Map<String, dynamic> value) {
+    final id = value['instrumentId'];
+    final code = value['tradingSymbol'];
+    final exchange = value['exchange'];
+    final name = value['companyName'];
+    final type = value['securityType'];
+    final memberships = value['indexMemberships'];
+    final industry = value['industry'];
+    final segment = value['sizeSegment'];
+    if (value['contractVersion'] != 'customer.market.company-profile.v1' ||
+        id is! num || id < 1 || id != id.toInt() ||
+        code is! String || code.isEmpty ||
+        exchange is! String || !const {'NSE', 'BSE'}.contains(exchange) ||
+        name is! String || type is! String ||
+        (industry != null && industry is! String) ||
+        (segment != null && !const {'LARGE','MID','SMALL','MICRO'}.contains(segment)) ||
+        memberships is! List) {
+      throw const FormatException('Invalid company profile response');
+    }
+    return CustomerCompanyProfile(instrumentId: id.toInt(),
+      tradingSymbol: code, companyName: name, exchange: exchange,
+      securityType: type,
+      industry: industry is String && industry.trim().isNotEmpty ? industry : null,
+      sizeSegment: segment as String?,
+      indexMemberships: [
+        for (final membership in memberships)
+          if (membership is Map<String, dynamic>)
+            CustomerCompanyMembership.fromJson(membership)
+          else
+            throw const FormatException('Invalid company membership row'),
+      ]);
+  }
+}
+
+abstract interface class CustomerCompanyProfileRepository {
+  Future<CustomerCompanyProfile> companyProfile(int instrumentId);
+}
+
 /// Owner-scoped watchlist. Membership is read from the backend, never cached locally.
 class CustomerWatchlistItem {
   const CustomerWatchlistItem({required this.instrumentId, required this.exchange,
@@ -1172,7 +1245,8 @@ abstract interface class CustomerPaginatedMarketRepository {
 class HttpCustomerMarketRepository implements CustomerMarketRepository,
     CustomerLiveMarketRepository, CustomerSnapshotMarketRepository,
     CustomerPaginatedMarketRepository, CustomerCandleRepository,
-    CustomerDetailRepository, CustomerWatchlistRepository, CustomerOverviewRepository,
+    CustomerDetailRepository, CustomerCompanyProfileRepository,
+    CustomerWatchlistRepository, CustomerOverviewRepository,
     CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository,
     CustomerMarketBoardRepository {
   HttpCustomerMarketRepository(this.api);
@@ -1357,6 +1431,22 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
       }
     }
     return page;
+  }
+
+  @override
+  Future<CustomerCompanyProfile> companyProfile(int instrumentId) async {
+    if (instrumentId < 1) throw ArgumentError.value(instrumentId);
+    final data = await api.getJson('$_root/company-profile', query: {
+      'instrumentId': '$instrumentId',
+    }, timeout: const Duration(seconds: 8));
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid company profile response');
+    }
+    final profile = CustomerCompanyProfile.fromJson(data);
+    if (profile.instrumentId != instrumentId) {
+      throw const FormatException('Company profile instrument identity mismatch');
+    }
+    return profile;
   }
 
   @override

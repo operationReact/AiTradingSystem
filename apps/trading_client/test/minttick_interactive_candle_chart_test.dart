@@ -100,7 +100,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('stock-chart-sma20')));
     await tester.pumpAndSettle();
     expect(find.text('Volume'), findsOneWidget);
-    expect(find.text('SMA20 bars ✓'), findsOneWidget);
+    expect(find.text('MA20 ✓'), findsOneWidget);
     expect(bars, hasLength(120));
 
     await tester.tap(find.byKey(const ValueKey('stock-chart-fullscreen')));
