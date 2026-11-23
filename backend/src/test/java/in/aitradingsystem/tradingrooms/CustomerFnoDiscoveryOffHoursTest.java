@@ -141,6 +141,48 @@ class CustomerFnoDiscoveryOffHoursTest {
     }
 
     @Test
+    void retainedSnapshotDatabaseFailureStillAllowsSeparatelyAuthorizedRestLastTrade() {
+        var expiry = mockListedMetadata();
+        var tradeAt = Instant.now().minusSeconds(3600);
+        when(source.listedFnoLastTrades(anyList())).thenReturn(Map.of(
+            CE, new UpstoxAnalyticsSource.ListedLastTrade(
+                CE, new BigDecimal("110.25"), new BigDecimal("100"),
+                2500L, tradeAt, tradeAt.plusSeconds(2))));
+        var brokenStore = mock(CustomerFnoLastTradeSnapshotStore.class);
+        when(brokenStore.latestAll(anyList()))
+            .thenThrow(new IllegalStateException("read-only snapshot unavailable"));
+        var subject = controller(true);
+        subject.setLastTrades(brokenStore);
+
+        var result = subject.internalMarket(expiry);
+        var call = result.strikes().getFirst().call();
+        assertThat(call.ltp()).isEqualByComparingTo("110.25");
+        assertThat(call.openInterest()).isEqualTo(2500L);
+        assertThat(call.quoteFresh()).isFalse();
+        assertThat(call.paperEligible()).isFalse();
+        assertThat(call.bid()).isNull();
+        assertThat(call.ask()).isNull();
+        verify(brokenStore).latestAll(anyList());
+        verify(source).listedFnoLastTrades(anyList());
+    }
+
+    @Test
+    void brokenRetainedSnapshotCannotBypassIndependentRestDisplayRights() {
+        var expiry = mockListedMetadata();
+        var brokenStore = mock(CustomerFnoLastTradeSnapshotStore.class);
+        when(brokenStore.latestAll(anyList()))
+            .thenThrow(new IllegalStateException("read-only snapshot unavailable"));
+        var subject = controller(false);
+        subject.setLastTrades(brokenStore);
+
+        var result = subject.internalMarket(expiry);
+        assertThat(result.strikes().getFirst().call().ltp()).isNull();
+        assertThat(result.strikes().getFirst().call().quoteFresh()).isFalse();
+        assertThat(result.strikes().getFirst().call().paperEligible()).isFalse();
+        verify(source, never()).listedFnoLastTrades(anyList());
+    }
+
+    @Test
     void openMarketStillRequiresLiveFeed() {
         when(source.enabled()).thenReturn(true);
         when(calendar.isInsideFnoSession(any(Instant.class))).thenReturn(true);
