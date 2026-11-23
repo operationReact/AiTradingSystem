@@ -183,6 +183,45 @@ public final class UpstoxFnoPlusMultiSocketPool {
         return java.util.Optional.empty();
     }
 
+    /** Only source-fresh quotes from already-listed supplementary subscriptions. */
+    public java.util.Optional<UpstoxFnoV3LiveFeedService.PaperQuote>
+            eligibleSupplementaryPaperQuote(String key) {
+        for (var shard : extra) {
+            var quote = shard.eligiblePaperQuote(key);
+            if (quote.isPresent()) return quote;
+        }
+        return java.util.Optional.empty();
+    }
+
+    public boolean hasSupplementarySubscription(String key) {
+        return extra.stream().anyMatch(s -> s.hasActiveFnoSubscription(key));
+    }
+
+    /** Actual exchange-time completeness, never just websocket send ACK. */
+    public UpstoxFnoV3LiveFeedService.StreamingCounts supplementaryCoverage() {
+        int subscribed=0, fresh=0, depth=0, absent=0;
+        int oi=0, volume=0, greeks=0;
+        for (var shard: extra) {
+            var c=shard.streamingCoverage();
+            subscribed+=c.subscribedNseFno();
+            fresh+=c.freshExchangeLtp();
+            depth+=c.freshTwoSidedDepth();
+            absent+=c.withoutFreshLtp();
+            oi+=c.withOi();
+            volume+=c.withVolume();
+            greeks+=c.withGreeks();
+        }
+        return new UpstoxFnoV3LiveFeedService.StreamingCounts(
+            "SUPPLEMENTARY",subscribed,fresh,depth,absent,
+            oi,volume,greeks,clock.instant(),false);
+    }
+
+    public List<UpstoxFnoV3LiveFeedService.DisplayQuote> supplementarySnapshot() {
+        var out=new ArrayList<UpstoxFnoV3LiveFeedService.DisplayQuote>();
+        for (var shard:extra) out.addAll(shard.eligibleDisplaySnapshot());
+        return List.copyOf(out);
+    }
+
     @Scheduled(fixedDelayString =
         "${minttick.upstox-fno.plus-pool-check-ms:30000}")
     public synchronized void stopAfterSession() {
