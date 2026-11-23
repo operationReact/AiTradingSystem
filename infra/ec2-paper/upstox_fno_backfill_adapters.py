@@ -123,11 +123,13 @@ class UpstoxExpiredCandles:
 
 
 class SQLiteHistoricalCandleSink:
-    """Optional durable candle storage, disabled without external attestation.
+    """Append-only original-download candle custody, with explicit rights gate.
 
-    UNIQUE(contract, interval, timestamp) makes replay idempotent.
-    The sink's own permission check prevents bypassing the worker's grant.
-    This adapter has no production auto-start, HTTP server or scheduler.
+    A completed provider candle is NOT an as-of-trading-day observation.
+    'first_captured_at' is the actual time our process first stored it, never
+    backdated to the old candle timestamp. An external rights verifier remains
+    mandatory; a mere receipt reference does not independently prove rights.
+    This module never starts a scheduler or makes a broker order.
     """
     def __init__(self, path: str | Path,
                  grant: RetentionGrant | None = None,
@@ -136,7 +138,6 @@ class SQLiteHistoricalCandleSink:
         from datetime import datetime, timezone
         self.grant, self.verifier = grant, verifier
         self.today = today or (lambda: datetime.now(timezone.utc).date())
-        # Fail before opening DB; no market data files with unapproved rights.
         if grant is None or not grant.intervals:
             raise GateClosed("FNO_DATA_RETENTION_NOT_AUTHORIZED")
         verify_approval(grant, verifier, grant.intervals[0], self.today())
@@ -165,12 +166,27 @@ class SQLiteHistoricalCandleSink:
             row_count INTEGER NOT NULL,
             committed_at REAL NOT NULL
         )""")
+        # The original legacy receipts have no content digest and CANNOT be
+        # promoted retroactively. Only new downloads can create this proof.
+        self.conn.execute("""CREATE TABLE IF NOT EXISTS fno_immutable_candle_receipt (
+            batch_hash TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            contract_key TEXT NOT NULL,
+            interval TEXT NOT NULL,
+            first_day TEXT NOT NULL,
+            last_day TEXT NOT NULL,
+            row_count INTEGER NOT NULL CHECK(row_count>0),
+            normalized_sha256 TEXT NOT NULL,
+            first_captured_at REAL NOT NULL,
+            permission_reference TEXT NOT NULL
+        )""")
 
     def close(self):
         self.conn.close()
 
     def upsert(self, batch: Batch, rows: list[tuple],
                idempotency_key: str) -> bool:
+        import hashlib
         verify_approval(self.grant, self.verifier, batch.interval, self.today())
         if (idempotency_key != batch.dedupe_key or not rows
                 or not re.fullmatch(r"[a-f0-9]{64}", idempotency_key)
@@ -180,27 +196,58 @@ class SQLiteHistoricalCandleSink:
         verified = validate_candles([list(x) for x in rows], batch)
         if len(verified) != len(rows):
             raise ValueError("INVALID_FNO_SINK_ROWS")
+        # Stable normalized OHLCV+OI order. This proves what was actually
+        # downloaded and persisted, NOT a cryptographic provider signature.
+        canonical = sorted(verified, key=lambda x:x[0])
+        normalized = hashlib.sha256(json.dumps(
+            canonical, separators=(",",":"), ensure_ascii=True,
+            allow_nan=False).encode("utf-8")).hexdigest()
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            previous = self.conn.execute("""
+                SELECT normalized_sha256,row_count,first_captured_at
+                FROM fno_immutable_candle_receipt WHERE batch_hash=?
+                """,(idempotency_key,)).fetchone()
+            legacy = self.conn.execute("""
+                SELECT COUNT(*) FROM fno_history_receipts WHERE batch_hash=?
+                """,(idempotency_key,)).fetchone()[0]
+            if (previous is None and legacy):
+                raise ValueError("UNATTESTED_LEGACY_BATCH_CANNOT_BE_REWRITTEN")
+            if previous is not None and (
+                    previous[0]!=normalized or previous[1]!=len(canonical)):
+                raise ValueError("HISTORICAL_PROVIDER_REVISION_DETECTED")
+            # Check *every* already persisted row, including overlapping
+            # windows: a new batch may never rewrite earlier market history.
+            for item in canonical:
+                prior = self.conn.execute("""
+                    SELECT open_price,high_price,low_price,close_price,
+                           volume,open_interest,batch_hash
+                    FROM fno_historical_candles
+                    WHERE source=? AND contract_key=? AND interval=? AND candle_ts=?
+                    """,(SOURCE,batch.contract_key,batch.interval,item[0])).fetchone()
+                if prior is not None and (prior!=tuple(item[1:])+(idempotency_key,)):
+                    raise ValueError("HISTORICAL_CANDLE_IMMUTABILITY_CONFLICT")
             self.conn.executemany("""INSERT INTO fno_historical_candles(
                 source,contract_key,interval,candle_ts,open_price,
                 high_price,low_price,close_price,volume,open_interest,batch_hash)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(source,contract_key,interval,candle_ts)
-                DO UPDATE SET open_price=excluded.open_price,
-                  high_price=excluded.high_price,low_price=excluded.low_price,
-                  close_price=excluded.close_price,volume=excluded.volume,
-                  open_interest=excluded.open_interest,
-                  batch_hash=excluded.batch_hash""",
+                ON CONFLICT(source,contract_key,interval,candle_ts) DO NOTHING""",
                 [(SOURCE,batch.contract_key,batch.interval,*item,idempotency_key)
-                 for item in verified])
-            self.conn.execute("""INSERT INTO fno_history_receipts
-                (batch_hash,source,contract_key,interval,row_count,committed_at)
-                VALUES (?,?,?,?,?,?)
-                ON CONFLICT(batch_hash) DO UPDATE SET
-                   row_count=excluded.row_count,committed_at=excluded.committed_at""",
-                (idempotency_key,SOURCE,batch.contract_key,batch.interval,
-                 len(rows),utcnow()))
+                 for item in canonical])
+            if previous is None:
+                captured=utcnow()
+                self.conn.execute("""INSERT INTO fno_immutable_candle_receipt(
+                    batch_hash,source,contract_key,interval,first_day,last_day,
+                    row_count,normalized_sha256,first_captured_at,
+                    permission_reference) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (idempotency_key,SOURCE,batch.contract_key,batch.interval,
+                     batch.first.isoformat(),batch.last.isoformat(),len(canonical),
+                     normalized,captured,self.grant.reference))
+                self.conn.execute("""INSERT INTO fno_history_receipts(
+                    batch_hash,source,contract_key,interval,row_count,committed_at)
+                    VALUES (?,?,?,?,?,?)""",
+                    (idempotency_key,SOURCE,batch.contract_key,batch.interval,
+                     len(canonical),captured))
             self.conn.execute("COMMIT")
             return True
         except BaseException:
