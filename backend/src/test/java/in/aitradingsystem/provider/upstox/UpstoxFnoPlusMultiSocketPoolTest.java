@@ -46,7 +46,7 @@ class UpstoxFnoPlusMultiSocketPoolTest {
             shardStates.add(ref);
         }
         when(primary.status()).thenReturn(status("CONNECTED",64));
-        when(primary.streamingCoverage()).thenReturn(coverage("CONNECTED"));
+        when(primary.localStreamingCoverage()).thenReturn(coverage("CONNECTED"));
         when(source.enabled()).thenReturn(true);
         when(calendar.isInsideFnoSession(NOW)).thenReturn(true);
         return new UpstoxFnoPlusMultiSocketPool(
