@@ -262,6 +262,16 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
                         NOW.plusSeconds(3),NOW)));
         assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_future_tick",CONTRACT,
                 EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .hasMessageContaining("quote identity, spread or chronology invalid");
+
+        // This separate future-timestamp fixture has valid exchange-to-receipt
+        // chronology, proving the original time/session guard still applies.
+        when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(
+                new UpstoxFnoV3LiveFeedService.PaperQuote(CONTRACT,
+                        new BigDecimal("99"),new BigDecimal("100"),
+                        NOW.plusSeconds(3),NOW.plusSeconds(3))));
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_future_tick2",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101"))))
                 .hasMessageContaining("stale or outside session");
 
         // Saturday cannot become a PAPER session just because the fixture has quotes.
@@ -273,6 +283,96 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         assertThat(s.orders(owner,paper)).isEmpty();
         assertThat(s.positions(owner,paper)).isEmpty();
         assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
+    }
+
+    @Test
+    void mismatchedCrossedOrOutOfOrderV3QuotesNeverCreateVirtualFnoOrders() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var engine=engine(true,true);
+
+        var exchange=NOW.minusSeconds(2);
+        var observed=NOW.minusSeconds(1);
+        var rejected=List.of(
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                "NSE_FO|DIFFERENT",new BigDecimal("99"),new BigDecimal("100"),
+                exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("101"),new BigDecimal("100"),
+                exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,null,new BigDecimal("100"),exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),null,exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("-1"),new BigDecimal("100"),
+                exchange,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),new BigDecimal("100"),
+                exchange,exchange.minusMillis(1)),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),new BigDecimal("100"),
+                null,observed),
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CONTRACT,new BigDecimal("99"),new BigDecimal("100"),
+                exchange,null)
+        );
+        int index=0;
+        for (var invalid:rejected) {
+            when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(invalid));
+            String key="bad_quote_identity_"+index++;
+            assertThatThrownBy(()->tx(()->engine.submit(
+                    owner,paper,key,CONTRACT,EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("quote identity, spread or chronology invalid");
+            assertThat(engine.orders(owner,paper)).isEmpty();
+            assertThat(engine.positions(owner,paper)).isEmpty();
+            assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
+        }
+        assertThat(new CustomerPaperSharedWalletAuditService(jdbc)
+            .inspect(owner,paper).cashAndRealizedPnlReconciled()).isTrue();
+    }
+
+    @Test
+    void wrongContractQuoteCannotSellHeldPaperOptionButValidQuoteCanClose() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var engine=engine(true,true);
+        var opened=tx(()->engine.submit(owner,paper,"quote_guard_buy_01",
+            CONTRACT,EXPIRY,"BUY",1,new BigDecimal("101")));
+        assertThat(opened.side()).isEqualTo("BUY");
+        long cashHolding=wallets.get(owner,paper).availableCashPaise();
+        assertThat(engine.positions(owner,paper)).hasSize(1);
+
+        when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(
+            new UpstoxFnoV3LiveFeedService.PaperQuote("NSE_FO|SOME_OTHER_OPTION",
+                new BigDecimal("110"),new BigDecimal("111"),
+                NOW.minusSeconds(2),NOW.minusSeconds(1))));
+        assertThatThrownBy(()->tx(()->engine.submit(owner,paper,"quote_guard_sell1",
+            CONTRACT,EXPIRY,"SELL",1,new BigDecimal("109"))))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("quote identity, spread or chronology invalid");
+        assertThat(engine.orders(owner,paper)).hasSize(1);
+        assertThat(engine.positions(owner,paper)).hasSize(1);
+        assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(cashHolding);
+
+        prepareMarket("110.00","111.00");
+        var sold=tx(()->engine.submit(owner,paper,"quote_guard_sell2",
+            CONTRACT,EXPIRY,"SELL",1,new BigDecimal("109")));
+        assertThat(sold.side()).isEqualTo("SELL");
+        assertThat(sold.realizedPnlDeltaPaise()).isPositive();
+        assertThat(engine.positions(owner,paper)).isEmpty();
+        assertThat(engine.orders(owner,paper)).hasSize(2);
+        assertThat(new CustomerPaperFnoReconciliationService(jdbc)
+            .inspect(owner,paper).status()).isEqualTo("BOOKKEEPING_MATCHED");
+        assertThat(new CustomerPaperSharedWalletAuditService(jdbc)
+            .inspect(owner,paper).cashAndRealizedPnlReconciled()).isTrue();
     }
 
     @Test

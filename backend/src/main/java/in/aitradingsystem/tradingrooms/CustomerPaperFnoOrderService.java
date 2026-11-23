@@ -146,6 +146,17 @@ public class CustomerPaperFnoOrderService {
         UpstoxFnoV3LiveFeedService.PaperQuote quote=live.eligiblePaperQuote(instrumentKey)
                 .orElseThrow(()->reject(HttpStatus.CONFLICT,
                         "Fresh verified F&O bid/ask unavailable"));
+        // Independently verify the quote from the V3 feed/secondary pool.
+        // A mismatched contract, crossed spread, or receipt preceding its
+        // exchange tick must never authorize a virtual debit or sell.
+        if (!instrumentKey.equals(quote.instrumentKey())
+                || quote.bid()==null || quote.ask()==null
+                || quote.bid().signum()<=0 || quote.ask().signum()<=0
+                || quote.bid().compareTo(quote.ask())>0
+                || quote.exchangeAt()==null || quote.observedAt()==null
+                || quote.observedAt().isBefore(quote.exchangeAt()))
+            throw reject(HttpStatus.CONFLICT,
+                "F&O PAPER provider quote identity, spread or chronology invalid");
         // Defense in depth: executable PAPER fill requires both observation
         // and provider exchange time fresh INSIDE the active Indian session.
         if (quote.exchangeAt()==null || quote.observedAt()==null
