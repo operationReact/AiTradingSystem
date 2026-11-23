@@ -180,13 +180,19 @@ def current_nse_master() -> list:
 
 
 def main(argv=None) -> int:
+    """Offline inspect-only compatibility CLI; never submit from a JSON file.
+
+    An arbitrary file cannot prove that Mintick Mind produced the signal.
+    Actual sandbox execution requires the authenticated, journaled runner:
+    scripts/minttick_mind_sandbox_authenticated.py
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--research-json", required=True, type=Path)
     parser.add_argument("--execute-sandbox", action="store_true")
     parser.add_argument("--confirmation", default="DO_NOT_EXECUTE")
     args = parser.parse_args(argv)
-    if args.execute_sandbox and args.confirmation != "SANDBOX_ONLY":
-        print("MIND_SANDBOX_CONFIRMATION_REQUIRED")
+    if args.execute_sandbox:
+        print("MIND_SANDBOX_FILE_EXECUTION_DISABLED")
         return 2
     try:
         if args.research_json.stat().st_size > 20000:
@@ -194,28 +200,10 @@ def main(argv=None) -> int:
         data = json.loads(args.research_json.read_text(encoding="utf-8"))
         intent = intent_from_research(data, current_nse_master())
         print("MIND_SANDBOX_VALIDATED_RESEARCH_ONLY:" + intent.strategy_id)
-        if not args.execute_sandbox:
-            print("MIND_SANDBOX_DRY_RUN:ZERO_BROKER_ORDERS")
-            return 0
-        # Dedicated sandbox role, token and host only. No live credentials.
-        if broker.SANDBOX != "https://api-sandbox.upstox.com" or (
-                broker.SANDBOX_USER_AGENT != "MintTick-Upstox-Sandbox/1.0"):
-            raise BridgeBlocked("MIND_SANDBOX_HOST_OR_HEADER_MISMATCH")
-        token = ssm.load_sandbox_token()
-        try:
-            result = broker.run_cycle(
-                broker.sandbox_transport(token), intent.instrument_key,
-                intent.quantity, str(intent.limit_price), str(intent.tick))
-        finally:
-            token = None
-        print("MIND_SANDBOX_SIMULATED_LIFECYCLE:" +
-              ("VERIFIED" if all(result.get(k) is True for k in ("placed", "modified", "cancelled"))
-               else "INCOMPLETE"))
-        return 0 if all(result.get(k) is True for k in ("placed", "modified", "cancelled")) else 1
-    except (OSError, ValueError, TypeError, json.JSONDecodeError,
-            broker.SandboxError, ssm.SandboxBootstrapError) as exc:
-        # Errors are fixed categories, not raw broker/SSM response content.
-        if isinstance(exc, (BridgeBlocked, broker.SandboxError, ssm.SandboxBootstrapError)):
+        print("MIND_SANDBOX_DRY_RUN:ZERO_BROKER_ORDERS")
+        return 0
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        if isinstance(exc, BridgeBlocked):
             print("MIND_SANDBOX_BLOCKED:" + str(exc))
         else:
             print("MIND_SANDBOX_BLOCKED:UNAVAILABLE_OR_INVALID_INPUT")
