@@ -231,10 +231,12 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
     final scheme = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final expiry = c.expiry.toIso8601String().substring(0, 10);
-    return Padding(
+    return InkWell(
       key: ValueKey('fno-universe-contract-${c.instrumentKey}'),
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(children: [
+      onTap: () => _showInstrument(c),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(children: [
         SizedBox(width: 46,
           child: Text(c.type, style: t.labelSmall?.copyWith(
             fontWeight: FontWeight.w800,
@@ -251,7 +253,93 @@ class _MintTickFnoUniversePanelState extends State<MintTickFnoUniversePanel> {
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: t.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
           ])),
-      ]),
+        ]),
+      ),
     );
   }
+
+  void _showInstrument(CustomerFnoUniverseInstrument contract) {
+    // Request an exact source last trade only when the owner taps a listed
+    // contract. No polling, quote stream changes, or executable orders.
+    final request = widget.repository.lastTrade(contract.instrumentKey);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        String formatted(num? value) => value == null
+            ? '—' : value.toStringAsFixed(2);
+        return SafeArea(child: SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(contract.tradingSymbol,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text('${contract.type} · ${contract.instrumentKey}',
+                style: theme.textTheme.labelSmall),
+              const SizedBox(height: 12),
+              FutureBuilder<CustomerFnoLastTrade>(
+                future: request,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: LinearProgressIndicator(minHeight: 2));
+                  }
+                  final quote = snapshot.data;
+                  if (snapshot.hasError || quote == null ||
+                      quote.instrumentKey != contract.instrumentKey) {
+                    return const Text(
+                      'Source last-trade lookup unavailable.');
+                  }
+                  if (!quote.hasPrice) {
+                    return Text('No verified last trade · ${quote.status}',
+                      key: const ValueKey('fno-universe-last-unavailable'));
+                  }
+                  return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Last ₹${formatted(quote.ltp)}',
+                        key: const ValueKey('fno-universe-last-price'),
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text(quote.freshExchangeTime
+                          ? 'Exchange-timed last trade · read only'
+                          : 'Previous trade · read only',
+                        key: const ValueKey('fno-universe-last-status'),
+                        style: theme.textTheme.labelMedium),
+                      const SizedBox(height: 9),
+                      _detail('Traded at',
+                        quote.exchangeAt?.toLocal().toIso8601String() ?? '—'),
+                      _detail('Observed',
+                        quote.observedAt?.toLocal().toIso8601String() ?? '—'),
+                      _detail('Previous close',
+                        quote.previousClose == null ? '—'
+                            : '₹${formatted(quote.previousClose)}'),
+                      _detail('OI',
+                        quote.openInterest?.toString() ?? '—'),
+                      const SizedBox(height: 10),
+                      Text('Source: Upstox REST V3. This is the latest '
+                          'verified trade observation, not a firm bid, ask, '
+                          'market depth, or executable order quote.',
+                        style: theme.textTheme.bodySmall),
+                    ]);
+                }),
+            ]),
+        ));
+      },
+    );
+  }
+
+  Widget _detail(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(children: [
+      Expanded(child: Text(label)),
+      Text(value, style: const TextStyle(
+        fontFeatures: [FontFeature.tabularFigures()],
+        fontWeight: FontWeight.w700)),
+    ]),
+  );
 }
