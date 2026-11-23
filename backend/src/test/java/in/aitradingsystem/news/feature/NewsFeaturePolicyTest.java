@@ -170,4 +170,29 @@ class NewsFeaturePolicyTest {
             List.of(new Evaluated(flat, NewsFeaturePolicy.classify(flat, ASOF))));
         assertThat(neutral.direction()).isEqualTo("NEUTRAL");
     }
+    @Test
+    void malformedModelScoresNeverEnterDirectionalAggregate() {
+        List<Candidate> invalid = List.of(
+            new Candidate(PUBLISHED, PUBLISHED.plusSeconds(120), "ANALYZED", "INTRADAY",
+                new BigDecimal("1.01"), new BigDecimal("0.80"), new BigDecimal("0.70"), false, false, true),
+            new Candidate(PUBLISHED, PUBLISHED.plusSeconds(120), "ANALYZED", "INTRADAY",
+                new BigDecimal("-1.01"), new BigDecimal("0.80"), new BigDecimal("0.70"), false, false, true),
+            new Candidate(PUBLISHED, PUBLISHED.plusSeconds(120), "ANALYZED", "INTRADAY",
+                new BigDecimal("0.60"), new BigDecimal("1.01"), new BigDecimal("0.70"), false, false, true),
+            new Candidate(PUBLISHED, PUBLISHED.plusSeconds(120), "ANALYZED", "INTRADAY",
+                new BigDecimal("0.60"), new BigDecimal("0.80"), new BigDecimal("-0.50"), false, false, true),
+            new Candidate(PUBLISHED, PUBLISHED.plusSeconds(120), "ANALYZED", "INTRADAY",
+                new BigDecimal("0.60"), new BigDecimal("0.80"), BigDecimal.ZERO, false, false, true),
+            new Candidate(PUBLISHED, PUBLISHED.plusSeconds(120), "ANALYZED", "INTRADAY",
+                new BigDecimal("0.60"), new BigDecimal("0.80"), new BigDecimal("1.01"), false, false, true));
+        for (Candidate candidate : invalid) {
+            assertThat(NewsFeaturePolicy.classify(candidate, ASOF)).isEqualTo(EXCLUDED_INVALID_SCORE);
+        }
+        Aggregate aggregate = NewsFeaturePolicy.aggregate(invalid.stream()
+            .map(c -> new Evaluated(c, NewsFeaturePolicy.classify(c, ASOF))).toList());
+        assertThat(aggregate.includedCount()).isZero();
+        assertThat(aggregate.netDirection()).isNull();
+        assertThat(aggregate.direction()).isEqualTo("UNKNOWN");
+    }
+
 }
