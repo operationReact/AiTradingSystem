@@ -61,6 +61,7 @@ Map<String, dynamic> overviewJson({String indexFreshness = 'LAST_CLOSE',
 
 class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotMarketRepository,
     CustomerCandleRepository, CustomerDetailRepository, CustomerCompanyProfileRepository,
+    CustomerFundamentalsRepository,
     CustomerWatchlistRepository,
     CustomerOverviewRepository {
   bool failOverview = false;
@@ -129,6 +130,38 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
         {'indexCode': 'MIDCAP150', 'source': 'NSE_MIDCAP150_CSV',
           'sourceAsOf': '2026-11-20'},
       ],
+    });
+  }
+
+  @override
+  Future<CustomerFundamentalsSection> fundamentals(int instrumentId, String section) async {
+    final Object raw = switch (section) {
+      'profile' => <String, dynamic>{
+        'company_profile': 'Test Company makes industrial equipment.',
+        'sector': 'Engineering',
+        'sector_market_cap_inr': {'formatted': '12,000 Cr', 'unit': 'crore'},
+      },
+      'ratios' => <Map<String, dynamic>>[
+        {'name': 'P/E', 'company_value': '20.15', 'sector_value': '12.46'},
+        {'name': 'ROE', 'company_value': '8.94%', 'sector_value': '16.46%'},
+      ],
+      'income' => <String, dynamic>{
+        'units_in': 'crore',
+        'income_statement': [
+          {'category': 'revenue', 'history': [{'value': 1200, 'period': 'Sep 2026'}]},
+          {'category': 'net_profit', 'history': [{'value': 100, 'period': 'Sep 2026'}]},
+        ],
+      },
+      'shareholding' => <Map<String, dynamic>>[
+        {'category': 'promoters', 'history': [{'value': 50, 'period': 'Sep 2026'}]},
+      ],
+      _ => throw ArgumentError.value(section),
+    };
+    return CustomerFundamentalsSection.fromJson({
+      'contractVersion': 'customer.market.fundamentals.v1',
+      'instrumentId': instrumentId, 'tradingSymbol': 'TEST-EQ',
+      'isin': 'INE002A01018', 'section': section,
+      'provider': 'UPSTOX', 'fetchedAt': '2026-11-23T10:00:00Z', 'data': raw,
     });
   }
 
@@ -476,6 +509,11 @@ void main() {
     expect(find.text('Index size'), findsOneWidget);
     expect(find.text('MID'), findsOneWidget);
     expect(find.byKey(const ValueKey('company-index-MIDCAP150')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-fundamentals')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-fundamental-ratios')), findsOneWidget);
+    expect(find.text('20.15'), findsOneWidget);
+    expect(find.text('8.94%'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('company-source-details')));
     await tester.pumpAndSettle();
     expect(find.textContaining('NSE_MIDCAP150_CSV'), findsOneWidget);
