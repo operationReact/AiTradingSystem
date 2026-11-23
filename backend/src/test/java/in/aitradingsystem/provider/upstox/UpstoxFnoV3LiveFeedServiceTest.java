@@ -246,6 +246,60 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void verifiedPlusFullCapacitySupportsOneThousandFiveHundredOnTheSameSocketOnly() {
+        var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        when(source.enabled()).thenReturn(true);
+        when(source.authorizeFnoMarketFeedV3()).thenReturn(URI.create(
+            "wss://prod-feed.upstox.com/market-data-feeder/v3/feeds?code=one-use"));
+        when(socket.sendBinary(any(ByteBuffer.class), eq(true)))
+            .thenReturn(CompletableFuture.completedFuture(socket));
+        when(socket.sendClose(anyInt(), anyString()))
+            .thenReturn(CompletableFuture.completedFuture(socket));
+        var plus = new UpstoxFnoV3LiveFeedService(source, current, (uri, capture) -> {
+            listener.set(capture);
+            return CompletableFuture.completedFuture(socket);
+        }, executor, true);
+        try {
+            assertThat(plus.subscriptionLimit()).isEqualTo(1500);
+            var initial = new java.util.ArrayList<String>();
+            for (int n = 0; n < 64; n++) initial.add("NSE_FO|" + (61001+n));
+            plus.start(initial);
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            for (int start = 64; start < 1500; start += 64) {
+                var keys = new java.util.ArrayList<String>();
+                for (int i = start; i < Math.min(1500, start + 64); i++)
+                    keys.add("NSE_FO|" + (61001 + i));
+                plus.subscribeAdditionalListed(keys);
+            }
+            assertThat(plus.status().subscriptions()).isEqualTo(1500);
+            assertThat(plus.subscriptionLimit()).isEqualTo(1500);
+            assertThat(plus.hasActiveFnoSubscription("NSE_FO|62500")).isTrue();
+            assertThat(plus.eligibleDisplayQuote("NSE_FO|62500")).isEmpty();
+            assertThatThrownBy(() -> plus.subscribeAdditionalListed(
+                List.of("NSE_FO|62501"))).hasMessage("UPSTOX_FNO_SUBSCRIPTION_CAP_REACHED");
+            verify(source, times(1)).authorizeFnoMarketFeedV3();
+            verify(socket, never()).sendClose(anyInt(), anyString());
+            assertThat(plus.status().liveTradingEnabled()).isFalse();
+        } finally {
+            plus.shutdown();
+        }
+    }
+
+    @Test
+    void unverifiedPlusEntitlementKeepsLegacy256RatherThanAssumingFiveSockets() {
+        var legacy = service();
+        try {
+            assertThat(legacy.subscriptionLimit()).isEqualTo(256);
+            assertThat(legacy.status().subscriptions()).isZero();
+            verify(source, never()).authorizeFnoMarketFeedV3();
+        } finally {
+            legacy.shutdown();
+        }
+    }
+
+    @Test
     void dynamicSubscriptionFailsClosedWhenUnconnectedOrBinarySendFails() {
         var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
         var s = service(current);
