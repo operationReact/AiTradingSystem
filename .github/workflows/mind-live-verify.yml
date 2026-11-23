@@ -65,6 +65,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate read-only F&O runtime evidence parser with no network
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mind/check_fno_research_runtime.py
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_research_runtime.py' -v
+
       - name: Authenticated Mind reads and denials (per-run token, never printed)
         # The token is minted for this run only (Cognito access/ID tokens last 15 minutes). No long-lived
         # JWT is stored. The owner provisions the test customer, the password secret and the client id
@@ -135,6 +141,25 @@ jobs:
             echo "FAIL authenticated full progress inventory walk"; fail=1
           fi
           rm -f "$RUNNER_TEMP/verify_walk_token"
+          # One authenticated customer F&O research GET. This is a read-only
+          # status diagnosis; never return a quote, instrument, account, broker
+          # order or private body to GitHub logs. A 404 means NOT_DEPLOYED,
+          # not an F&O runtime pass. A blocked/no-trade result is not E2E proof.
+          umask 077
+          fno_file="$RUNNER_TEMP/mind_fno_research_runtime.json"
+          if fno_code="$(curl -sS -o "$fno_file" -w '%{http_code}' --max-time 20 \
+              "${auth[@]}" -H 'Accept: application/json' \
+              -H 'User-Agent: MintTick-Mind-FNO-ReadOnly/1.0' \
+              -H 'Cache-Control: no-store' \
+              "https://api.minttick.com/api/customer/mind/v1/fno-evaluation")"; then
+            if ! python3 scripts/mind/check_fno_research_runtime.py "$fno_code" "$fno_file"; then
+              echo "FAIL authenticated F&O research runtime contract"; fail=1
+            fi
+          else
+            echo "MIND_FNO_RESEARCH_RUNTIME:route=TRANSPORT_UNAVAILABLE;execution=false"
+            fail=1
+          fi
+          rm -f "$fno_file"
           for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
             if [ "$code" = 404 ]; then echo "PASS authenticated $path -> 404"; else echo "FAIL authenticated $path -> $code"; fail=1; fi
