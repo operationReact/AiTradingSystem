@@ -245,7 +245,9 @@ class UpstoxFnoV3LiveFeedServiceTest {
             assertThat(stream.status().state()).isEqualTo("RECONNECTING");
             assertThat(stream.status().subscriptions()).isEqualTo(2);
             assertThat(stream.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
-            verify(socket).abort();
+            // Both the synchronized reconnect gate and failed-send callback
+            // may abort the same dead socket. Abort is idempotent and safe.
+            verify(socket, atLeastOnce()).abort();
         } finally {
             stream.shutdown();
         }
