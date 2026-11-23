@@ -61,8 +61,8 @@ Future<void> _pumpBoard(WidgetTester tester, CustomerFnoMarket market) async {
           selected: null,
           onStrike: (_) {},
           onLeg: (_) {},
-          onTicket: (_, __) {
-            fail('A retained/chain quote must never open an order ticket');
+          onTicket: (leg, side) {
+            fail('Retained/chain quote must not open $side order for ${leg.instrumentKey}');
           },
           canClose: false,
         ),
