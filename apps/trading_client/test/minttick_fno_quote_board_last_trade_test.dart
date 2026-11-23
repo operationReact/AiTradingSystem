@@ -1,0 +1,124 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_paper_fno_repository.dart';
+import 'package:trading_client/src/features/trading_rooms/presentation/minttick_fno_quote_board.dart';
+
+CustomerFnoMarket _market({
+  bool rights = true,
+  num? lastPrice = 110.25,
+  int? lastOi = 500,
+  bool withChain = false,
+  Duration age = const Duration(hours: 1),
+}) {
+  final now = DateTime.now().toUtc();
+  final observed = now.subtract(age);
+  return CustomerFnoMarket.decode({
+    'underlyingKey': 'NSE_INDEX|Nifty 50',
+    'expiry': '2026-12-08',
+    'status': 'MARKET_CLOSED',
+    'snapshotAt': now.toIso8601String(),
+    'displayRightsVerified': rights,
+    'liveOrderEnabled': false,
+    'strikes': [
+      {
+        'strikePrice': 25000,
+        'call': {
+          'instrumentKey': 'NSE_FO|61001',
+          'tradingSymbol': 'NIFTY 25000 CE',
+          'side': 'CE',
+          'lotSize': 65,
+          'tickSize': 0.05,
+          'bid': null,
+          'ask': null,
+          'exchangeAt': observed.toIso8601String(),
+          'observedAt': observed.toIso8601String(),
+          'quoteFresh': false,
+          'paperEligible': false,
+          'ltp': lastPrice,
+          'previousClose': 100,
+          'openInterest': lastOi,
+        },
+      },
+    ],
+    if (withChain)
+      'chainSnapshotIndicators': {
+        'NSE_FO|61001': {
+          'ltp': 122.5,
+          'openInterest': 700,
+        },
+      },
+  });
+}
+
+Future<void> _pumpBoard(WidgetTester tester, CustomerFnoMarket market) async {
+  await tester.pumpWidget(MaterialApp(
+    home: Scaffold(
+      body: SingleChildScrollView(
+        child: MintTickFnoQuoteBoard(
+          market: market,
+          fresh: false,
+          strike: 25000,
+          selected: null,
+          onStrike: (_) {},
+          onLeg: (_) {},
+          onTicket: (_, __) {
+            fail('A retained/chain quote must never open an order ticket');
+          },
+          canClose: false,
+        ),
+      ),
+    ),
+  ));
+  await tester.pump();
+}
+
+void main() {
+  testWidgets('authorized last trade is visible but PAPER ticket remains blocked',
+      (tester) async {
+    await _pumpBoard(tester, _market());
+    expect(find.text('Listed Options'), findsOneWidget);
+    expect(find.textContaining('Last ₹110.25'), findsOneWidget);
+    expect(find.textContaining('Last trade ·'), findsOneWidget);
+    expect(find.text('OI 500  ·  Volume —'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(
+        find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('read-only chain snapshot has its own label and cannot trade',
+      (tester) async {
+    await _pumpBoard(tester,
+        _market(lastPrice: null, lastOi: null, withChain: true));
+    expect(find.textContaining('Chain ₹122.50'), findsOneWidget);
+    expect(find.textContaining('Chain snapshot · read only'), findsOneWidget);
+    expect(find.text('OI 700  ·  Volume —'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(
+        find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('missing display rights hides last trade and chain values',
+      (tester) async {
+    await _pumpBoard(tester, _market(rights: false, withChain: true));
+    expect(find.textContaining('Last ₹'), findsNothing);
+    expect(find.textContaining('Chain ₹'), findsNothing);
+    expect(find.text('OI 500  ·  Volume —'), findsNothing);
+    expect(find.text('OI —  ·  Volume —'), findsOneWidget);
+  });
+
+  testWidgets('old last trade is withheld even when a malformed response supplies it',
+      (tester) async {
+    await _pumpBoard(tester, _market(age: const Duration(days: 8)));
+    expect(find.textContaining('Last ₹'), findsNothing);
+    expect(find.text('OI —  ·  Volume —'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(
+        find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed,
+      isNull,
+    );
+  });
+}
