@@ -218,6 +218,22 @@ public class FnoFuturesContractRegistry {
         return new UniverseResult(state, rows.total(), rows.contracts());
     }
 
+    /**
+     * Internal candidate identities for the realtime subscription planner.
+     * Requires a fresh, rights-approved full BOD. Never returns snapshots
+     * that are STALE or a catalog that failed its last validation.
+     */
+    public List<UpstoxFnoInstrumentUniverse.Contract> livePlanningCandidates(
+            String underlyingKey) {
+        if (underlyingKey == null || !underlyingKey.matches(
+                "(?:NSE_EQ\\|[A-Za-z0-9._-]{1,64}|NSE_INDEX\\|[A-Za-z0-9 ._-]{1,64})") ||
+                !"LOADED".equals(universeStatus().state()))
+            return List.of();
+        var snapshot = universeSnapshot;
+        return snapshot == null ? List.of() : snapshot.catalog()
+            .byUnderlying().getOrDefault(underlyingKey, List.of());
+    }
+
     /** Search over the already-loaded provider file; never perform a provider GET. */
     public UniverseResult universeSearch(String query, String type,
             int page, int pageSize) {

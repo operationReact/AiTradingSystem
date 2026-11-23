@@ -178,6 +178,107 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void dynamicallyAddsListedContractKeysOnSameConnectedSocketWithoutOrders() {
+        var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var s = service(current);
+        try {
+            s.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            assertThat(s.status().state()).isEqualTo("CONNECTED");
+
+            var result = s.subscribeAdditionalListed(List.of(
+                "NSE_FO|61002", "NSE_FO|61003"));
+            assertThat(result.subscriptions()).isEqualTo(3);
+            assertThat(result.liveTradingEnabled()).isFalse();
+            assertThat(s.hasActiveFnoSubscription("NSE_FO|61002")).isTrue();
+            // A successful WebSocket send is not a real exchange-time trade.
+            assertThat(s.eligibleDisplayQuote("NSE_FO|61002")).isEmpty();
+            assertThat(s.eligiblePaperQuote("NSE_FO|61002")).isEmpty();
+            var sent = org.mockito.ArgumentCaptor.forClass(ByteBuffer.class);
+            verify(socket, times(2)).sendBinary(sent.capture(), eq(true));
+            assertThat(new String(sent.getAllValues().get(1).array(),
+                    java.nio.charset.StandardCharsets.UTF_8))
+                .contains("\"method\":\"sub\"",
+                    "\"mode\":\"full\"",
+                    "NSE_FO|61002", "NSE_FO|61003")
+                .doesNotContain("NSE_FO|61001");
+            // Idempotent: retries cannot duplicate provider subscriptions.
+            assertThat(s.subscribeAdditionalListed(
+                List.of("NSE_FO|61002")).subscriptions()).isEqualTo(3);
+            verify(socket, times(2)).sendBinary(any(ByteBuffer.class), eq(true));
+            verify(source, times(1)).authorizeFnoMarketFeedV3();
+            verify(socket, never()).sendClose(anyInt(), anyString());
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
+    void expandedCapacityStopsAt256AndNeverCreatesAnotherSocket() {
+        var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var s = service(current);
+        try {
+            var initial = new java.util.ArrayList<String>();
+            initial.add("NSE_FO|61001");
+            for (int n = 1; n < 64; n++) initial.add("NSE_FO|" + (61001 + n));
+            s.start(initial);
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            for (int group = 1; group <= 3; group++) {
+                var extra = new java.util.ArrayList<String>();
+                for (int n = 0; n < 64; n++)
+                    extra.add("NSE_FO|" + (61001 + group * 64 + n));
+                s.subscribeAdditionalListed(extra);
+            }
+            assertThat(s.status().subscriptions()).isEqualTo(256);
+            assertThatThrownBy(() ->
+                s.subscribeAdditionalListed(List.of("NSE_FO|999999")))
+                .hasMessage("UPSTOX_FNO_SUBSCRIPTION_CAP_REACHED");
+            assertThat(s.status().subscriptions()).isEqualTo(256);
+            verify(source, times(1)).authorizeFnoMarketFeedV3();
+            verify(socket, times(4)).sendBinary(any(ByteBuffer.class), eq(true));
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
+    void dynamicSubscriptionFailsClosedWhenUnconnectedOrBinarySendFails() {
+        var current = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var s = service(current);
+        try {
+            assertThatThrownBy(() ->
+                s.subscribeAdditionalListed(List.of("NSE_FO|61002")))
+                .hasMessage("UPSTOX_FNO_SOCKET_NOT_READY_FOR_ADD");
+            s.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            assertThatThrownBy(() ->
+                s.subscribeAdditionalListed(List.of("NSE_FO|61002")))
+                .hasMessage("UPSTOX_FNO_SOCKET_NOT_READY_FOR_ADD");
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            when(socket.sendBinary(any(ByteBuffer.class), eq(true)))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException()));
+            assertThatThrownBy(() ->
+                s.subscribeAdditionalListed(List.of("NSE_FO|61002")))
+                .hasMessage("UPSTOX_FNO_SUBSCRIBE_SEND_UNVERIFIED");
+            assertThat(s.hasActiveFnoSubscription("NSE_FO|61002")).isFalse();
+            assertThat(s.status().subscriptions()).isEqualTo(1);
+            assertThatThrownBy(() ->
+                s.subscribeAdditionalListed(List.of("NSE_EQ|INE002A01018")))
+                .hasMessage("UPSTOX_FNO_INVALID_LISTED_SUBSCRIPTIONS");
+            assertThatThrownBy(() ->
+                s.subscribeAdditionalListed(List.of("NSE_FO|61002", "NSE_FO|61002")))
+                .hasMessage("UPSTOX_FNO_INVALID_LISTED_SUBSCRIPTIONS");
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
     void cannotStartTwoConnectionsOrSubscribeArbitraryKeys() {
         var s = service();
         try {

@@ -116,10 +116,10 @@ public class UpstoxFnoV3LiveOperatorController {
                 .orElseThrow(() -> new IllegalStateException("FNO_FUTURES_PAIR_NOT_VERIFIED"));
         List<String> futures = List.of(pair.near().instrumentKey(), pair.far().instrumentKey());
         List<String> options = listedNearAtmKeys(source, expiry,
-                UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS - futures.size());
+                UpstoxFnoV3LiveFeedService.MAX_INITIAL_SUBSCRIPTIONS - futures.size());
         List<String> plan = new java.util.ArrayList<>(futures);
         plan.addAll(options);
-        if (plan.size() > UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS
+        if (plan.size() > UpstoxFnoV3LiveFeedService.MAX_INITIAL_SUBSCRIPTIONS
                 || Set.copyOf(plan).size() != plan.size()) {
             throw new IllegalStateException("UPSTOX_FNO_NO_MATCHING_CONTRACTS");
         }
@@ -131,7 +131,7 @@ public class UpstoxFnoV3LiveOperatorController {
      * automatic market-hours subscription. No untrusted contract keys.
      */
     static List<String> listedNearAtmKeys(UpstoxAnalyticsSource source, LocalDate expiry) {
-        return listedNearAtmKeys(source, expiry, UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS);
+        return listedNearAtmKeys(source, expiry, UpstoxFnoV3LiveFeedService.MAX_INITIAL_SUBSCRIPTIONS);
     }
 
     static List<String> listedNearAtmKeys(UpstoxAnalyticsSource source, LocalDate expiry, int maxKeys) {
