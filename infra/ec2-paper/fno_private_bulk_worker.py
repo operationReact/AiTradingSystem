@@ -260,6 +260,7 @@ def cleanup_expired_cache(sink):
         for hashvalue in old:
             sink.conn.execute("DELETE FROM fno_historical_candles WHERE batch_hash=?",(hashvalue,))
             sink.conn.execute("DELETE FROM fno_history_receipts WHERE batch_hash=?",(hashvalue,))
+            sink.conn.execute("DELETE FROM fno_immutable_candle_receipt WHERE batch_hash=?",(hashvalue,))
         sink.conn.execute("COMMIT")
     except BaseException:
         sink.conn.execute("ROLLBACK")
@@ -357,15 +358,27 @@ def expire_private_cache():
             db.execute("BEGIN IMMEDIATE")
             db.execute("DELETE FROM fno_historical_candles")
             db.execute("DELETE FROM fno_history_receipts")
+            # Legacy cache databases may predate the immutable receipt schema.
+            if db.execute("""
+                SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='fno_immutable_candle_receipt'
+                """).fetchone():
+                db.execute("DELETE FROM fno_immutable_candle_receipt")
             db.execute("COMMIT")
             return "OWNER_SCOPE_EXPIRED_CACHE_CLEARED"
         old=time.time()-DAILY_CACHE_TTL_SECONDS
         db.execute("BEGIN IMMEDIATE")
         expired=[x[0] for x in db.execute(
             "SELECT batch_hash FROM fno_history_receipts WHERE committed_at<?",(old,))]
+        has_immutable=bool(db.execute("""
+            SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='fno_immutable_candle_receipt'
+            """).fetchone())
         for h in expired:
             db.execute("DELETE FROM fno_historical_candles WHERE batch_hash=?",(h,))
             db.execute("DELETE FROM fno_history_receipts WHERE batch_hash=?",(h,))
+            if has_immutable:
+                db.execute("DELETE FROM fno_immutable_candle_receipt WHERE batch_hash=?",(h,))
         db.execute("COMMIT")
         return "PRIVATE_CACHE_TTL_ENFORCED"
     finally:
