@@ -236,11 +236,14 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       }),
     );
     if (!mounted) return;
+    final accepted = <String, CustomerFundamentalsSection>{};
+    for (final (section, response) in answers) {
+      if (response != null) {
+        accepted[section] = response;
+      }
+    }
     setState(() {
-      _fundamentals = {
-        for (final (section, response) in answers)
-          if (response != null) section: response,
-      };
+      _fundamentals = accepted;
       _fundamentalsFailed = _fundamentals.isEmpty;
       _fundamentalsLoading = false;
     });
