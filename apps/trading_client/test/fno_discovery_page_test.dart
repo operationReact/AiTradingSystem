@@ -335,6 +335,57 @@ void main() {
     }), throwsFormatException);
   });
 
+  test('V3 LTP can be live for display without executable depth', () {
+    final at = DateTime.now().toUtc().toIso8601String();
+    final parsed = CustomerFnoDiscoveryCapability.decode({
+      'displayRightsVerified': true,
+      'feedConfigured': true,
+      'sourceReady': true,
+      'marketOpen': true,
+      'status': 'LIVE_QUOTES',
+      'streamState': 'CONNECTED',
+      'freshExchangeTimedQuotes': 0,
+      'latestFreshExchangeTradeAt': null,
+      'freshDisplayQuotes': 1,
+      'latestFreshDisplayTradeAt': at,
+      'subscribedInstruments': 64,
+    });
+    expect(parsed.live, isTrue);
+    expect(parsed.freshDisplayObserved, isTrue);
+    expect(parsed.executableDepthObserved, isFalse);
+    expect(parsed.freshDisplayQuotes, 1);
+    expect(parsed.subscribedInstruments, 64);
+  });
+
+  test('unverified, absent or overstated LTP coverage fails closed', () {
+    final at = DateTime.now().toUtc().toIso8601String();
+    Map<String, Object?> source() => {
+      'displayRightsVerified': true,
+      'feedConfigured': true,
+      'sourceReady': true,
+      'marketOpen': true,
+      'status': 'LIVE_QUOTES',
+      'streamState': 'CONNECTED',
+      'freshExchangeTimedQuotes': 0,
+      'latestFreshExchangeTradeAt': null,
+      'freshDisplayQuotes': 1,
+      'latestFreshDisplayTradeAt': at,
+      'subscribedInstruments': 64,
+    };
+    expect(() => CustomerFnoDiscoveryCapability.decode(
+      source()..['latestFreshDisplayTradeAt'] = null),
+      throwsFormatException);
+    expect(() => CustomerFnoDiscoveryCapability.decode(
+      source()..['subscribedInstruments'] = 0),
+      throwsFormatException);
+    expect(() => CustomerFnoDiscoveryCapability.decode(
+      source()..['displayRightsVerified'] = false),
+      throwsFormatException);
+    expect(() => CustomerFnoDiscoveryCapability.decode(
+      source()..['marketOpen'] = false),
+      throwsFormatException);
+  });
+
   testWidgets('closed Options market shows retained actual LTP with Last label',
       (tester) async {
     final rooms = TradingRoomDraftStore();

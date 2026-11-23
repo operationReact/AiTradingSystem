@@ -91,7 +91,21 @@ public final class CustomerFnoDiscoveryController {
                              boolean sourceReady, boolean marketOpen,
                              String status, String streamState,
                              int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt,
-                             boolean contractDiscoveryVerified) {}
+                             boolean contractDiscoveryVerified,
+                             int freshDisplayQuotes, Instant latestFreshDisplayTradeAt,
+                             int subscribedInstruments) {
+        // Compatibility with existing tests; legacy counts represent depth-qualified
+        // observations, NOT every exchange-timed LTP.
+        public Capability(boolean displayRightsVerified, boolean feedConfigured,
+                boolean sourceReady, boolean marketOpen,
+                String status, String streamState,
+                int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt,
+                boolean contractDiscoveryVerified) {
+            this(displayRightsVerified, feedConfigured, sourceReady, marketOpen,
+                status, streamState, freshExchangeTimedQuotes,
+                latestFreshExchangeTradeAt, contractDiscoveryVerified, 0, null, 0);
+        }
+    }
 
     @GetMapping("/capability")
     public ResponseEntity<Capability> capability(Authentication auth) {
@@ -104,7 +118,19 @@ public final class CustomerFnoDiscoveryController {
         boolean open = sessionCalendar.isInsideFnoSession(clock.instant());
         var stream = feed.getIfAvailable();
         var liveStatus = feedConfigured && stream != null ? stream.status() : null;
+        // The existing status counter is depth-qualified (PAPER bid+ask).
+        // A valid exchange-timed V3 LTP must remain visible even if there is
+        // no executable two-sided depth. These are distinct capabilities.
         int fresh = open && liveStatus != null ? liveStatus.freshExchangeTimedQuotes() : 0;
+        var display = displayRightsVerified && sourceReady && open &&
+                feedConfigured && stream != null
+            ? stream.eligibleDisplaySnapshot()
+            : List.<UpstoxFnoV3LiveFeedService.DisplayQuote>of();
+        int freshDisplay = display.size();
+        Instant latestDisplayTrade = display.stream()
+            .map(UpstoxFnoV3LiveFeedService.DisplayQuote::exchangeAt)
+            .filter(java.util.Objects::nonNull)
+            .max(Instant::compareTo).orElse(null);
         String status = !displayRightsVerified
                 ? (contractDiscoveryVerified
                     ? "CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED"
@@ -112,7 +138,7 @@ public final class CustomerFnoDiscoveryController {
             : !sourceReady ? "FNO_CONTRACT_SOURCE_UNAVAILABLE"
             : !open ? "MARKET_CLOSED"
             : !feedConfigured || stream == null ? "FNO_V3_FEED_UNAVAILABLE"
-            : fresh > 0 ? "LIVE_QUOTES"
+            : freshDisplay > 0 || fresh > 0 ? "LIVE_QUOTES"
             : "CONNECTED".equals(liveStatus.state())
                  || "CONNECTED_AWAITING_TICKS".equals(liveStatus.state())
                     ? "WAITING_FOR_QUOTES" : "FEED_DISCONNECTED";
@@ -122,7 +148,11 @@ public final class CustomerFnoDiscoveryController {
             displayRightsVerified ? fresh : 0,
             displayRightsVerified && open && fresh > 0
                 ? liveStatus.latestFreshExchangeTradeAt() : null,
-            contractDiscoveryVerified);
+            contractDiscoveryVerified,
+            displayRightsVerified ? freshDisplay : 0,
+            displayRightsVerified ? latestDisplayTrade : null,
+            displayRightsVerified && open && liveStatus != null
+                ? liveStatus.subscriptions() : 0);
     }
 
     @GetMapping("/expiries")

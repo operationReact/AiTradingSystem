@@ -81,6 +81,62 @@ class CustomerFnoDiscoveryOffHoursTest {
     }
 
     @Test
+    void inSessionFreshLtpWithoutDepthIsLiveDisplayNotExecutableCoverage() {
+        when(source.enabled()).thenReturn(true);
+        when(calendar.isInsideFnoSession(any(Instant.class))).thenReturn(true);
+        var socket = mock(UpstoxFnoV3LiveFeedService.class);
+        when(feed.getIfAvailable()).thenReturn(socket);
+        Instant at = Instant.now().minusSeconds(1);
+        when(socket.status()).thenReturn(new UpstoxFnoV3LiveFeedService.Status(
+            "CONNECTED", 64, 52, 5000, 0L,
+            at, at, 0, true, false, false, false, 0, null));
+        when(socket.eligibleDisplaySnapshot()).thenReturn(List.of(
+            new UpstoxFnoV3LiveFeedService.DisplayQuote(
+                CE, new BigDecimal("105.50"), new BigDecimal("104"),
+                5000L, null, null, null, null, null,
+                null, null, at, at)));
+        var env = new MockEnvironment()
+            .withProperty("minttick.upstox-fno.display-rights-verified", "true")
+            .withProperty("minttick.upstox-fno.v3-feed-enabled", "true");
+        var subject = new CustomerFnoDiscoveryController(
+            mock(CustomerIdentityStore.class), source, feed,
+            mock(CustomerFnoExpiryCatalog.class), calendar, env);
+
+        var capability = subject.internalCapability();
+        assertThat(capability.status()).isEqualTo("LIVE_QUOTES");
+        assertThat(capability.freshDisplayQuotes()).isEqualTo(1);
+        assertThat(capability.latestFreshDisplayTradeAt()).isEqualTo(at);
+        assertThat(capability.subscribedInstruments()).isEqualTo(64);
+        // A viewable LTP is NOT a broker/PAPER order-eligible bid/ask.
+        assertThat(capability.freshExchangeTimedQuotes()).isZero();
+        assertThat(capability.latestFreshExchangeTradeAt()).isNull();
+    }
+
+    @Test
+    void deniedDisplayRightsNeverExposeSourceQuoteCountsOrTimes() {
+        when(source.enabled()).thenReturn(true);
+        when(calendar.isInsideFnoSession(any(Instant.class))).thenReturn(true);
+        var socket = mock(UpstoxFnoV3LiveFeedService.class);
+        when(feed.getIfAvailable()).thenReturn(socket);
+        when(socket.status()).thenReturn(new UpstoxFnoV3LiveFeedService.Status(
+            "CONNECTED", 64, 50, 5000, 0L, Instant.now(), Instant.now(),
+            0, true, false, false, false, 12, Instant.now()));
+        var env = new MockEnvironment()
+            .withProperty("minttick.upstox-fno.contract-discovery-verified", "true")
+            .withProperty("minttick.upstox-fno.v3-feed-enabled", "true");
+        var subject = new CustomerFnoDiscoveryController(
+            mock(CustomerIdentityStore.class), source, feed,
+            mock(CustomerFnoExpiryCatalog.class), calendar, env);
+
+        var capability = subject.internalCapability();
+        assertThat(capability.status()).isEqualTo("CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED");
+        assertThat(capability.freshDisplayQuotes()).isZero();
+        assertThat(capability.subscribedInstruments()).isZero();
+        assertThat(capability.latestFreshDisplayTradeAt()).isNull();
+        verify(socket, never()).eligibleDisplaySnapshot();
+    }
+
+    @Test
     void lastTradeLookupPrioritizesNearestSpotInsteadOfLowestStrike() {
         var rows = List.of(
             strike("25100", "61001", "61002"),
