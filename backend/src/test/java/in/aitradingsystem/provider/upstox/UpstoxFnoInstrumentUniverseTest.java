@@ -105,6 +105,25 @@ class UpstoxFnoInstrumentUniverseTest {
     }
 
     @Test
+    void localSymbolSearchCoversIndexAndStockWithoutProviderHttpRequests() throws Exception {
+        var expiry = LocalDate.of(2026, 12, 1);
+        var catalog = parse(json(
+            row("NSE_FO|101", "NSE_INDEX|Nifty 50", "CE", expiry, 65, 26000),
+            row("NSE_FO|102", "NSE_INDEX|Nifty 50", "PE", expiry, 65, 26000),
+            row("NSE_FO|103", "NSE_EQ|INE002A01018", "FUT", expiry, 250, 0)));
+        assertEquals(2, catalog.search("nifty", null, 0, 20).total());
+        assertEquals("NSE_FO|103",
+            catalog.search("reliance", "FUT", 0, 20)
+                .contracts().getFirst().instrumentKey());
+        assertEquals(1, catalog.search("nifty", "CE", 0, 20).total());
+        assertEquals(0, catalog.search("reliance", "CE", 0, 20).total());
+        assertThrows(IllegalArgumentException.class,
+            () -> catalog.search("NIFTY/../", null, 0, 50));
+        assertThrows(IllegalArgumentException.class,
+            () -> catalog.search("NIFTY", null, 0, 101));
+    }
+
+    @Test
     void gzipAndPlainProduceSameCountAndContractKeys() throws Exception {
         byte[] body = json(row("NSE_FO|101", "NSE_INDEX|Nifty 50",
             "FUT", LocalDate.of(2026, 12, 1), 65, 0));
