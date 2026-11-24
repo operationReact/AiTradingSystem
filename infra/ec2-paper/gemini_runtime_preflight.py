@@ -176,7 +176,8 @@ def classify_history_failure(text):
     if "PermissionError:" in text:
         return "FILESYSTEM_PERMISSION_DENIED"
     if "FileNotFoundError:" in text:
-        if '/opt/aitradingsystem-paper/monitor/' in text:
+        if ('/opt/aitradingsystem-paper/monitor/' in text
+                or re.search(r"FileNotFoundError:[^\n]*['\"][0-9]{1,12}\.json['\"](?:\r?\n|$)", text)):
             return "HISTORY_CACHE_FILE_MISSING"
         return "FILESYSTEM_FILE_MISSING"
     return "UNCLASSIFIED_HISTORY_FAILURE"
