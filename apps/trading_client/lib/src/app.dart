@@ -69,6 +69,8 @@ import 'features/trading_rooms/presentation/minttick_home_command_centre.dart';
 import 'features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'features/market_intelligence/data/market_news_repository.dart';
 import 'features/market_intelligence/data/market_event_repository.dart';
+import 'features/market_intelligence/data/news_health_repository.dart';
+import 'features/market_intelligence/presentation/news_health_admin_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
 import 'presentation/backtests_page.dart';
@@ -374,6 +376,9 @@ class _TradingAppState extends State<TradingApp> {
             ),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
+        '/admin/news-pipeline': (_) => NewsHealthAdminPage(
+              repository: HttpNewsHealthRepository(_api),
+            ),
         '/admin/experiments': (_) => ResearchExperimentJobsPage(
               repository: HttpResearchExperimentJobRepository(_api),
             ),
@@ -950,6 +955,7 @@ class _MoreProductSheet extends StatelessWidget {
     ('/risk', Icons.shield_rounded, 'Risk controls', 'Trading limits and safety controls'),
     ('/backtests', Icons.science_rounded, 'Backtests', 'Review strategy simulations'),
     ('/admin/models', Icons.hub_rounded, 'Model control', 'ADMIN model registry and PAPER/SHADOW evidence'),
+    ('/admin/news-pipeline', Icons.article_outlined, 'News pipeline', 'ADMIN source rights, feed and event health'),
     ('/admin/experiments', Icons.science_outlined, 'Experiments', 'Review immutable research specs and queued jobs'),
     ('/admin/model-emergency', Icons.shield_rounded, 'Emergency model controls', 'Reduce model influence with audited confirmation'),
     ('/notifications', Icons.notifications_rounded, 'Notifications', 'Important account and trading updates'),
