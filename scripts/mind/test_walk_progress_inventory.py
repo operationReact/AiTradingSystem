@@ -32,6 +32,20 @@ def make(items_per_page, total, overall_done=None):
     return summary, pages, all_items
 
 
+class SafeFailureTests(unittest.TestCase):
+    def test_http_failure_reports_status_without_private_body(self):
+        from urllib.error import HTTPError
+        error = HTTPError("https://private.example/path", 502, "bad gateway", {}, None)
+        self.assertEqual("HTTP_502", w.safe_failure_code(error))
+        self.assertNotIn("private", w.safe_failure_code(error))
+
+    def test_json_and_timeout_failures_are_classified(self):
+        import json
+        self.assertEqual("JSON_PARSE_ERROR_LINE_1_COLUMN_1",
+                         w.safe_failure_code(json.JSONDecodeError("x", "x", 0)))
+        self.assertEqual("TIMEOUT", w.safe_failure_code(TimeoutError()))
+
+
 class WalkTests(unittest.TestCase):
     def test_full_walk_passes_and_reconciles(self):
         summary, pages, _ = make(50, 313)

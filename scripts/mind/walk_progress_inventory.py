@@ -25,8 +25,34 @@ MAX_PAGES = 400
 DETAIL_TIMEOUT = 20
 
 
+def progress(*args, **kwargs):
+    """Flush each sanitized stage marker even when a later request fails."""
+    kwargs.setdefault("flush", True)
+    print(*args, **kwargs)
+
+
 class WalkError(Exception):
     pass
+
+
+def safe_failure_code(error):
+    """Return a bounded cause code without including URLs, bodies, headers or tokens."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP_{error.code}" if 100 <= error.code <= 599 else "HTTP_ERROR"
+    if isinstance(error, urllib.error.URLError):
+        reason = error.reason
+        if isinstance(reason, TimeoutError):
+            return "URL_TIMEOUT"
+        if isinstance(reason, OSError) and type(reason.errno) is int:
+            return f"URL_OS_ERROR_{reason.errno}"
+        return "URL_ERROR"
+    if isinstance(error, json.JSONDecodeError):
+        return f"JSON_PARSE_ERROR_LINE_{error.lineno}_COLUMN_{error.colno}"
+    if isinstance(error, (TimeoutError,)):
+        return "TIMEOUT"
+    if isinstance(error, OSError) and type(error.errno) is int:
+        return f"OS_ERROR_{error.errno}"
+    return "UNEXPECTED_" + type(error).__name__
 
 
 def percent_done(done, total):
@@ -169,8 +195,8 @@ def walk(base, token, expected_total=None):
     if status != 200 or len(body) >= EDGE_CAP:
         raise WalkError(f"summary failed or too large (status {status})")
     summary = json.loads(body)
-    print(f"summary bytes={len(body)}")
-    print(f"backendRevision={summary.get('backendRevision')} revisionKnown={summary.get('revisionKnown')} "
+    progress(f"summary bytes={len(body)}")
+    progress(f"backendRevision={summary.get('backendRevision')} revisionKnown={summary.get('revisionKnown')} "
           f"manifestVersion={summary.get('manifestVersion')}")
     overall = verify_summary(summary)
     if expected_total is not None and overall["total"] != expected_total:
@@ -185,7 +211,7 @@ def walk(base, token, expected_total=None):
             raise WalkError(f"inventory page at offset {offset} returned {status}")
         page = json.loads(body)
         pages.append((len(body), page))
-        print(f"page offset={offset} items={len(page.get('items', []))} bytes={len(body)}")
+        progress(f"page offset={offset} items={len(page.get('items', []))} bytes={len(body)}")
         if page.get("nextOffset") is None:
             break
         offset = page["nextOffset"]
@@ -195,12 +221,12 @@ def walk(base, token, expected_total=None):
     items = verify_pages(pages, summary, overall)
     counts = verify_percentages(items, overall)
     layer_result = verify_layers(items, overall)
-    print("layers " + " ".join(f"{k}={v}/{len(items)}" for k, v in layer_result.items()))
-    print(f"walked items={len(items)} summary_total={overall['total']} pages={len(pages)}")
-    print(f"counts done={counts['done']} pending={counts['pending']} blocked={counts['blocked']} "
+    progress("layers " + " ".join(f"{k}={v}/{len(items)}" for k, v in layer_result.items()))
+    progress(f"walked items={len(items)} summary_total={overall['total']} pages={len(pages)}")
+    progress(f"counts done={counts['done']} pending={counts['pending']} blocked={counts['blocked']} "
           f"percentDone={counts['percentDone']}")
     max_page = max(size for size, _ in pages)
-    print(f"largest_page_bytes={max_page} cap={EDGE_CAP}")
+    progress(f"largest_page_bytes={max_page} cap={EDGE_CAP}")
 
     for item_id in detail_sample(items):
         path = "/api/customer/mind/v1/progress/items/" + urllib_quote(item_id)
@@ -210,7 +236,7 @@ def walk(base, token, expected_total=None):
         detail = json.loads(body)
         if not isinstance(detail.get("item"), dict) or detail["item"].get("id") != item_id:
             raise WalkError("item detail does not match requested id")
-        print(f"detail ok bytes={len(body)}")
+        progress(f"detail ok bytes={len(body)}")
     return {"total": overall["total"], "pages": len(pages), "items": len(items)}
 
 
@@ -221,7 +247,7 @@ def urllib_quote(value):
 
 def main(argv):
     if len(argv) not in (3, 4):
-        print("WALK_FAILED: BAD_ARGUMENTS", file=sys.stderr)
+        progress("WALK_FAILED: BAD_ARGUMENTS", file=sys.stderr)
         return 2
     base = argv[1].rstrip("/")
     with open(argv[2]) as fh:
@@ -230,12 +256,12 @@ def main(argv):
     try:
         result = walk(base, token, expected)
     except WalkError as err:
-        print("WALK_FAILED: " + str(err), file=sys.stderr)
+        progress("WALK_FAILED: " + str(err), file=sys.stderr)
         return 1
-    except Exception:
-        print("WALK_FAILED: TRANSPORT_OR_PARSE_ERROR", file=sys.stderr)
+    except Exception as err:
+        progress("WALK_FAILED: " + safe_failure_code(err), file=sys.stderr)
         return 1
-    print(f"WALK_PASSED: {result['items']} items in {result['pages']} pages")
+    progress(f"WALK_PASSED: {result['items']} items in {result['pages']} pages")
     return 0
 
 
