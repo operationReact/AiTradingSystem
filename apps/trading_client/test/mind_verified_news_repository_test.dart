@@ -82,10 +82,10 @@ void main() {
     expect(() => MindVerifiedNewsEvidence.fromJson(
       verified()..['verifiedListingId'] = null,
     ), throwsFormatException);
-    final late = verified();
-    ((late['evidence'] as List).single as Map)['mappingFirstKnownAt'] =
+    final futureKnown = verified();
+    ((futureKnown['evidence'] as List).single as Map)['mappingFirstKnownAt'] =
         '2026-11-24T08:11:00Z';
-    expect(() => MindVerifiedNewsEvidence.fromJson(late), throwsFormatException);
+    expect(() => MindVerifiedNewsEvidence.fromJson(futureKnown), throwsFormatException);
     final unsafe = verified();
     ((unsafe['evidence'] as List).single as Map)['originalUrl'] =
         'javascript:alert(1)';
