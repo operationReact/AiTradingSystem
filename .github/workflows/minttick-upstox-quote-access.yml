@@ -45,6 +45,10 @@ jobs:
                             'UPDATE customer_', 'DELETE FROM',
                             'TRADING_MODE=LIVE', 'print(token)', 'print(result.stdout)'):
               assert forbidden not in s, forbidden
+          workflow=Path('.github/workflows/minttick-upstox-quote-access.yml').read_text()
+          assert "issues: " + "write" not in workflow
+          assert "github." + "token" not in workflow
+          assert "Post only safe authorization " + "result to recovery issue" not in workflow
           PY
 
   probe:
@@ -55,7 +59,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      issues: write
     env:
       AWS_REGION: ap-south-1
     steps:
@@ -87,16 +90,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 infra/ec2-paper/upstox_quote_access_probe.py runner > "$RUNNER_TEMP/upstox-quote-audit.txt" 2>&1
-      - name: Post only safe authorization result to recovery issue
-        if: ${{ always() && github.event_name == 'push' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          GH_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          python3 infra/ec2-paper/upstox_quote_access_probe.py issue "$RUNNER_TEMP/upstox-quote-audit.txt"
+          python3 infra/ec2-paper/upstox_quote_access_probe.py runner \
+            | tee "$RUNNER_TEMP/upstox-quote-audit.txt"
+      - name: Retain sanitized quote authorization receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstox-quote-readonly
+          path: "$RUNNER_TEMP/upstox-quote-audit.txt"
+          if-no-files-found: ignore
+          retention-days: 14
 
 # No quotes, credentials, historical data, trading rights, EC2 resources,
 # workloads or broker orders are persisted or changed by this workflow.
