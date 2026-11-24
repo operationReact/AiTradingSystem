@@ -25,6 +25,10 @@ import java.util.Objects;
 public final class FnoFuturesMomentumV1 {
     public static final String STRATEGY_ID = "strategy.STR-176";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    // NSE F&O circular 07/2026 (NSE/FAOP/72352): Sunday Budget
+    // session, 2026-02-01, 09:15–15:30 IST. Still requires sessionVerified
+    // and genuine OHLCV/OI availability; never allow arbitrary weekends.
+    private static final LocalDate VERIFIED_BUDGET_SESSION = LocalDate.of(2026, 2, 1);
     private static final LocalDate AUGUST_CLOSE_CHANGE = LocalDate.of(2026, 8, 3);
     private static final LocalDate DECEMBER_CLOSE_CHANGE = LocalDate.of(2026, 12, 7);
     private static final Duration MAX_FIRST_SEEN_LAG = Duration.ofHours(36);
@@ -211,7 +215,8 @@ public final class FnoFuturesMomentumV1 {
     private static boolean validBar(CompletedSession bar, Contract contract, Instant asOf) {
         if (bar == null || !bar.sessionVerified() || !bar.ohlcvVerified()
                 || bar.exchangeDate() == null
-                || bar.exchangeDate().getDayOfWeek().getValue() > 5
+                || (bar.exchangeDate().getDayOfWeek().getValue() > 5
+                    && !VERIFIED_BUDGET_SESSION.equals(bar.exchangeDate()))
                 || bar.exchangeDate().isBefore(contract.listedFrom())
                 || bar.exchangeDate().isAfter(contract.expiry())
                 || !contract.instrumentKey().equals(bar.instrumentKey())
