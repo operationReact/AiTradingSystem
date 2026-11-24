@@ -6,10 +6,14 @@ import '../data/operations_evidence_repository.dart';
 enum OperationsEvidenceSection { news, notifications, audit, settings }
 
 class OperationsEvidencePage extends StatefulWidget {
-  const OperationsEvidencePage({required this.repository, required this.section, super.key});
+  const OperationsEvidencePage({
+    required this.repository, required this.section, this.onOpenNewsHealth,
+    super.key,
+  });
 
   final OperationsEvidenceRepository repository;
   final OperationsEvidenceSection section;
+  final VoidCallback? onOpenNewsHealth;
 
   @override
   State<OperationsEvidencePage> createState() => _OperationsEvidencePageState();
@@ -58,7 +62,19 @@ class _OperationsEvidencePageState extends State<OperationsEvidencePage> {
   Widget build(BuildContext context) {
     final snapshot=_snapshot;
     return Scaffold(
-      appBar: AppBar(title: Text(_title(widget.section))),
+      appBar: AppBar(
+        title: Text(_title(widget.section)),
+        actions: [
+          if (widget.section == OperationsEvidenceSection.news &&
+              widget.onOpenNewsHealth != null)
+            IconButton(
+              key: const ValueKey('news-admin-health-open'),
+              icon: const Icon(Icons.monitor_heart_outlined),
+              tooltip: 'News pipeline health (admin)',
+              onPressed: widget.onOpenNewsHealth,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh:_refresh,

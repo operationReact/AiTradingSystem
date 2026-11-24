@@ -68,6 +68,8 @@ import 'features/trading_rooms/presentation/minttick_home_activity_page.dart';
 import 'features/trading_rooms/presentation/minttick_home_command_centre.dart';
 import 'features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'features/market_intelligence/data/market_news_repository.dart';
+import 'features/market_intelligence/data/news_admin_health_repository.dart';
+import 'features/market_intelligence/presentation/news_admin_health_page.dart';
 import 'features/market_intelligence/data/market_event_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
@@ -348,7 +350,16 @@ class _TradingAppState extends State<TradingApp> {
             ),
         '/risk': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/approvals': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
-        '/news': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.news),
+        '/news': (_) => OperationsEvidencePage(
+          repository: _operationsEvidence,
+          section: OperationsEvidenceSection.news,
+          onOpenNewsHealth: () => _navigate('/admin/news-health'),
+        ),
+        '/admin/news-health': (_) => widget.session.isCustomerAuthenticated
+          ? _overviewPage()
+          : NewsAdminHealthPage(
+              repository: HttpNewsAdminHealthRepository(_api),
+            ),
         '/notifications': (_) => widget.session.isCustomerAuthenticated ? _customerState('Notifications') : OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
         '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
         '/history-monitor': (_) => widget.session.isCustomerAuthenticated
