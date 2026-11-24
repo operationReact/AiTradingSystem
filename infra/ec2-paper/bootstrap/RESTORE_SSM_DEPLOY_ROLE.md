@@ -23,8 +23,9 @@ Do not re-use or replace the historical CloudFormation bootstrap stack.
 3. **If role exists:** DO NOT create a duplicate stack. Inspect IAM trust for
    GitHub OIDC subject
    `repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev`
-   with audience `sts.amazonaws.com`. Restore the exact role's narrowly scoped
-   policy and trust under the existing owner; do not wildcard the subject.
+   with audience `sts.amazonaws.com`. The updated trust must contain only the exact
+   `dev` and `main` branch subjects plus that audience. Restore the exact role's
+   narrowly scoped policy and trust under the existing owner; do not wildcard the subject.
 4. After the new role exists, start a **fresh read-only** SSM readiness request
    through `.github/workflows/ec2-paper-ssm-readiness.yml` (a new single-file
    `infra/ec2-paper/requests/ssm-preflight.json` commit to `dev`).

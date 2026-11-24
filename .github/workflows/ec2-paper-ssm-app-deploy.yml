@@ -2,7 +2,7 @@ name: PAPER EC2 - deploy Java PostgreSQL Flutter over SSM (no public ports)
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
     paths:
       - 'infra/ec2-paper/requests/ssm-release.json'
 
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     env:
@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
-          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$GITHUB_REF" = "refs/heads/main"
           test "$AWS_REGION" = "ap-south-1"
           test "$INSTANCE_ID" = "i-09c01b470fb39b85a"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
@@ -132,7 +132,7 @@ jobs:
           docker compose -f infra/ec2-paper/paper-compose.yml config --quiet
           echo 'Verified offline exact SHA ARM64 images; package has no runtime secrets'
 
-      - name: Assume separate dev-only one-host SSM delivery role
+      - name: Assume one-host PAPER SSM delivery role for main releases
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
