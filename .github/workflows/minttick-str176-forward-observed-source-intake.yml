@@ -1,0 +1,79 @@
+name: MintTick STR-176 forward-observed V102 ingestion safety (NO ORDERS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-forward-observed-source-intake.yml'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestor.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorTest.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorIT.java'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-forward-observed-source-intake.yml'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestor.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorTest.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorIT.java'
+
+permissions:
+  contents: read
+
+jobs:
+  original-source-intake:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run original-bytes, rights, no-lookahead and no-trade unit tests
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno176OriginalObservedIngestorTest,FnoVerifiedCompletedOhlcvOiStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.marketdata.Fno176OriginalObservedIngestorTest.xml
+      - name: Static no-retroactive-publication, no-credential and no-order gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('backend/src/main/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestor.java')
+          s=p.read_text()
+          for required in ('clock_timestamp() AS accepted_at',
+                           'observed.accepted_at, observed.accepted_at',
+                           'r.receipt_status = \'VERIFIED\'',
+                           'revoked.receipt_status = \'REVOKED\'',
+                           'RAW_RETENTION', 'MODEL_INFERENCE',
+                           'nse_fo_completed_ohlcv', 'nse_fo_final_oi',
+                           'nse_fo_trading_calendar',
+                           'IndependentlyVerifiedSource',
+                           'independentHistoricalE2ECertified',
+                           'false, false, false'):
+              assert required in s,required
+          for forbidden in ('@RestController', '@Component', '@Service',
+                            '@Scheduled', '@PostMapping', 'placeOrder',
+                            'submitOrder', 'get-parameter',
+                            'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED',
+                            'market_candle', 'fno_closing_snapshot'):
+              # Two prohibited operational sources may appear only in a comment.
+              if forbidden in ('market_candle','fno_closing_snapshot'):
+                  assert forbidden not in s.split('private static final String INSERT =')[1],forbidden
+              else:
+                  assert forbidden not in s,forbidden
+          PY
+      - name: Historical certification is NOT advanced by ingestion fixtures
+        if: always()
+        run: |
+          echo 'STR-176 original source sink boundary only. No licensed provider adapter, genuine upstream source receipts, after-cost OOS or independent E2E acceptance.'
+          echo 'Runner-local PostgreSQL full integration tests execute through phase0-validation.yml; certified 0/43.'
