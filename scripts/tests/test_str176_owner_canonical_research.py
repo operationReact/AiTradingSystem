@@ -150,6 +150,45 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         self.assertIsInstance(out["oosNetPaise"],int)
         self.assertGreaterEqual(out["oosMaxDrawdownPaise"],0)
 
+    def test_precise_validation_codes_do_not_change_signal_thresholds(self):
+        expiry=date(2026,12,24)
+        dates=weekdays(date(2026,12,15),9)
+        prices=[100,101,102,103,104,105,111,113,109]
+        rows=[sample(d,p,50000 if i>=4 else 30000,130000)
+              for i,(d,p) in enumerate(zip(dates,prices))]
+        signal=replay.momentum(rows[:7],expiry,dates[7])
+        detailed=replay.momentum(rows[:7],expiry,dates[7],details=True)
+        self.assertEqual(signal,detailed[0])
+        self.assertEqual(("LONG","UPWARD_BREAKOUT"),detailed)
+        reasons=[
+            ([], "INVALID_WINDOW_SESSIONS"),
+            ([(r[0],*r[1:6],0,r[7]) for r in rows[:7]],
+             "MISSING_VOLUME_OR_OI"),
+            (rows[:7], "EXPIRY_OUT_OF_SCOPE")
+        ]
+        for window,code in reasons:
+            as_of=dates[7] if code!="EXPIRY_OUT_OF_SCOPE" else date(2026,12,20)
+            self.assertEqual(("BLOCKED",code),
+                             replay.momentum(window,expiry,as_of,details=True))
+        cold=[sample(d,100,40000,100000) for d in dates[:7]]
+        self.assertEqual(("NO_SIGNAL","VOLUME_OR_OI_PARTICIPATION_LOW"),
+            replay.momentum(cold,expiry,dates[7],details=True))
+
+    def test_private_receipt_rejects_invalid_diagnostic_totals_or_codes(self):
+        keys=self.valid_source_cache()
+        receipt=replay.run_research(
+            root=self.root,now=NOW,fetch=self.future_metadata(keys))
+        replay.safe_receipt(receipt)
+        forged=dict(receipt)
+        forged["diagnosticReasons"]={"EXPIRY_OUT_OF_SCOPE": 75}
+        with self.assertRaisesRegex(ValueError,"STR176_PRIVATE_RECEIPT_INVALID"):
+            replay.safe_receipt(forged)
+        forged=dict(receipt)
+        forged["diagnosticReasons"]={"UNVERIFIED_UNSAFE_REASON":
+            receipt["decisionWindows"]}
+        with self.assertRaisesRegex(ValueError,"STR176_PRIVATE_RECEIPT_INVALID"):
+            replay.safe_receipt(forged)
+
     def test_fake_identity_and_false_certification_receipt_are_blocked(self):
         self.assertEqual("BLOCKED",replay.momentum([],date(2026,12,24),
                           date(2026,12,14)))
