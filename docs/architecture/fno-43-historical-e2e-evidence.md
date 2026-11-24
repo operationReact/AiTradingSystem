@@ -744,3 +744,29 @@ with no Flutter change, V102 promotion, PAPER orders or LIVE activation.
 Actual clean-cohort coverage and OOS results require the subsequent host run;
 network-free regression fixtures do not establish certification. Independent
 historical certification remains 0/43.
+
+
+## Real 90-day evaluation after whole-cohort quarantine
+
+[Owner-host run 45395850309](https://github.com/operationReact/AiTradingSystem/actions/runs/45395850309),
+release request `f7c4feef01a74e492854d0149b9ea9f728b63a0e`, executed
+49 authenticated GETs: 13 discovery/metadata and 36 original history.
+It observed 8 eligible of 12 cohorts, 483 clean source bars, 4 quarantined
+cohorts, 6 rejected chunks (3 noncanonical daily times, 3 generic invalid
+sessions). Research evaluated 340 of 370 windows; 30 blocked, 49 earlier
+calendar-overlapping OOS windows purged. Three modeled training trades
+lost 3,264,399 paise after the fixed 30bps friction assumption. Zero OOS
+trades means zero OOS net/drawdown are NOT evidence of profitability or
+risk. Original first-publication availability was false, state was
+SOURCE_FUTURES_COHORTS_INCOMPLETE, certification 0/43, orders/writes false.
+
+The follow-up separates malformed timestamp, wrong/missing IST offset and
+unverified weekend-session blocks. A weekend label remains unverified,
+not a claim the exchange could never have held a special session; official
+calendar/source reconciliation is needed before accepting it. No row is
+reinterpreted. It also reports reconciled BLOCKED/NO_SIGNAL/LONG/SHORT
+window counts separately for training and OOS, after calendar purge and
+before overlap skipping. This distinguishes zero OOS opportunity from
+missing/blocked OOS source without tuning thresholds or manufacturing fills.
+These new breakdown fields still require a subsequent genuine host receipt;
+the observed run above used the earlier generic invalid-session reason.

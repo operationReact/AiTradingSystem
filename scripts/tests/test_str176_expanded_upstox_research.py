@@ -317,6 +317,39 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"MISSING_OR_AMBIGUOUS"):
             m.chosen_future(rows+[other],expiry,"NSE_INDEX|Nifty 50")
 
+    def test_malformed_offset_and_unverified_weekend_are_distinct(self):
+        cases=[(None,"HISTORICAL_TIMESTAMP_MALFORMED"),
+               ("private-invalid-time","HISTORICAL_TIMESTAMP_MALFORMED"),
+               ("2026-10-02T00:00:00","HISTORICAL_TIMESTAMP_OFFSET_INVALID"),
+               ("2026-10-02T00:00:00+00:00","HISTORICAL_TIMESTAMP_OFFSET_INVALID"),
+               ("2026-10-03T00:00:00+05:30","HISTORICAL_WEEKEND_SESSION_UNVERIFIED")]
+        for stamp,code in cases:
+            with self.subTest(code=code,stamp=stamp):
+                with self.assertRaisesRegex(ValueError,"^"+code+"$"):
+                    m.decode_expired_chunk({"candles":[[stamp,100,102,99,101,5,10]]},
+                                          date(2026,10,1),date(2026,10,30))
+                self.assertIn(code,m.QUARANTINE_CODES)
+                self.assertEqual(code,m.safe_block_code(ValueError(code)))
+
+    def test_split_outcomes_reconcile_and_cannot_forge_oos_activity(self):
+        p=FakeAuthenticatedUpstox()
+        report=m.safe_receipt(m.research(p.get,date(2026,11,24)))
+        splits=report["windowOutcomesBySplit"]
+        self.assertGreater(sum(splits["training"].values()),0)
+        self.assertGreater(sum(splits["outOfSample"].values()),0)
+        self.assertEqual(report["decisionWindows"],
+                         sum(sum(v.values()) for v in splits.values()))
+        from copy import deepcopy
+        for split,key in (("training","BLOCKED"),("outOfSample","NO_SIGNAL")):
+            forged=deepcopy(report)
+            forged["windowOutcomesBySplit"][split][key]+=1
+            with self.assertRaisesRegex(ValueError,"UNVERIFIED_EXTENDED_RESEARCH_RECEIPT"):
+                m.safe_receipt(forged)
+        for forged_outcomes in ({}, {"private-key":0},
+                                {"training":{"BLOCKED":True},"outOfSample":{}}):
+            with self.assertRaises(ValueError):
+                m.safe_receipt({**report,"windowOutcomesBySplit":forged_outcomes})
+
     def test_missing_one_expiry_never_reports_fully_qualified(self):
         p=FakeAuthenticatedUpstox(empty=months()[5])
         r=m.safe_receipt(m.research(p.get,date(2026,11,24)))
