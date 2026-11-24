@@ -101,7 +101,7 @@ class CustomerNewsEventDetailControllerIT extends AbstractPostgresIT {
                 """, eventId, version, receiptId, Timestamp.from(observed));
     }
 
-    private JsonNode get(UUID eventId) throws Exception {
+    private JsonNode loadEvent(UUID eventId) throws Exception {
         String json = mvc.perform(get(PREFIX + eventId).with(customer()))
             .andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
@@ -111,7 +111,7 @@ class CustomerNewsEventDetailControllerIT extends AbstractPostgresIT {
     @Test
     void customerGetsVersionedCorrectionsAndTwoOriginalPublisherEvidenceLinks() throws Exception {
         Fixture f = fixture(true, false);
-        JsonNode body = get(f.eventId());
+        JsonNode body = loadEvent(f.eventId());
 
         assertThat(body.path("eventId").asText()).isEqualTo(f.eventId().toString());
         assertThat(body.path("currentVersion").asInt()).isEqualTo(2);
@@ -132,7 +132,7 @@ class CustomerNewsEventDetailControllerIT extends AbstractPostgresIT {
     @Test
     void revokingCurrentCorrectionEvidenceMakesWholeEventUnavailable() throws Exception {
         Fixture f = fixture(true, false);
-        assertThat(get(f.eventId()).path("versions").size()).isEqualTo(2);
+        assertThat(loadEvent(f.eventId()).path("versions").size()).isEqualTo(2);
         client.sql("UPDATE news_source_policy SET license_state='REVOKED' WHERE source_id=:source")
             .param("source", f.secondSource()).update();
         mvc.perform(get(PREFIX + f.eventId()).with(customer()))
@@ -154,6 +154,6 @@ class CustomerNewsEventDetailControllerIT extends AbstractPostgresIT {
             .andExpect(status().isForbidden());
         mvc.perform(get(PREFIX + UUID.randomUUID()).with(customer()))
             .andExpect(status().isNotFound());
-        assertThat(get(f.eventId()).path("versions").size()).isEqualTo(1);
+        assertThat(loadEvent(f.eventId()).path("versions").size()).isEqualTo(1);
     }
 }
