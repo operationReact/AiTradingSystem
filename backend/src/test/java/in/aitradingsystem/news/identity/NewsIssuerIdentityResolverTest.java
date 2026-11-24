@@ -79,8 +79,7 @@ class NewsIssuerIdentityResolverTest {
     @Test
     void overlappingIssuerAliasesStayAmbiguousInsteadOfPickingFirst() {
         var a = current(Exchange.NSE, "issuer-a", "IN0000000005", "AAA", "Alpha Finance", "GROUP");
-        var b = current(Exchange.NSE, "issuer-b", "IN000000000000", "BBB", "Beta Finance", "GROUP");
-        // The second synthetic ISIN must have exactly 12 alphanumerics.
+        var b = current(Exchange.NSE, "issuer-b", "IN0000000007", "BBB", "Beta Finance", "GROUP");
         var result = NewsIssuerIdentityResolver.resolve("GROUP", Exchange.NSE, TODAY, NOW, List.of(a, b));
         assertThat(result.status()).isEqualTo(Status.AMBIGUOUS);
         assertThat(result.issuerKeys()).containsExactly("issuer-a", "issuer-b");
