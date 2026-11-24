@@ -2,7 +2,9 @@
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 import urllib.error
@@ -14,6 +16,21 @@ SPEC.loader.exec_module(probe)
 
 
 class GeminiRuntimePreflightTest(unittest.TestCase):
+    def test_installer_file_requirements_distinguish_missing_mode_owner_and_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'collector.py'
+            self.assertEqual('MISSING', probe.file_status(path, 0o600, os.geteuid()))
+            path.write_text('fixture')
+            path.chmod(0o600)
+            self.assertEqual('OK', probe.file_status(path, 0o600, os.geteuid()))
+            self.assertEqual('WRONG_OWNER', probe.file_status(path, 0o600, os.geteuid() + 1))
+            path.chmod(0o700)
+            self.assertEqual('WRONG_MODE', probe.file_status(path, 0o600, os.geteuid()))
+            self.assertEqual('OK', probe.file_status(path, 0o700, os.geteuid()))
+            link = Path(tmp) / 'link'
+            link.symlink_to(path)
+            self.assertEqual('SYMLINK', probe.file_status(link, 0o700, os.geteuid()))
+
     def test_history_failure_exports_only_allowlisted_code_from_relevant_stage(self):
         raw = ('Traceback fixture-private-path\n'
                'owner_history_progress.ProgressUnavailable: DUPLICATE_ARCHIVE_SESSION\n'

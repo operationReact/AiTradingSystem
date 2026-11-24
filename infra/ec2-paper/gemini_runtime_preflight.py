@@ -38,6 +38,10 @@ HISTORY_FAILURES = {
     "INVALID_CHART_ROW", "INVALID_CHART_IDENTITY_OR_LIMIT", "OVERSIZE_CHART",
     "OVERSIZE_MONTHLY_CHART", "INVALID_CHART_TOKEN", "INVALID_MONTHLY_TOKEN",
 }
+COLLECTOR_FILES = {"authProbe": ("probe_owner_angelone_auth.py", 0o600),
+                   "collector": ("owner_personal_angelone_history.py", 0o600),
+                   "launcher": ("run_owner_personal_history.sh", 0o700)}
+FILE_STATUSES = {"NOT_OBSERVED", "OK", "MISSING", "SYMLINK", "WRONG_OWNER", "WRONG_MODE", "UNREADABLE"}
 BOOL_FIELDS = ("geminiKeyEnvironmentPresent", "geminiModelEnvironmentPresent",
                "operatorKeyEnvironmentPresent", "hostSettingsReadable", "providerCallAttempted",
                "runtimeConnectivityVerified")
@@ -52,6 +56,7 @@ def expected_request():
 def report(status="INSPECTED", **fields):
     result = {"status": status, "deployedSha": None, "selectedProviderEnvironment": "UNKNOWN",
               "lastHistoryPrecheckFailure": "NOT_OBSERVED",
+              "historyCollectorPrerequisites": dict.fromkeys(COLLECTOR_FILES, "NOT_OBSERVED"),
               "hostGeminiKeyPresent": None, "hostSelectedProviderEnvironment": "UNKNOWN",
               "adminHealthHttpStatus": None, **dict.fromkeys(BOOL_FIELDS, False)}
     result.update(fields)
@@ -60,7 +65,8 @@ def report(status="INSPECTED", **fields):
 
 def validate_report(value):
     keys = {"status", "deployedSha", "selectedProviderEnvironment", "adminHealthHttpStatus",
-            "hostGeminiKeyPresent", "hostSelectedProviderEnvironment", "lastHistoryPrecheckFailure", *BOOL_FIELDS}
+            "hostGeminiKeyPresent", "hostSelectedProviderEnvironment", "lastHistoryPrecheckFailure",
+            "historyCollectorPrerequisites", *BOOL_FIELDS}
     if not isinstance(value, dict) or set(value) != keys or value["status"] not in STATUSES:
         raise ValueError("INVALID_PREFLIGHT_REPORT")
     if value["deployedSha"] is not None and (not isinstance(value["deployedSha"], str)
@@ -72,6 +78,9 @@ def validate_report(value):
         raise ValueError("INVALID_HOST_PROVIDER")
     if value["lastHistoryPrecheckFailure"] not in HISTORY_FAILURES:
         raise ValueError("INVALID_HISTORY_FAILURE")
+    files = value["historyCollectorPrerequisites"]
+    if not isinstance(files, dict) or set(files) != set(COLLECTOR_FILES) or any(v not in FILE_STATUSES for v in files.values()):
+        raise ValueError("INVALID_COLLECTOR_METADATA")
     present = value["hostGeminiKeyPresent"]
     if present is not None and type(present) is not bool:
         raise ValueError("INVALID_HOST_PRESENCE")
@@ -155,6 +164,25 @@ def classify_history_failure(text):
     return match.group(1) if match and match.group(1) in HISTORY_FAILURES else "UNCLASSIFIED_HISTORY_FAILURE"
 
 
+def file_status(path, mode, owner=0):
+    try:
+        if path.is_symlink():
+            return "SYMLINK"
+        if not path.is_file():
+            return "MISSING"
+        info = path.stat()
+        if info.st_uid != owner:
+            return "WRONG_OWNER"
+        return "OK" if info.st_mode & 0o7777 == mode else "WRONG_MODE"
+    except OSError:
+        return "UNREADABLE"
+
+
+def collector_metadata():
+    root = Path("/opt/aitradingsystem-paper")
+    return {key: file_status(root / name, mode) for key, (name, mode) in COLLECTOR_FILES.items()}
+
+
 def history_precheck_failure():
     # Read only recent SSM deployment stderr on this exact host. Never return
     # a log line, path, traceback, archive content or arbitrary exception text.
@@ -213,6 +241,7 @@ def host():
         result = summarize_config(config)
         result.update(host_settings())
         result["lastHistoryPrecheckFailure"] = history_precheck_failure()
+        result["historyCollectorPrerequisites"] = collector_metadata()
         key = next((row.split("=", 1)[1] for row in config["Env"] if row.startswith("APP_API_KEY=")), "")
         result["adminHealthHttpStatus"] = admin_health_status(
             key, urllib.request.build_opener(NoRedirect()))
