@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -42,6 +41,10 @@ public class NewsBseSecurityEvidenceService {
     public Coverage asOf(Instant decisionAt) {
         Objects.requireNonNull(decisionAt, "decisionAt");
         Snapshot snapshot = candidates.asOf(decisionAt);
+        if (snapshot.bseCount() == 0) {
+            return new Coverage(snapshot.catalogueVersion(), snapshot.sourceAvailableAt(),
+                0, 0, 0, "NO_BSE_CANDIDATES", null, null, List.of());
+        }
         LocalDate decisionDate = decisionAt.atZone(IST).toLocalDate();
         List<SourceSecurity> sources = official.latestAvailableAt(decisionAt, decisionDate);
         if (sources.size() > NewsBseSecurityEvidenceRepository.MAX_SOURCE_ROWS) {
