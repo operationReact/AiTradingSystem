@@ -32,7 +32,7 @@ jobs:
           s=Path('infra/ec2-paper/str176_owner_canonical_research.py').read_text()
           for x in ('?mode=ro','PRAGMA query_only=ON',
                     'COST_BPS=30', 'historicalStrategyE2ECertified',
-                    'providerFirstPublishedAtVerified', 'original', 
+                    'providerFirstPublishedAtVerified', 'OWNER_END', 
                     'SOURCE_FUTURES_COHORTS_INCOMPLETE',
                     'SIMULATED_OPENS_AND_UNVERIFIED_ORIGINAL_PUBLICATION'):
               assert x in s,x
