@@ -2,6 +2,9 @@ package in.aitradingsystem.news;
 
 import in.aitradingsystem.common.PageResponse;
 import java.time.Instant;
+import java.time.Duration;
+import java.sql.Timestamp;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -47,15 +50,46 @@ public class NewsEventReadRepository {
     }
 
     public PageResponse<EventCard> events(int page, int size, String sourceId) {
+        return events(page, size, sourceId, null, null, 0);
+    }
+
+    /**
+     * All filters apply after current publisher DISPLAY rights and known-at checks.
+     * A blank query does not enable fuzzy issuer mapping or stock inference.
+     */
+    public PageResponse<EventCard> events(
+        int page, int size, String sourceId, String category, String headlineQuery, int windowDays) {
         if (page < 0 || page > 200 || size < 1 || size > 50
-            || (sourceId != null && sourceId.length() > 80)) {
+            || (sourceId != null && sourceId.length() > 80)
+            || (category != null && category.length() > 40)
+            || (headlineQuery != null && headlineQuery.length() > 100)
+            || (windowDays != 0 && windowDays != 1 && windowDays != 7 && windowDays != 30)) {
             throw new IllegalArgumentException("Invalid bounded news event query");
         }
-        String sourceFilter = sourceId == null || sourceId.isBlank()
-            ? "" : " AND src.source_id = ? ";
+        StringBuilder filters = new StringBuilder();
         List<Object> args = new ArrayList<>();
-        if (!sourceFilter.isEmpty()) args.add(sourceId.trim());
-        Long count = jdbc.queryForObject("SELECT count(*) " + FROM + sourceFilter,
+        if (sourceId != null && !sourceId.isBlank()) {
+            filters.append(" AND src.source_id = ? ");
+            args.add(sourceId.trim());
+        }
+        if (category != null && !category.isBlank()) {
+            filters.append(" AND v.category = ? ");
+            args.add(category.trim().toUpperCase(Locale.ROOT));
+        }
+        if (headlineQuery != null && !headlineQuery.isBlank()) {
+            // Escape SQL LIKE metacharacters: "%" and "_" in a user query are
+            // literal headline text, not unbounded wildcards or SQL fragments.
+            String query = headlineQuery.strip().toLowerCase(Locale.ROOT)
+                .replace("#", "##").replace("%", "#%").replace("_", "#_");
+            filters.append(" AND LOWER(src.title) LIKE ? ESCAPE '#' ");
+            args.add("%" + query + "%");
+        }
+        if (windowDays > 0) {
+            filters.append(" AND e.first_seen_at >= ? ");
+            args.add(Timestamp.from(Instant.now().minus(Duration.ofDays(windowDays))));
+        }
+        String filterSql = filters.toString();
+        Long count = jdbc.queryForObject("SELECT count(*) " + FROM + filterSql,
             Long.class, args.toArray());
         List<Object> pageArgs = new ArrayList<>(args);
         pageArgs.add(size);
@@ -65,7 +99,7 @@ public class NewsEventReadRepository {
                        v.category, v.effective_known_at, v.retraction,
                        src.title, src.source_id, src.publisher, src.source_url,
                        src.published_at, src.first_observed_at
-                """ + FROM + sourceFilter + """
+                """ + FROM + filterSql + """
                 ORDER BY e.first_seen_at DESC, e.event_id DESC
                 LIMIT ? OFFSET ?
                 """, (rs, index) -> new EventCard(
