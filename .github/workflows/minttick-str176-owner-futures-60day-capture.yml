@@ -33,7 +33,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('infra/ec2-paper/str176_private_futures_capture.py').read_text()
-          for required in ('MAX_EXPIRIES=12', 'timedelta(days=60)',
+          for required in ('len(expiries)!=12', 'timedelta(days=60)',
                            'validate_candles(', 'original_sha256',
                            'original_http BLOB', 'historicalE2ECertified',
                            'fno_private_bulk_worker', 'owner.ssm_token()'):
