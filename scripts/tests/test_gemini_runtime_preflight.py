@@ -14,6 +14,12 @@ SPEC.loader.exec_module(probe)
 
 
 class GeminiRuntimePreflightTest(unittest.TestCase):
+    def test_pr_validation_cannot_supersede_shared_host_deployment_queue(self):
+        workflow = (ROOT / '.github/workflows/minttick-gemini-runtime-preflight.yml').read_text()
+        self.assertNotIn('concurrency:\n  group: aitrading-paper-ec2-manual-lifecycle', workflow)
+        self.assertIn('    concurrency:\n      group: aitrading-paper-ec2-manual-lifecycle\n'
+                      '      cancel-in-progress: false\n      queue: max', workflow)
+
     def config(self, *extra):
         return {'Image': 'aitradingsystem-paper-backend-arm64:' + 'a' * 40,
                 'Env': ['APP_BUILD_REVISION=' + 'a' * 40,

@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
+  group: minttick-gemini-preflight-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +35,12 @@ jobs:
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
+    # Only the real host inspection enters the lifecycle queue. PR validation
+    # must not supersede a deployment waiting/running in that shared group.
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
