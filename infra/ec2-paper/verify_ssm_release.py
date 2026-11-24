@@ -35,6 +35,14 @@ REQUESTS = {
                "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY"),
 }
 
+PREFLIGHT_STAGES = {
+    "identity", "architecture", "cloud_init", "docker_service",
+    "ssm_service", "docker_info", "docker_compose", "aws_cli",
+    "install_root", "runtime_file", "runtime_permissions",
+    "postgres_secret_shape", "app_key_shape", "disk_space",
+    "intake_diagnostic", "complete",
+}
+
 
 class Rejected(RuntimeError):
     """A deployment precondition was not met."""
@@ -150,6 +158,14 @@ def make_command(action: str, sha: str = "", digest: str = "") -> str:
     return f"printf '%s' '{encoded}' | base64 -d | bash -s --{argv}"
 
 
+def safe_preflight_failure_stage(output: str) -> str | None:
+    """Extract only an explicitly allowed host-stage marker from SSM output."""
+    match = re.search(r"MINTTICK_PREFLIGHT_FAILED_STAGE:([a-z_]+)", output)
+    if match and match.group(1) in PREFLIGHT_STAGES:
+        return match.group(1)
+    return None
+
+
 def send_command(action: str, sha: str = "", digest: str = "") -> None:
     command = make_command(action, sha, digest)
     params = json.dumps({"commands": [command]})
@@ -182,9 +198,14 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
             print(f"SSM {action} completed successfully; no cloud changes outside exact host", flush=True)
             return
         if status in {"Cancelled", "Failed", "TimedOut", "Cancelling"}:
-            # Permit only explicitly enumerated stage identifiers from the
-            # reviewed deploy script, NEVER raw SSM stdout/stderr (may contain
-            # instance secrets, database details, or transient credentials).
+            # Read output only to extract fixed allowlisted markers; never
+            # include raw stdout/stderr or secret-bearing host details.
+            combined = (str(result.get("StandardOutputContent") or "") +
+                        "\n" + str(result.get("StandardErrorContent") or ""))
+            if action == "preflight":
+                stage = safe_preflight_failure_stage(combined)
+                if stage:
+                    raise Rejected(f"SSM preflight failed at safe host stage: {stage}")
             if action == "deploy":
                 stages = {
                     "host_precheck", "artifact_download",
@@ -192,10 +213,7 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
                     "image_load", "host_activation",
                     "history_precheck", "history_activation",
                 }
-                combined = (str(result.get("StandardOutputContent") or "") +
-                            "\n" + str(result.get("StandardErrorContent") or ""))
-                # Exact allowlist for the deliberately categorized S3 client
-                # error; raw AWS output is never included in run logs.
+                # Exact allowlist for deliberately categorized errors.
                 download_errors = {
                     "access_denied", "object_missing", "disk_full",
                     "credentials_unavailable", "network_unavailable", "unknown",
