@@ -112,7 +112,6 @@ public final class Fno176VerifiedHistoricalReplayService {
                     || !digest(proof.originalOhlcvDigest())
                     || !digest(proof.originalOiDigest())
                     || !digest(proof.originalListingDigest())
-                    || !calendar.isTradingDay(b.sessionDate())
                     || (prior != null && !b.sessionDate().isAfter(prior))
                     || (provider != null && !provider.equals(b.provider()))
                     || (listingDigest != null
@@ -122,6 +121,15 @@ public final class Fno176VerifiedHistoricalReplayService {
                         || !contract.expiry().equals(b.expiry())
                         || contract.lotSize() != b.lotSize())))
                 return denied("STR176_ORIGINAL_CONTRACT_OR_CUSTODY_INCONSISTENT", rows.size());
+            // A provider/calendar outage is UNKNOWN, never proof of a holiday
+            // or a source-verified trading session.
+            try {
+                if (!calendar.isTradingDay(b.sessionDate()))
+                    return denied("STR176_ORIGINAL_CONTRACT_OR_CUSTODY_INCONSISTENT",
+                        rows.size());
+            } catch (RuntimeException unavailable) {
+                return denied("STR176_VERIFIED_CALENDAR_UNAVAILABLE", 0);
+            }
             contract = b;
             provider = b.provider();
             listingDigest = proof.originalListingDigest();
@@ -134,7 +142,13 @@ public final class Fno176VerifiedHistoricalReplayService {
             var day = proof.bar().sessionDate();
             if (prior != null) for (var gap = prior.plusDays(1);
                     gap.isBefore(day); gap = gap.plusDays(1)) {
-                if (calendar.isTradingDay(gap))
+                final boolean sessionExpected;
+                try {
+                    sessionExpected = calendar.isTradingDay(gap);
+                } catch (RuntimeException unavailable) {
+                    return denied("STR176_VERIFIED_CALENDAR_UNAVAILABLE", 0);
+                }
+                if (sessionExpected)
                     return denied("STR176_VERIFIED_CALENDAR_SESSION_GAP",rows.size());
             }
             prior = day;
