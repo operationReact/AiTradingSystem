@@ -435,3 +435,36 @@ immutable evidence receipts. Historical simulation does not require actual
 broker fill receipts; those are a *separate* PAPER/LIVE certification gate.
 No sample will count as 1/43 until the real host execution and the independent
 replay/OOS tests pass all these requirements.
+
+## STR-176 authentic owner archive → modelled after-cost OOS replay (2026-11-24)
+
+`str176_private_futures_aftercost.py` independently reads and re-hashes
+the original 60-day owner-private Upstox futures HTTP records collected
+by `str176_private_futures_capture.py`. The collector is GET-only and
+stores actual response bytes; this separate replay is read-only and has
+no provider token, API call or broker order dependency.
+
+The replay implements the fixed production STR-176 momentum threshold
+logic for seven completed daily sessions, with independent daily data
+validation and no future bar in its signals. It models an entry at the
+**open two complete sessions after** the last signal bar and an exit at
+the following open, not a same-bar or hindsight close fill. It applies
+an explicit, fixed 40-bps per-round-trip research cost assumption
+(including fees/tax/spread/slippage/impact) and aggregates gross/net P&L
+and maximum drawdown. The **earliest eight expiry months** form training;
+later months are untouched out-of-sample. The split is set before
+looking at returns; blocked source windows and zero signals are
+reported, not discarded as profitable trades. No strategy parameters
+are optimized using OOS outcomes.
+
+A passing **real host** simulation establishes that real archived
+historical prices were fed through an independently implemented,
+time-delayed strategy and after-cost model. It does *not* establish the
+vendor's historical original publication times, independently
+cross-check every Upstox monthly volume/OI source against official NSE,
+verify executable historical bid/ask quotes, or prove actual broker
+fills. These limitations must be measured before a full independent
+historical strategy certification is accepted; PAPER/LIVE are separate.
+The protected one-file SSM request now invokes **capture then replay**,
+emitting only private aggregate decision, trade and after-cost counters.
+A genuine market replay failure must never be counted as 1/43.
