@@ -51,10 +51,10 @@ Captured at: 2026-11-24 (UTC), in this file on the MI-PR01 branch
 Current main SHA: bd1aaf42e; dev SHA: 1ac4d5180 (divergence 11 / 4653)
 Running production / PAPER SHA: ACCESS_BLOCKED (no valid AWS identity; PAPER workflow not dispatched)
 Last completed: #1825 merged e1300e4f; #1828 merged 8e2f005f; #1829 PARTIAL-health work (see GitHub)
-Current active PRs: MI-PR01 (this document) and then MI-PR02 (source rights registry)
-Task IDs accepted: REL-001, REL-002, REL-003, OPS-011 (this document)
-CI verdict: pending for this PR
-Source rights: NO source APPROVED. Empty NEWS_ANALYZER_APPROVED_SOURCES. No credential values recorded.
+Merged: #1839 MI-PR02 source rights, squash 8a19b8be7 (all 11 exact-head checks green on 75c78d7c)
+Active PR: #1840 MI-PR03 event ledger, rebased onto dev 8a19b8be7 as 9166df286 (CI pending at capture)
+Task IDs accepted: REL-001, REL-002, REL-003, OPS-011 (MI-PR01); SRC-001..003, SRC-011, REL-005 (MI-PR02)
+Source rights: NO source APPROVED. V128 seeds REVIEW_PENDING. Empty NEWS_ANALYZER_APPROVED_SOURCES. No credential values recorded.
 Gemini readiness: CODE_SUPPORT only; parameter name not found in repo; runtime unverified
 Device/release readiness: Android device BLOCKED (no KVM); signing BLOCKED (no secrets); no emulator run
 BLOCKED only: (1) AWS valid read-only identity or OIDC evidence for running-SHA audit; (2) main promotion plan
