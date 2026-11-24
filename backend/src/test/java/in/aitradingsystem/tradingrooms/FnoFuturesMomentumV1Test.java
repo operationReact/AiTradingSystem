@@ -91,6 +91,48 @@ class FnoFuturesMomentumV1Test {
     }
 
     @Test
+    void exactBudgetSundayRequiresVerifiedSessionAndGenuineAvailability() {
+        var days = List.of(LocalDate.of(2026,1,27),LocalDate.of(2026,1,28),
+            LocalDate.of(2026,1,29),LocalDate.of(2026,1,30),
+            LocalDate.of(2026,2,1),LocalDate.of(2026,2,2),LocalDate.of(2026,2,3));
+        var contract = new Contract(CONTRACT.instrumentKey(), CONTRACT.underlyingKey(),
+            LocalDate.of(2026,1,1),LocalDate.of(2026,2,24),75,true);
+        var asOf = LocalDate.of(2026,2,4).atTime(9,0).atZone(IST).toInstant();
+        var bars = new ArrayList<CompletedSession>();
+        for (int i=0;i<days.size();i++) {
+            var sample=up().get(i);
+            var day=days.get(i);
+            bars.add(new CompletedSession(day,true,contract.instrumentKey(),
+                sample.provider(),sample.open(),sample.high(),sample.low(),
+                sample.close(),true,close(day).plusSeconds(150),
+                sample.tradedVolumeUnits(),sample.openInterestUnits(),
+                close(day).plusSeconds(900)));
+        }
+        var result=FnoFuturesMomentumV1.evaluate(contract,bars,RIGHTS,THRESHOLDS,asOf);
+        assertEquals(Status.RESEARCH_CANDIDATE,result.status());
+        assertFalse(result.executable());
+        assertFalse(result.orderPlaced());
+        var special=bars.get(4);
+        for (var badDay : List.of(LocalDate.of(2026,1,31),special.exchangeDate())) {
+            var invalid=new CompletedSession(badDay,!badDay.equals(special.exchangeDate()),
+                special.instrumentKey(),special.provider(),special.open(),special.high(),
+                special.low(),special.close(),true,close(badDay).plusSeconds(150),
+                special.tradedVolumeUnits(),special.openInterestUnits(),
+                close(badDay).plusSeconds(900));
+            assertEquals("FUT_MOM_COMPLETED_BAR_INVALID",
+                FnoFuturesMomentumV1.evaluate(contract,replace(bars,4,invalid),
+                    RIGHTS,THRESHOLDS,asOf).reasonCode());
+        }
+        var premature=new CompletedSession(special.exchangeDate(),true,
+            special.instrumentKey(),special.provider(),special.open(),special.high(),
+            special.low(),special.close(),true,close(special.exchangeDate()).minusSeconds(1),
+            special.tradedVolumeUnits(),special.openInterestUnits(),special.oiFirstObservedAt());
+        assertEquals("FUT_MOM_COMPLETED_BAR_INVALID",
+            FnoFuturesMomentumV1.evaluate(contract,replace(bars,4,premature),
+                RIGHTS,THRESHOLDS,asOf).reasonCode());
+    }
+
+    @Test
     void upwardBreakoutIsResearchOnlyAndAllRequiredMetricsAreRecorded() {
         Decision d = run(up());
         assertEquals(Status.RESEARCH_CANDIDATE, d.status());
