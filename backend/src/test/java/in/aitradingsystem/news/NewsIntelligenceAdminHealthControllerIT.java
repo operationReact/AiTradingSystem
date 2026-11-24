@@ -52,6 +52,8 @@ class NewsIntelligenceAdminHealthControllerIT extends AbstractPostgresIT {
         assertThat(body.path("model").path("selectedProviderConfigured").isBoolean()).isTrue();
         assertThat(body.path("model").path("recordedGeminiAnalysisReceipts").asLong()).isGreaterThanOrEqualTo(0L);
         assertThat(body.path("model").path("geminiReadiness").isTextual()).isTrue();
+        assertThat(body.path("model").path("lastGeminiAttemptOutcome").asText()).isEqualTo("NO_OBSERVATION");
+        assertThat(body.path("model").path("lastGeminiAttemptAt").isNull()).isTrue();
         assertThat(body.path("eventLedgerEnabled").asBoolean()).isFalse();
         assertThat(body.path("analysisSchedulerEnabled").asBoolean()).isFalse();
         assertThat(raw).doesNotContain("apiKey", "geminiApiKey",
