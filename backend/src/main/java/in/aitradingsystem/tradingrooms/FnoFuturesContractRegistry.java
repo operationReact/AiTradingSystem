@@ -192,6 +192,22 @@ public class FnoFuturesContractRegistry {
     }
 
     /**
+     * The current universe snapshot only when the discovery rights gate is open, the last refresh
+     * succeeded and the snapshot is within the 36-hour master age. Anything else returns empty, so a
+     * caller can never treat an absent or stale catalogue as "no derivatives". Read-only.
+     */
+    public Optional<UniverseSnapshot> loadedUniverseSnapshot() {
+        if (!discoveryVerified || universeFailure != null) return Optional.empty();
+        UniverseSnapshot s = universeSnapshot;
+        if (s == null) return Optional.empty();
+        Instant now = clock.instant();
+        if (now.isBefore(s.fetchedAt()) || now.isAfter(s.fetchedAt().plus(java.time.Duration.ofHours(36)))) {
+            return Optional.empty();
+        }
+        return Optional.of(s);
+    }
+
+    /**
      * Safe paginated discovery; returns no contracts when the independent
      * discovery entitlement is absent or the daily file is too old. The
      * caller must not turn this into quote freshness or order permission.
