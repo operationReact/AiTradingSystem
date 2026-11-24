@@ -337,6 +337,66 @@ def safe_receipt(r):
             raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     return r
 
+# Only these literal reason IDs may leave the private host. Unrecognized
+# exception text (including URLs, keys, raw source JSON or credentials) never
+# leaves the SSM boundary. Blocked/error reports cannot certify E2E.
+SAFE_BLOCK_CODES=frozenset((
+  "EXPIRED_UNIVERSE_INVALID",
+  "TWELVE_ACTUAL_MONTHLY_EXPIRIES_REQUIRED",
+  "UPSTOX_ORIGINAL_FUTURES_INVALID",
+  "UPSTOX_ORIGINAL_FUTURES_MISSING",
+  "UPSTOX_ORIGINAL_FUTURES_MISSING_OR_AMBIGUOUS",
+  "INVALID_SOURCE_CANDLE_LENGTH",
+  "INVALID_SOURCE_SESSION",
+  "INVALID_SOURCE_QUANTITY",
+  "UNVERIFIED_AUTHENTICATED_CANDLES",
+  "ORIGINAL_SOURCE_PRICE_INVALID",
+  "ORIGINAL_SOURCE_OHLC_INVALID",
+  "DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS",
+  "UNVERIFIED_SOURCE_SCOPE",
+  "UPSTOX_SOURCE_REQUEST_COUNT_CHANGED",
+  "SOURCE_REQUEST_SCOPE_INVALID",
+  "SOURCE_UNDERLYING_SCOPE_INVALID",
+  "OWNER_UNDERLYING_INVALID",
+  "RESEARCH_SIGNAL_COHORT_DRIFT",
+  "UNVERIFIED_EXTENDED_RESEARCH_RECEIPT",
+  "PROVIDER_GET_COUNT_INVALID",
+  "OWNER_PRIVATE_FNO_SCOPE_MISSING_OR_EXPIRED",
+  "FNO_DATA_RETENTION_NOT_AUTHORIZED",
+  "UPSTOX_TOKEN_UNAVAILABLE",
+  "FNO_DISCOVERY_AUTH_REJECTED",
+  "FNO_DISCOVERY_RATE_LIMITED",
+  "FNO_DISCOVERY_PROVIDER_REJECTED",
+  "FNO_DISCOVERY_INVALID_RESPONSE",
+  "FNO_DISCOVERY_TRANSPORT",
+  "FNO_DISCOVERY_TOO_LARGE",
+  "FNO_DISCOVERY_INVALID_JSON",
+  "FNO_REQUEST_BUDGET_EXHAUSTED",
+  "INVALID_FNO_DISCOVERY_ROUTE",
+  "OWNER_SOURCE_RESEARCH_FAILED",
+  "OWNER_SOURCE_RESEARCH_TIMEOUT",
+  "OWNER_SSM_STATE_UNKNOWN",
+  "EXACT_PRIVATE_HOST_REQUIRED",
+  "UNCLASSIFIED_SOURCE_FAILURE"
+))
+
+def safe_block_code(exc):
+    if (isinstance(exc,(ValueError,RuntimeError,OSError,KeyError,TypeError))
+            and len(exc.args)==1 and type(exc.args[0]) is str
+            and exc.args[0] in SAFE_BLOCK_CODES):
+        return exc.args[0]
+    return "UNCLASSIFIED_SOURCE_FAILURE"
+
+def ssm_block_code(stderr):
+    if not isinstance(stderr,str) or len(stderr)>8192:
+        return "UNCLASSIFIED_SOURCE_FAILURE"
+    prefix=SOURCE_MARKER+"BLOCKED:"
+    hits=[line[len(prefix):] for line in stderr.splitlines()
+          if line.startswith(prefix)]
+    if len(hits)==1 and hits[0] in SAFE_BLOCK_CODES:
+        return hits[0]
+    return "UNCLASSIFIED_SOURCE_FAILURE"
+
 def host():
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         raise ValueError("EXACT_PRIVATE_HOST_REQUIRED")
@@ -391,7 +451,11 @@ def runner():
                 separators=(",",":")),flush=True)
             return
         if state in ("Failed","TimedOut","Cancelled"):
-            raise ValueError("OWNER_SOURCE_RESEARCH_FAILED")
+            # AWS SSM retains the private command stderr; export ONLY a
+            # reviewed symbolic reason, never the raw provider exception.
+            detail=ssm_block_code(result.get("StandardErrorContent") or "")
+            raise ValueError(detail if state=="Failed"
+                             else "OWNER_SOURCE_RESEARCH_FAILED")
         if state not in ("Pending","InProgress","Delayed"):
             raise ValueError("OWNER_SSM_STATE_UNKNOWN")
     raise ValueError("OWNER_SOURCE_RESEARCH_TIMEOUT")
@@ -401,7 +465,7 @@ if __name__=="__main__":
         if len(sys.argv)!=2 or sys.argv[1] not in ("host","runner"):
             raise ValueError("RUNNER_MODE_INVALID")
         host() if sys.argv[1]=="host" else runner()
-    except (ValueError,RuntimeError,TypeError,KeyError,OSError):
-        print("MINTTICK_STR176_EXTENDED_SOURCE_RESEARCH:BLOCKED_NO_SOURCE_RECEIPT",
-              file=sys.stderr)
+    except (ValueError,RuntimeError,TypeError,KeyError,OSError) as exc:
+        print(SOURCE_MARKER+"BLOCKED:"+safe_block_code(exc),
+              file=sys.stderr,flush=True)
         raise SystemExit(2)
