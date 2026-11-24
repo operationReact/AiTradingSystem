@@ -41,6 +41,11 @@ SOURCE_DAYS=90
 PER_GET_DAYS=30
 MAX_BARS=1080
 FIXED_FRICTION_BPS=30
+# NSE F&O Circular 07/2026 (NSE/FAOP/72352), published 2026-01-16:
+# https://nsearchives.nseindia.com/content/circulars/FAOP72352.pdf
+# Confirms one real Sunday session, 09:15-15:30 IST. Research decoding only;
+# not a complete exchange holiday calendar or original candle publication proof.
+VERIFIED_SPECIAL_SESSION=date(2026,2,1)
 SAFE_STATE=frozenset((
     "RESEARCH_EXTENDED_EOD_NOT_CERTIFIED",
     "SOURCE_FUTURES_COHORTS_INCOMPLETE",
@@ -113,19 +118,21 @@ def decode_expired_chunk(payload, first, last):
             raise ValueError("INVALID_SOURCE_CANDLE_LENGTH")
         stamp,op,hi,lo,close,vol,oi=row
         if not isinstance(stamp,str):
-            raise ValueError("INVALID_SOURCE_SESSION")
+            raise ValueError("HISTORICAL_TIMESTAMP_MALFORMED")
         try:dt=datetime.fromisoformat(stamp)
-        except ValueError:raise ValueError("INVALID_SOURCE_SESSION") from None
+        except ValueError:raise ValueError("HISTORICAL_TIMESTAMP_MALFORMED") from None
         if dt.utcoffset()!=timedelta(hours=5,minutes=30):
-            raise ValueError("INVALID_SOURCE_SESSION")
+            raise ValueError("HISTORICAL_TIMESTAMP_OFFSET_INVALID")
         if not first<=dt.date()<=last:
             raise ValueError("HISTORICAL_BAR_OUTSIDE_REQUEST")
         if dt.hour or dt.minute or dt.second or dt.microsecond:
             raise ValueError("HISTORICAL_NONCANONICAL_DAILY_TIME")
         if dt.date() in seen:
             raise ValueError("HISTORICAL_DUPLICATE_SESSION_DAY")
-        if dt.date().weekday()>=5:
-            raise ValueError("INVALID_SOURCE_SESSION")
+        if dt.date().weekday()>=5 and dt.date()!=VERIFIED_SPECIAL_SESSION:
+            # A weekday heuristic cannot disprove an official special session.
+            # Retain the block until independently verified calendar evidence.
+            raise ValueError("HISTORICAL_WEEKEND_SESSION_UNVERIFIED")
         seen.add(dt.date())
         if (type(vol) is not int or vol<0 or vol>10**12
                 or type(oi) is not int or oi<0 or oi>10**12):
@@ -142,6 +149,8 @@ QUARANTINE_CODES=frozenset((
     "HISTORICAL_NONCANONICAL_DAILY_TIME", "HISTORICAL_DUPLICATE_SESSION_DAY",
     "HISTORICAL_BAR_OUTSIDE_REQUEST", "INVALID_SOURCE_CANDLE_LENGTH",
     "INVALID_SOURCE_SESSION", "INVALID_SOURCE_QUANTITY",
+    "HISTORICAL_TIMESTAMP_MALFORMED", "HISTORICAL_TIMESTAMP_OFFSET_INVALID",
+    "HISTORICAL_WEEKEND_SESSION_UNVERIFIED",
     "ORIGINAL_SOURCE_PRICE_INVALID", "ORIGINAL_SOURCE_OHLC_INVALID",
     "DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS",
 ))
@@ -270,6 +279,7 @@ def evaluate(universe,metadata,cost_bps):
     split=ordered_expiries[8]
     training_end=ordered_expiries[7]
     counts=Counter()
+    outcomes={split_name:Counter() for split_name in ("training","outOfSample")}
     train_net=oos_net=0
     oos_net_by_exit=Counter()
     for expiry in sorted(metadata):
@@ -287,6 +297,7 @@ def evaluate(universe,metadata,cost_bps):
                 counts["purgedPreOosWindows"]+=1
                 continue
             outcome=signal(rows[i-6:i+1],expiry,decision_day)
+            outcomes["training" if expiry<split else "outOfSample"][outcome]+=1
             counts["decisionWindows"]+=1
             if outcome=="BLOCKED":
                 counts["blockedWindows"]+=1
@@ -327,6 +338,10 @@ def evaluate(universe,metadata,cost_bps):
         "state":state,"sourceFuturesBars":counts["sourceFuturesRows"],
         "eligibleFuturesCohorts":counts["eligibleFuturesCohorts"],
         "decisionWindows":counts["decisionWindows"],
+        "windowOutcomesBySplit":{
+            split_name:{outcome:values[outcome] for outcome in
+                        ("BLOCKED","NO_SIGNAL","LONG","SHORT")}
+            for split_name,values in outcomes.items()},
         "purgedPreOosWindows":counts["purgedPreOosWindows"],
         "evaluatedWindows":counts["evaluatedWindows"],
         "blockedWindows":counts["blockedWindows"],
@@ -405,6 +420,22 @@ def safe_receipt(r):
             or (r["state"]=="RESEARCH_EXTENDED_EOD_NOT_CERTIFIED"
                 and r["eligibleFuturesCohorts"]!=MAX_FUTURES)) :
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    outcomes=r.get("windowOutcomesBySplit")
+    if (type(outcomes) is not dict or set(outcomes)!={"training","outOfSample"}
+            or any(type(v) is not dict or set(v)!={"BLOCKED","NO_SIGNAL","LONG","SHORT"}
+                   or any(type(n) is not int or not 0<=n<=MAX_BARS for n in v.values())
+                   for v in outcomes.values())):
+        raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    sums=Counter()
+    for values in outcomes.values():sums.update(values)
+    if (sum(sums.values())!=r["decisionWindows"]
+            or sums["BLOCKED"]!=r["blockedWindows"]
+            or sums["LONG"]+sums["SHORT"]!=r["candidateWindows"]
+            or sums["NO_SIGNAL"]+sums["LONG"]+sums["SHORT"]!=r["evaluatedWindows"]
+            or any(r[trade_key]>outcomes[split_name]["LONG"]+outcomes[split_name]["SHORT"]
+                   for split_name,trade_key in (("training","trainingTrades"),
+                                               ("outOfSample","outOfSampleTrades")))):
+        raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     for k in ("trainingNetPaise","outOfSampleNetPaise",
               "outOfSampleMaxDrawdownPaise","oosNetAt20BpsPaise",
               "oosNetAt50BpsPaise"):
@@ -423,6 +454,9 @@ SAFE_BLOCK_CODES=frozenset((
   "UPSTOX_ORIGINAL_FUTURES_MISSING_OR_AMBIGUOUS",
   "INVALID_SOURCE_CANDLE_LENGTH",
   "INVALID_SOURCE_SESSION",
+  "HISTORICAL_TIMESTAMP_MALFORMED",
+  "HISTORICAL_TIMESTAMP_OFFSET_INVALID",
+  "HISTORICAL_WEEKEND_SESSION_UNVERIFIED",
   "INVALID_SOURCE_QUANTITY",
   "UNVERIFIED_AUTHENTICATED_CANDLES",
   "HISTORICAL_DATA_OBJECT_MISSING",
