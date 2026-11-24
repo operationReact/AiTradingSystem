@@ -58,7 +58,10 @@ class HistoricalVerifiedNewsApiE2EIT extends AbstractPostgresIT {
             """, f.event(), Timestamp.from(correction));
         addProof(f, 2, correction, "AFFECTED_ISSUER");
         assertThat(read(f.instrument(), f.cutoff()).path("evidence").get(0).path("eventVersion").asInt()).isEqualTo(1);
-        JsonNode revised = read(f.instrument(), correction.plusSeconds(1)).path("evidence").get(0);
+        JsonNode revisedPage = read(f.instrument(), correction.plusSeconds(1));
+        assertThat(revisedPage.path("catalogueVersion").asText()).isEqualTo(f.catalogue().toString());
+        assertThat(revisedPage.path("evidenceCount").asInt()).isEqualTo(1);
+        JsonNode revised = revisedPage.path("evidence").get(0);
         assertThat(revised.path("eventVersion").asInt()).isEqualTo(2);
         assertThat(revised.path("retracted").asBoolean()).isTrue();
     }
@@ -122,6 +125,14 @@ class HistoricalVerifiedNewsApiE2EIT extends AbstractPostgresIT {
         String token = UUID.randomUUID().toString().replace("-", "");
         String source = "fixture-e2e-" + UUID.randomUUID();
         String symbol = "SYNTHETIC-EQ";
+        // Shared integration contexts may leave successful imports with timestamps
+        // inside this fixture's historical window. Isolate only overlapping rows
+        // in this test transaction; the rollback restores their original times.
+        jdbc.update("""
+            UPDATE instrument_import_run SET completed_at=?
+             WHERE status='SUCCEEDED' AND completed_at >= ? AND completed_at <= ?
+            """, Timestamp.from(now), Timestamp.from(now.minusSeconds(200)),
+            Timestamp.from(now.minusSeconds(40)));
         jdbc.update("""
             INSERT INTO instrument_import_run(id,status,source_url,completed_at,accepted_count,rejected_count)
             VALUES (?,'SUCCEEDED',?,?,1,0)
