@@ -20,6 +20,7 @@ class MindDecisionRecord {
     required this.dataCutoffAt,
     required this.candidateFingerprint,
     required this.reasons,
+    this.instrumentId,
     this.news,
   });
 
@@ -35,6 +36,9 @@ class MindDecisionRecord {
   final DateTime dataCutoffAt;
   final String candidateFingerprint;
   final List<String> reasons;
+  /// Immutable database instrument identity recorded by the historical scan.
+  /// Absent for older backend history contracts, never inferred from ticker.
+  final int? instrumentId;
 
   /// Advisory as-of news context recorded at scan time. Null means it was not recorded for
   /// this candidate, which is never shown as "no news".
@@ -53,6 +57,10 @@ class MindDecisionRecord {
     final run = value['scanRunId'];
     final version = value['strategyVersion'];
     final reasons = value['reasons'];
+    final instrumentId = value['instrumentId'];
+    if (instrumentId != null && (instrumentId is! int || instrumentId < 1)) {
+      throw const FormatException('Unverified decision instrument identity');
+    }
     if (strategy is! String || strategy.isEmpty || symbol is! String || symbol.isEmpty ||
         exchange is! String || interval is! String || fingerprint is! String || fingerprint.isEmpty ||
         run is! String || (version != null && version is! int) ||
@@ -78,6 +86,7 @@ class MindDecisionRecord {
       dataCutoffAt: cutoff,
       candidateFingerprint: fingerprint,
       reasons: List.unmodifiable(reasons.cast<String>()),
+      instrumentId: instrumentId as int?,
       news: MindNewsContext.decode(value['news']),
     );
   }
