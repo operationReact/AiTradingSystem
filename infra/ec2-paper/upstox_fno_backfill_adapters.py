@@ -19,7 +19,7 @@ import urllib.request
 
 from fno_history_backfill import (
     Batch, GateClosed, ProviderReply, RetentionGrant, SOURCE,
-    _contract_key, utcnow,
+    SourceObservation, _contract_key, utcnow,
 )
 
 BASE = "https://api.upstox.com/v2/expired-instruments/historical-candle/"
@@ -119,7 +119,11 @@ class UpstoxExpiredCandles:
                 or not isinstance(body.get("data"), dict)
                 or not isinstance(body["data"].get("candles"), list)):
             return ProviderReply(502)
-        return ProviderReply(200, body["data"]["candles"])
+        # Preserve exactly what the provider returned; the response hash
+        # is *not* a historic source-publication timestamp or vendor signature.
+        return ProviderReply(200, body["data"]["candles"],
+                             source_observation=SourceObservation(
+                                 payload, float(utcnow())))
 
 
 class SQLiteHistoricalCandleSink:
@@ -181,11 +185,33 @@ class SQLiteHistoricalCandleSink:
             permission_reference TEXT NOT NULL
         )""")
 
+        # Immutable provider HTTP payload remains owner-private and is
+        # independently re-hashable. Existing pre-capture batches remain
+        # legacy; they MUST NOT be assigned made-up historical HTTP receipts.
+        self.conn.execute("""CREATE TABLE IF NOT EXISTS fno_original_http_capture (
+            batch_hash TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            original_body BLOB NOT NULL,
+            response_sha256 TEXT NOT NULL CHECK(length(response_sha256)=64),
+            byte_count INTEGER NOT NULL CHECK(byte_count BETWEEN 1 AND 4194304),
+            received_at REAL NOT NULL CHECK(received_at>0),
+            FOREIGN KEY(batch_hash) REFERENCES fno_immutable_candle_receipt(batch_hash)
+        )""")
+
     def close(self):
         self.conn.close()
 
+    def upsert_with_observation(self, batch: Batch, rows: list[tuple],
+                idempotency_key: str, source_observation: SourceObservation) -> bool:
+        return self._upsert(batch, rows, idempotency_key, source_observation)
+
     def upsert(self, batch: Batch, rows: list[tuple],
                idempotency_key: str) -> bool:
+        # Legacy/test-only path; never counts as provider HTTP custody.
+        return self._upsert(batch, rows, idempotency_key, None)
+
+    def _upsert(self, batch: Batch, rows: list[tuple], idempotency_key: str,
+                observation: SourceObservation | None) -> bool:
         import hashlib
         verify_approval(self.grant, self.verifier, batch.interval, self.today())
         if (idempotency_key != batch.dedupe_key or not rows
@@ -196,6 +222,24 @@ class SQLiteHistoricalCandleSink:
         verified = validate_candles([list(x) for x in rows], batch)
         if len(verified) != len(rows):
             raise ValueError("INVALID_FNO_SINK_ROWS")
+        if observation is not None:
+            if not isinstance(observation, SourceObservation):
+                raise ValueError("INVALID_HTTP_OBSERVATION")
+            # Never label old candles with the time they were first published.
+            # This is ONLY when our authenticated response was received.
+            age=utcnow()-observation.received_at
+            if not -60 <= age <= 1800:
+                raise ValueError("SOURCE_CAPTURE_TIME_INVALID")
+            try:
+                original=json.loads(observation.raw_body)
+                if not isinstance(original,dict) or original.get("status")!="success":
+                    raise ValueError("ORIGINAL_HTTP_BODY_INVALID")
+                original_rows=original.get("data",{}).get("candles")
+                verified_original=validate_candles(original_rows,batch)
+            except (TypeError,KeyError,ValueError,UnicodeError):
+                raise ValueError("ORIGINAL_HTTP_BODY_INVALID") from None
+            if verified_original!=verified:
+                raise ValueError("HTTP_CANDLES_DO_NOT_MATCH_SOURCE")
         # Stable normalized OHLCV+OI order. This proves what was actually
         # downloaded and persisted, NOT a cryptographic provider signature.
         # SQLite stores OHLC as REAL, so hash their exact stored numeric
@@ -220,6 +264,20 @@ class SQLiteHistoricalCandleSink:
             if previous is not None and (
                     previous[0]!=normalized or previous[1]!=len(canonical)):
                 raise ValueError("HISTORICAL_PROVIDER_REVISION_DETECTED")
+            earlier_http=self.conn.execute("""
+                SELECT response_sha256,byte_count,received_at,original_body
+                FROM fno_original_http_capture WHERE batch_hash=?
+                """,(idempotency_key,)).fetchone()
+            if observation is not None:
+                if previous is not None and earlier_http is None:
+                    raise ValueError("CANNOT_RETROFIT_OLD_HTTP_CAPTURE")
+                if earlier_http is not None and (
+                        earlier_http[0]!=observation.sha256
+                        or earlier_http[1]!=len(observation.raw_body)
+                        or earlier_http[3]!=observation.raw_body):
+                    raise ValueError("ORIGINAL_PROVIDER_RESPONSE_REVISION")
+            elif earlier_http is not None:
+                raise ValueError("ORIGINAL_HTTP_CAPTURE_CANNOT_BE_DOWNGRADED")
             # Check *every* already persisted row, including overlapping
             # windows: a new batch may never rewrite earlier market history.
             for item in canonical:
@@ -252,6 +310,13 @@ class SQLiteHistoricalCandleSink:
                     VALUES (?,?,?,?,?,?)""",
                     (idempotency_key,SOURCE,batch.contract_key,batch.interval,
                      len(canonical),captured))
+            if observation is not None and earlier_http is None:
+                self.conn.execute("""INSERT INTO fno_original_http_capture(
+                    batch_hash,source,original_body,response_sha256,
+                    byte_count,received_at) VALUES(?,?,?,?,?,?)""",
+                    (idempotency_key,SOURCE,observation.raw_body,
+                     observation.sha256,len(observation.raw_body),
+                     observation.received_at))
             self.conn.execute("COMMIT")
             return True
         except BaseException:
