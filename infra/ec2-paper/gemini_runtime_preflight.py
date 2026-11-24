@@ -37,6 +37,8 @@ HISTORY_FAILURES = {
     "UNTRUSTED_CHART_BACKUP", "UNTRUSTED_MONTHLY_CHART_PATH", "UNTRUSTED_MONTHLY_CHART_BACKUP",
     "INVALID_CHART_ROW", "INVALID_CHART_IDENTITY_OR_LIMIT", "OVERSIZE_CHART",
     "OVERSIZE_MONTHLY_CHART", "INVALID_CHART_TOKEN", "INVALID_MONTHLY_TOKEN",
+    "HISTORY_SCHEMA_MISSING", "HISTORY_SQLITE_OPERATIONAL_FAILURE", "FILESYSTEM_DISK_FULL",
+    "FILESYSTEM_PERMISSION_DENIED", "FILESYSTEM_FILE_MISSING",
 }
 COLLECTOR_FILES = {"authProbe": ("probe_owner_angelone_auth.py", 0o600),
                    "collector": ("owner_personal_angelone_history.py", 0o600),
@@ -161,7 +163,19 @@ def classify_history_failure(text):
     if "MINTTICK_DEPLOY_FAILED_STAGE:history_precheck" not in text:
         return "NOT_OBSERVED"
     match = re.search(r"(?:ProgressUnavailable|SchedulerBlocked): ([A-Z_]+)(?:\r?\n|$)", text)
-    return match.group(1) if match and match.group(1) in HISTORY_FAILURES else "UNCLASSIFIED_HISTORY_FAILURE"
+    if match:
+        return match.group(1) if match.group(1) in HISTORY_FAILURES else "UNCLASSIFIED_HISTORY_FAILURE"
+    if re.search(r"sqlite3\.OperationalError: no such (?:table|column):", text):
+        return "HISTORY_SCHEMA_MISSING"
+    if "sqlite3.OperationalError:" in text:
+        return "HISTORY_SQLITE_OPERATIONAL_FAILURE"
+    if "[Errno 28] No space left on device" in text:
+        return "FILESYSTEM_DISK_FULL"
+    if "PermissionError:" in text:
+        return "FILESYSTEM_PERMISSION_DENIED"
+    if "FileNotFoundError:" in text:
+        return "FILESYSTEM_FILE_MISSING"
+    return "UNCLASSIFIED_HISTORY_FAILURE"
 
 
 def file_status(path, mode, owner=0):

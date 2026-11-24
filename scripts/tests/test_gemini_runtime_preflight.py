@@ -41,6 +41,19 @@ class GeminiRuntimePreflightTest(unittest.TestCase):
             raw.replace('DUPLICATE_ARCHIVE_SESSION', 'PRIVATE_SECRET_VALUE')))
         self.assertNotIn('fixture', probe.classify_history_failure(raw))
 
+    def test_history_failure_classifies_sqlite_and_filesystem_without_private_details(self):
+        cases = {
+            'sqlite3.OperationalError: no such table: fixture-private-table': 'HISTORY_SCHEMA_MISSING',
+            'sqlite3.OperationalError: fixture-private-message': 'HISTORY_SQLITE_OPERATIONAL_FAILURE',
+            'OSError: [Errno 28] No space left on device: fixture-private-path': 'FILESYSTEM_DISK_FULL',
+            'PermissionError: fixture-private-path': 'FILESYSTEM_PERMISSION_DENIED',
+            'FileNotFoundError: fixture-private-path': 'FILESYSTEM_FILE_MISSING',
+        }
+        for error, expected in cases.items():
+            raw = error + '\nMINTTICK_DEPLOY_FAILED_STAGE:history_precheck\n'
+            self.assertEqual(expected, probe.classify_history_failure(raw))
+            self.assertNotIn('fixture', probe.classify_history_failure(raw))
+
     def test_pr_validation_cannot_supersede_shared_host_deployment_queue(self):
         workflow = (ROOT / '.github/workflows/minttick-gemini-runtime-preflight.yml').read_text()
         self.assertNotIn('concurrency:\n  group: aitrading-paper-ec2-manual-lifecycle', workflow)
