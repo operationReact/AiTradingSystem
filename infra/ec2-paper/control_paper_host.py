@@ -85,7 +85,7 @@ def describe() -> str:
             if isinstance(x, dict)}
     profile = item.get("IamInstanceProfile", {})
     if (item.get("InstanceId") != INSTANCE
-        or item.get("InstanceType") != "t4g.medium"
+        or item.get("InstanceType") not in {"t4g.medium", "m6g.medium", "m7g.medium"}
         or item.get("VpcId") != VPC
         or item.get("SubnetId") != SUBNET
         or item.get("MetadataOptions", {}).get("HttpTokens") != "required"
