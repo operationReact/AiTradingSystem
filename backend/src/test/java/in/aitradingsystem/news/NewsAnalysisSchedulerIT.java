@@ -62,7 +62,7 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
     private NewsAnalysisService analysis(FakeProvider provider) {
         return new NewsAnalysisService(jdbc, mapper,
             new NewsProperties("FAKE", "m", "m", null, null, 5000, 30000, 2),
-            List.of(provider), new NewsAnalysisParser(mapper), news);
+            List.of(provider), new NewsAnalysisParser(mapper), news, policy);
     }
 
     private UUID ingestArticle(Instant publishedAt) {
