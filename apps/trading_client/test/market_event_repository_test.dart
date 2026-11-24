@@ -51,6 +51,42 @@ void main() {
     client.close();
   });
 
+  test('category, headline and day filters use explicit URL parameters', () async {
+    final session = OperatorSession()..setOperatorKey('test-operator-key');
+    late http.Request request;
+    final client = MockClient((captured) async {
+      request = captured;
+      return http.Response(jsonEncode({
+        'items': [fixtureEvent()], 'page': 0, 'size': 20,
+        'totalItems': 1, 'totalPages': 1,
+      }), 200);
+    });
+    final api = AuthenticatedApiClient(
+      session: session, client: client, baseUri: Uri.parse('http://example.test'),
+    );
+    await HttpMarketEventRepository(api).events(
+      page: 0, category: 'REGULATORY', query: 'corporate', windowDays: 7,
+    );
+    expect(request.url.queryParameters['category'], 'REGULATORY');
+    expect(request.url.queryParameters['q'], 'corporate');
+    expect(request.url.queryParameters['windowDays'], '7');
+    expect(request.url.queryParameters['sourceId'], isNull);
+    client.close();
+  });
+
+  test('unsupported date windows are rejected before the network', () async {
+    final session = OperatorSession()..setOperatorKey('test-operator-key');
+    final api = AuthenticatedApiClient(
+      session: session,
+      client: MockClient((_) async => http.Response('{}', 200)),
+      baseUri: Uri.parse('http://example.test'),
+    );
+    await expectLater(
+      HttpMarketEventRepository(api).events(page: 0, windowDays: 2),
+      throwsArgumentError,
+    );
+  });
+
   test('fails closed on future evidence, bad url and invalid statuses', () {
     final future = fixtureEvent()..['effectiveKnownAt'] = '2026-11-24T04:00:00Z';
     expect(() => MarketEventCard.fromJson(future), throwsFormatException);
