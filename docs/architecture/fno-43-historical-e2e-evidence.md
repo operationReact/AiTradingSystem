@@ -697,3 +697,25 @@ host-visible values are these allowlisted fixed strings; raw provider
 responses, instrument IDs, source bytes and credentials remain private.
 The same expired contract keys, API windows, original STR-176 thresholds,
 transaction costs and independent E2E false gate remain unchanged.
+
+## 2026-11-24 authenticated 90-day response overcount
+
+The exact PAPER host [#45372906805](
+https://github.com/operationReact/AiTradingSystem/actions/runs/45372906805)
+reported the specific error `HISTORICAL_CANDLE_WINDOW_OVERSIZED`.
+The Upstox historical endpoint returned **more than 30 candle entries**
+inside a request for 30 calendar days. This proves the previous
+`len(candles) <= 30` invariant does not hold for this actual provider
+response. It does **not** by itself prove whether the upstream included
+two conflicting timestamps for a session, out-of-range dates or
+something else.
+
+The next strict decoder allows up to 120 *bounded candidate records* so
+it can inspect the actual provider dates, while retaining the original
+30-calendar-day request. It rejects any candle whose date is outside the
+requested range, any non-midnight IST daily label, or a duplicate daily
+session and emits distinct allowlisted aggregate failure codes.
+**No** unexpected row is silently dropped, merged, de-duplicated or
+reinterpreted as a complete daily candle. Original remaining source
+requirements, no-broker-orders, fixed strategy thresholds and 0/43
+independent historical E2E are unchanged.

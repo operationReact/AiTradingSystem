@@ -139,10 +139,10 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         self.assertTrue(all(r[0].weekday()<5 and r[-1]==m.SOURCE for r in bars))
         double=dict(raw)
         double["candles"]=list(raw["candles"])+[raw["candles"][0]]
-        with self.assertRaisesRegex(ValueError,"INVALID_SOURCE_SESSION"):
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_DUPLICATE_SESSION_DAY"):
             m.decode_expired_chunk(double,start,end)
         wrong={"candles":[["2026-10-01T09:15:00+05:30",100,101,99,100,1,1]]}
-        with self.assertRaisesRegex(ValueError,"INVALID_SOURCE_SESSION"):
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_NONCANONICAL_DAILY_TIME"):
             m.decode_expired_chunk(wrong,start,end)
 
     def test_missing_or_oversized_authenticated_response_is_diagnosed_without_raw_data(self):
@@ -153,7 +153,7 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
             ([],"HISTORICAL_DATA_OBJECT_MISSING"),
             ({},"HISTORICAL_CANDLE_ARRAY_MISSING"),
             ({"candles":None},"HISTORICAL_CANDLE_ARRAY_MISSING"),
-            ({"candles":[["masked"]]*31},"HISTORICAL_CANDLE_WINDOW_OVERSIZED")
+            ({"candles":[["masked"]]*121},"HISTORICAL_CANDLE_WINDOW_OVERSIZED")
         ]:
             with self.assertRaisesRegex(ValueError,"^"+reason+"$"):
                 m.decode_expired_chunk(payload,first,last)
@@ -161,6 +161,42 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         for arbitrary in ("raw token=Bearer abc","NSE_FO|private_key"):
             self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
                 m.safe_block_code(ValueError(arbitrary)))
+
+    def test_more_than_30_source_records_are_inspected_for_actual_duplicate_or_bad_time(self):
+        from datetime import timedelta
+        first=date(2026,10,1)
+        last=date(2026,10,30)
+        # 40 underlying records for only 20 actual trading sessions:
+        # not legitimate 40 distinct daily bars; do not silently dedupe.
+        days=[]
+        d=first
+        while len(days)<20:
+            if d.weekday()<5:days.append(d)
+            d+=timedelta(days=1)
+        raw=[]
+        for d in days:
+            for stamp_time in ("00:00:00","09:15:00"):
+                raw.append([d.isoformat()+"T"+stamp_time+"+05:30",
+                            100,102,99,101,5000,10000])
+        self.assertGreater(len(raw),30)
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_NONCANONICAL_DAILY_TIME"):
+            m.decode_expired_chunk({"candles":raw},first,last)
+        only_canonical=[row for row in raw if "T00:00:00" in row[0]]
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_DUPLICATE_SESSION_DAY"):
+            m.decode_expired_chunk({"candles":only_canonical+
+                                    [only_canonical[0]]},first,last)
+        bad=list(only_canonical)
+        bad.append(["2026-11-02T00:00:00+05:30",100,102,99,101,5000,10000])
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_BAR_OUTSIDE_REQUEST"):
+            m.decode_expired_chunk({"candles":bad},first,last)
+        for code in ("HISTORICAL_NONCANONICAL_DAILY_TIME",
+                     "HISTORICAL_DUPLICATE_SESSION_DAY",
+                     "HISTORICAL_BAR_OUTSIDE_REQUEST"):
+            self.assertEqual(code,m.safe_block_code(ValueError(code)))
+        self.assertEqual("HISTORICAL_CANDLE_WINDOW_OVERSIZED",
+            m.safe_block_code(ValueError("HISTORICAL_CANDLE_WINDOW_OVERSIZED")))
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_CANDLE_WINDOW_OVERSIZED"):
+            m.decode_expired_chunk({"candles":[only_canonical[0]]*121},first,last)
 
     def test_missing_one_expiry_never_reports_fully_qualified(self):
         p=FakeAuthenticatedUpstox(empty=months()[5])
