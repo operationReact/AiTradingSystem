@@ -313,3 +313,46 @@ The historical strategy certification counter remains **0/43** until
 those sources, outcomes and checks have actually passed. This PR does
 not deploy or enable provider collection and MUST NOT be described as
 populating the real V102 table.
+
+## Upstox owner-personal original HTTP custody (2026-11-24)
+
+The owner confirmed that MintTick's market-data use is private and that
+the owner considers necessary personal-use rights already held. Do not
+interrupt engineering to request the same permission again. This declaration
+does not by itself fabricate third-party VERIFIED receipt rows or establish
+independent historical first-publication time, pricing, or data quality.
+
+The existing `UpstoxExpiredCandles` provider now carries an immutable
+`SourceObservation` containing the **exact original successful HTTP response
+bytes and the actual first time this client received them**. Its
+`BackfillWorker` routes such replies through the strict
+`SQLiteHistoricalCandleSink.upsert_with_observation` path; a target sink
+that cannot preserve the original HTTP bytes blocks the job rather than
+silently falling back to normalized candle-only storage.
+
+The sink stores an append-only provider HTTP packet with its byte length,
+SHA-256 and observed-at time in `fno_original_http_capture` in the same
+SQLite transaction as canonical candles and the preexisting immutable
+normalized SHA receipt. Exact source JSON candle rows must match the
+persisted normalized bars. Existing batches with no HTTP receipt cannot
+be retroactively promoted, duplicate retrieval of the same payload is
+idempotent, and a changed provider response fails rather than overwrites.
+
+`fno_independent_candle_e2e.audit` additionally re-hashes saved original
+HTTP payloads, reconciles their bars to the canonical candle records,
+checks capture-time ordering, rejects orphan/mutated evidence and reports
+the **aggregate** `replayableOriginalHttpResponseBatches`. It deliberately
+returns `originalProviderPublicationTimeVerified=false` and
+`historicalStrategyE2EValidated=0`: an authentic HTTP response can be
+independently replayed and audited without proving the vendor first made
+that historical bar/finished-OI value available before its session-close
+decision. None of these receipts is a cryptographically signed vendor
+publication attestation, and none contains evidence of bid/ask fills
+or after-cost OOS. Prior cached observations remain clearly legacy.
+
+The change has no AWS/S3 calls, auto-scheduling, broker order routes or
+production deployment. It preserves existing no-default-allow checks
+without asking the owner to request an additional external permission.
+The next certification prerequisites remain original source data with
+valid exchange-calendar/contract metadata, genuine as-of feasibility,
+the evaluator replay, OOS costs and independent review.

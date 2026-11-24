@@ -55,10 +55,28 @@ class RetentionGrant:
 
 
 @dataclass(frozen=True)
+class SourceObservation:
+    """Exact original provider HTTP body captured NOW, not historic publication."""
+    raw_body: bytes
+    received_at: float
+
+    def __post_init__(self):
+        if (type(self.raw_body) is not bytes or not 0 < len(self.raw_body) <= 4*1024*1024
+                or type(self.received_at) is not float
+                or not math.isfinite(self.received_at) or self.received_at <= 0):
+            raise ValueError("INVALID_HTTP_ORIGINAL_CAPTURE")
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.raw_body).hexdigest()
+
+
+@dataclass(frozen=True)
 class ProviderReply:
     status: int
     candles: object = None
     retry_after_seconds: int = 0
+    source_observation: SourceObservation | None = None
 
 
 @dataclass(frozen=True)
@@ -386,7 +404,17 @@ class BackfillWorker:
                 return "EMPTY"
             self.rights.require(batch.interval, self.today())
             try:
-                written = self.sink.upsert(batch, rows, batch.dedupe_key)
+                if reply.source_observation is not None:
+                    # Original Upstox provider success must retain the exact
+                    # bounded HTTP bytes or fail closed; no metadata-only pass.
+                    if not hasattr(self.sink, "upsert_with_observation"):
+                        raise ValueError("ORIGINAL_HTTP_RECEIPT_SINK_REQUIRED")
+                    written = self.sink.upsert_with_observation(
+                        batch, rows, batch.dedupe_key, reply.source_observation)
+                else:
+                    # Explicitly legacy/test-only source; never imply
+                    # original HTTP receipt or independent strategy E2E.
+                    written = self.sink.upsert(batch, rows, batch.dedupe_key)
             except ValueError:
                 # Immutable source conflicts are custody failures, not
                 # transient transport issues. Do not endlessly retry and

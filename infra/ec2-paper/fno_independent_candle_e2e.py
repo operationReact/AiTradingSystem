@@ -53,8 +53,10 @@ def audit(database: str | Path, now: datetime | None=None) -> dict:
         if not 1<=len(evidence)<=50000:
             _fail("NO_ELIGIBLE_IMMUTABLE_SOURCE_RECEIPTS")
         count=0
+        http_count=0
         seen=set()
         last_capture=None
+        has_original_http="fno_original_http_capture" in tables
         for (batch_hash,source,key,interval,first,last,expected,digest,
              captured,ref) in evidence:
             if (not isinstance(batch_hash,str) or not HEX.fullmatch(batch_hash)
@@ -115,6 +117,40 @@ def audit(database: str | Path, now: datetime | None=None) -> dict:
                 if ident in seen:
                     _fail("DUPLICATE_SOURCE_CANDLE")
                 seen.add(ident)
+            if has_original_http:
+                captured_http=conn.execute("""
+                    SELECT source,original_body,response_sha256,byte_count,received_at
+                    FROM fno_original_http_capture WHERE batch_hash=?
+                    """,(batch_hash,)).fetchone()
+                if captured_http is not None:
+                    original_source,body,original_digest,byte_count,received_at=captured_http
+                    if (original_source!=SOURCE
+                            or type(body) is not bytes
+                            or type(byte_count) is not int
+                            or not 0<len(body)==byte_count<=4*1024*1024
+                            or not isinstance(original_digest,str)
+                            or not HEX.fullmatch(original_digest)
+                            or hashlib.sha256(body).hexdigest()!=original_digest
+                            or not isinstance(received_at,(int,float))
+                            or not 0<received_at<=captured+1):
+                        _fail("ORIGINAL_HTTP_CAPTURE_MISMATCH")
+                    try:
+                        provider=json.loads(body)
+                        source_rows=provider["data"]["candles"]
+                        if (not isinstance(provider,dict)
+                                or provider.get("status")!="success"
+                                or not isinstance(source_rows,list)
+                                or len(source_rows)!=expected):
+                            _fail("ORIGINAL_HTTP_CANDLE_MISMATCH")
+                        normalized_source=sorted(
+                            ((r[0],float(r[1]),float(r[2]),float(r[3]),
+                              float(r[4]),int(r[5]),int(r[6]))
+                             for r in source_rows),key=lambda r:r[0])
+                    except (KeyError,ValueError,TypeError,IndexError):
+                        _fail("ORIGINAL_HTTP_CANDLE_MISMATCH")
+                    if normalized_source!=rows:
+                        _fail("ORIGINAL_HTTP_CANDLE_MISMATCH")
+                    http_count+=1
             normalized=hashlib.sha256(json.dumps(
                 rows,separators=(",",":"),ensure_ascii=True,
                 allow_nan=False).encode("utf-8")).hexdigest()
@@ -128,10 +164,15 @@ def audit(database: str | Path, now: datetime | None=None) -> dict:
             "SELECT COUNT(*) FROM fno_history_receipts").fetchone()[0]
         if all_rows!=count or all_receipts!=len(evidence):
             _fail("UNATTESTED_OR_ORPHAN_HISTORICAL_RECORDS")
+        if has_original_http and conn.execute(
+                "SELECT COUNT(*) FROM fno_original_http_capture").fetchone()[0]!=http_count:
+            _fail("ORPHAN_PROVIDER_HTTP_RECEIPT")
         return {
             "state":"STORAGE_ROUND_TRIP_VERIFIED_NOT_STRATEGY_E2E",
             "verifiedCandleRows":count,
             "verifiedImmutableBatches":len(evidence),
+            "replayableOriginalHttpResponseBatches":http_count,
+            "originalProviderPublicationTimeVerified":False,
             "legacyOrUnattributedRows":0,
             "sourceFirstCapturedAtVerified":True,
             "historicalFirstKnownAtReconstructed":False,

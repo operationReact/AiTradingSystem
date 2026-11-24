@@ -64,6 +64,8 @@ class IndependentCandleE2ETest(unittest.TestCase):
                          "STORAGE_ROUND_TRIP_VERIFIED_NOT_STRATEGY_E2E")
         self.assertEqual(report["verifiedCandleRows"],2)
         self.assertEqual(report["verifiedImmutableBatches"],1)
+        self.assertEqual(report["replayableOriginalHttpResponseBatches"],0)
+        self.assertFalse(report["originalProviderPublicationTimeVerified"])
         self.assertTrue(report["sourceFirstCapturedAtVerified"])
         self.assertFalse(report["historicalFirstKnownAtReconstructed"])
         self.assertFalse(report["independentSourceRightsVerified"])
@@ -151,11 +153,82 @@ class IndependentCandleE2ETest(unittest.TestCase):
             self.assertEqual(worker.run_once(),"DONE")
             self.assertEqual(opener.calls,1)
             self.assertEqual(queue.summary()["rows_written"],2)
-            self.assertEqual(independent.audit(self.path)["verifiedCandleRows"],2)
+            report=independent.audit(self.path)
+            self.assertEqual(report["verifiedCandleRows"],2)
+            self.assertEqual(report["replayableOriginalHttpResponseBatches"],1)
+            self.assertFalse(report["originalProviderPublicationTimeVerified"])
+            receipt=self.sink.conn.execute("""
+                SELECT original_body,response_sha256,received_at
+                FROM fno_original_http_capture
+                WHERE batch_hash=?""",(self.batch.dedupe_key,)).fetchone()
+            import hashlib
+            self.assertEqual(hashlib.sha256(receipt[0]).hexdigest(),receipt[1])
+            self.assertLessEqual(receipt[2],self.sink.conn.execute("""
+                SELECT first_captured_at FROM fno_immutable_candle_receipt
+                WHERE batch_hash=?""",(self.batch.dedupe_key,)).fetchone()[0])
             self.assertEqual(worker.run_once(),"IDLE")
             self.assertEqual(opener.calls,1)
         finally:
             queue.close()
+
+    def test_raw_http_is_immutable_and_independently_rehashed(self):
+        import json
+        import hashlib
+        original=json.dumps({"status":"success","data":{"candles":[
+            list(x) for x in candles()]}}).encode()
+        observation=core.SourceObservation(original,float(core.utcnow()))
+        self.assertTrue(self.sink.upsert_with_observation(
+            self.batch,candles(),self.batch.dedupe_key,observation))
+        self.assertEqual(independent.audit(self.path)[
+            "replayableOriginalHttpResponseBatches"],1)
+        # Identical provider bytes are idempotent; first observed stays put.
+        before=self.sink.conn.execute("""
+            SELECT received_at,response_sha256 FROM fno_original_http_capture
+            WHERE batch_hash=?""",(self.batch.dedupe_key,)).fetchone()
+        self.assertTrue(self.sink.upsert_with_observation(
+            self.batch,candles(),self.batch.dedupe_key,observation))
+        after=self.sink.conn.execute("""
+            SELECT received_at,response_sha256 FROM fno_original_http_capture
+            WHERE batch_hash=?""",(self.batch.dedupe_key,)).fetchone()
+        self.assertEqual(before,after)
+        with self.assertRaisesRegex(ValueError,"ORIGINAL_HTTP_CAPTURE_CANNOT_BE_DOWNGRADED"):
+            self.store()
+        revised=json.dumps({"status":"success","data":{"candles":[
+            list(x) for x in candles()]}},separators=(",",":")).encode()
+        self.assertNotEqual(hashlib.sha256(original).hexdigest(),
+                            hashlib.sha256(revised).hexdigest())
+        with self.assertRaisesRegex(ValueError,"ORIGINAL_PROVIDER_RESPONSE_REVISION"):
+            self.sink.upsert_with_observation(
+                self.batch,candles(),self.batch.dedupe_key,
+                core.SourceObservation(revised,float(core.utcnow())))
+        self.sink.conn.execute("""UPDATE fno_original_http_capture
+            SET response_sha256=? WHERE batch_hash=?""",
+            ("0"*64,self.batch.dedupe_key))
+        with self.assertRaisesRegex(ValueError,"ORIGINAL_HTTP_CAPTURE_MISMATCH"):
+            independent.audit(self.path)
+
+    def test_legacy_batches_cannot_acquire_late_original_http_receipts(self):
+        import json
+        self.store()
+        body=json.dumps({"status":"success","data":{"candles":[
+            list(x) for x in candles()]}}).encode()
+        with self.assertRaisesRegex(ValueError,"CANNOT_RETROFIT_OLD_HTTP_CAPTURE"):
+            self.sink.upsert_with_observation(
+                self.batch,candles(),self.batch.dedupe_key,
+                core.SourceObservation(body,float(core.utcnow())))
+        self.assertEqual(independent.audit(self.path)[
+            "replayableOriginalHttpResponseBatches"],0)
+
+    def test_forged_http_payload_not_matching_rows_is_rejected(self):
+        import json
+        corrupted=[list(x) for x in candles()]
+        corrupted[1][4]=107
+        forged=json.dumps({"status":"success","data":{"candles":corrupted}}).encode()
+        with self.assertRaisesRegex(ValueError,"HTTP_CANDLES_DO_NOT_MATCH_SOURCE"):
+            self.sink.upsert_with_observation(
+                self.batch,candles(),self.batch.dedupe_key,
+                core.SourceObservation(forged,float(core.utcnow())))
+        self.assertEqual(self.sink.count(),0)
 
     def test_worker_quarantines_provider_revision_without_marking_done(self):
         class StaticProvider:
