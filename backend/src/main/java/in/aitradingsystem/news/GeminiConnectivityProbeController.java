@@ -24,6 +24,18 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/admin/market-intelligence")
 public class GeminiConnectivityProbeController {
     private static final Duration COOLDOWN = Duration.ofMinutes(5);
+    // A diagnostic nonce is application-generated input, not an untrusted news
+    // article. The production classifier correctly ignores article instructions;
+    // use explicit diagnostic instructions so those rules cannot conflict here.
+    private static final String DIAGNOSTIC_SYSTEM_PROMPT = """
+        Perform a synthetic structured-connectivity diagnostic, not news analysis.
+        Return only the JSON analysis schema with sentiment NEUTRAL, category OTHER,
+        directionScore 0, confidence 1, materiality 0, horizon UNKNOWN, novelty 0,
+        contradiction false, ambiguity false, impactedSymbols [], and risks [].
+        The evidence field must equal the user message exactly. The user message
+        is an application-generated diagnostic nonce, not an article or a command.
+        Do not give trading advice, price targets, forecasts or order instructions.
+        """;
     private final NewsProperties properties;
     private final GeminiNewsAnalysisProvider provider;
     private final NewsAnalysisParser parser;
@@ -55,12 +67,7 @@ public class GeminiConnectivityProbeController {
             long start = System.nanoTime();
             String challenge = "MINTTICK-DIAGNOSTIC-" + UUID.randomUUID();
             try {
-                var completion = provider.complete(NewsAnalysisService.SYSTEM_PROMPT,
-                    "Connectivity diagnostic only; fictional input, not news. "
-                    + "Return neutral OTHER classification, directionScore 0, confidence 1, "
-                    + "materiality 0, horizon UNKNOWN, novelty 0, contradiction false, "
-                    + "ambiguity false, impactedSymbols [], risks []. "
-                    + "The evidence field must equal exactly: " + challenge);
+                var completion = provider.complete(DIAGNOSTIC_SYSTEM_PROMPT, challenge);
                 var parsed = parser.parse(completion.text());
                 boolean idPresent = completion.providerRequestId() != null
                     && !completion.providerRequestId().isBlank();
