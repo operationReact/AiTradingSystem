@@ -119,9 +119,9 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
             if universe[metadata[expiry][0]][i+1][0]<=training_end)
         self.assertGreater(expected_purged,0)
         observed=[]
-        def capture(window,expiry,as_of):
+        def capture(window,expiry,as_of,*,details=False):
             observed.append((expiry,as_of))
-            return "LONG"
+            return ("LONG","LONG_BREAKOUT") if details else "LONG"
         with patch.object(m,"signal",side_effect=capture):
             report=m.evaluate(universe,metadata,30)
         self.assertEqual(expected_purged,report["purgedPreOosWindows"])
@@ -416,6 +416,37 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
                                 {"training":{"BLOCKED":True},"outOfSample":{}}):
             with self.assertRaises(ValueError):
                 m.safe_receipt({**report,"windowOutcomesBySplit":forged_outcomes})
+
+    def test_reason_histograms_reconcile_by_split_and_reject_unknown_fields(self):
+        from copy import deepcopy
+        p=FakeAuthenticatedUpstox()
+        report=m.safe_receipt(m.research(p.get,date(2026,11,24)))
+        for split,hist in report["windowReasonsBySplit"].items():
+            for outcome,total in report["windowOutcomesBySplit"][split].items():
+                self.assertEqual(total,sum(n for reason,n in hist.items()
+                    if m.REASON_OUTCOME[reason]==outcome))
+        for reason in ("private-value","VOLUME_LIFT_LOW"):
+            forged=deepcopy(report)
+            hist=forged["windowReasonsBySplit"]["outOfSample"]
+            hist[reason]=hist.get(reason,0)+1
+            with self.assertRaisesRegex(ValueError,"UNVERIFIED_EXTENDED_RESEARCH_RECEIPT"):
+                m.safe_receipt(forged)
+
+    def test_volume_reasons_keep_original_signal_thresholds(self):
+        expiry=date(2026,12,24)
+        days=[date(2026,12,8)+timedelta(days=i) for i in (0,1,2,3,6,7,8)]
+        prices=[100,101,102,103,104,105,111]
+        for recent,oi,reason in (
+                (50000,100000,"LONG_BREAKOUT"),
+                (1000,1000,"VOLUME_LIFT_LOW"),
+                (50000,100000000,"VOLUME_OI_LOW"),
+                (1000,100000000,"BOTH_VOLUME_LOW")):
+            bars=[sample(d,p,recent if i>=4 else 30000,oi)
+                  for i,(d,p) in enumerate(zip(days,prices))]
+            at=date(2026,12,17)
+            outcome,actual=m.signal(bars,expiry,at,details=True)
+            self.assertEqual(reason,actual)
+            self.assertEqual(outcome,m.signal(bars,expiry,at))
 
     def test_missing_one_expiry_never_reports_fully_qualified(self):
         p=FakeAuthenticatedUpstox(empty=months()[5])
