@@ -79,7 +79,7 @@ void main() {
     expect(() => NewsAdminHealthSnapshot.fromJson(negative), throwsFormatException);
     final duplicates = fixtureHealth();
     duplicates['sources'] = [
-      ...duplicates['sources'] as List,
+      ...(duplicates['sources'] as List),
       ...(duplicates['sources'] as List),
     ];
     expect(() => NewsAdminHealthSnapshot.fromJson(duplicates), throwsFormatException);
