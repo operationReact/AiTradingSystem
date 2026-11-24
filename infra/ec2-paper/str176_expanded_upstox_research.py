@@ -221,6 +221,18 @@ def signal(window,expiry,as_of):
     if down>=100 and falls>=2 and rises==0 and down-20>30:return "SHORT"
     return "NO_SIGNAL"
 
+def realized_drawdown_by_session(net_by_exit):
+    """Realized P&L drawdown, not intraday or mark-to-market risk.
+
+    Aggregate same-session exits and order by actual exit date, not expiry.
+    """
+    equity=peak=drawdown=0
+    for exit_day in sorted(net_by_exit):
+        equity+=net_by_exit[exit_day]
+        peak=max(peak,equity)
+        drawdown=max(drawdown,peak-equity)
+    return drawdown
+
 def evaluate(universe,metadata,cost_bps):
     if cost_bps not in (20,30,50) or len(metadata)!=12:
         raise ValueError("RESEARCH_SCENARIO_INVALID")
@@ -230,7 +242,8 @@ def evaluate(universe,metadata,cost_bps):
     split=ordered_expiries[8]
     training_end=ordered_expiries[7]
     counts=Counter()
-    train_net=oos_net=equity=peak=drawdown=0
+    train_net=oos_net=0
+    oos_net_by_exit=Counter()
     for expiry in sorted(metadata):
         key,lot=metadata[expiry]
         rows=universe.get(key)
@@ -277,9 +290,7 @@ def evaluate(universe,metadata,cost_bps):
             else:
                 counts["oosTrades"]+=1
                 oos_net+=net
-                equity+=net
-                peak=max(peak,equity)
-                drawdown=max(drawdown,peak-equity)
+                oos_net_by_exit[exit_date]+=net
                 if net<0:counts["oosLosses"]+=1
     state=("SOURCE_FUTURES_COHORTS_INCOMPLETE"
            if counts["eligibleFuturesCohorts"]!=12 else
@@ -298,7 +309,7 @@ def evaluate(universe,metadata,cost_bps):
         "outOfSampleTrades":counts["oosTrades"],
         "outOfSampleLosses":counts["oosLosses"],
         "trainingNetPaise":train_net,"outOfSampleNetPaise":oos_net,
-        "outOfSampleMaxDrawdownPaise":drawdown,
+        "outOfSampleMaxDrawdownPaise":realized_drawdown_by_session(oos_net_by_exit),
     }
 
 def research(fetch, reference_date):
