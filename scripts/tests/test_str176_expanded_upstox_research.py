@@ -139,7 +139,7 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         self.assertTrue(all(r[0].weekday()<5 and r[-1]==m.SOURCE for r in bars))
         double=dict(raw)
         double["candles"]=list(raw["candles"])+[raw["candles"][0]]
-        with self.assertRaisesRegex(ValueError,"INVALID_SOURCE_SESSION"):
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_DUPLICATE_SESSION_DAY"):
             m.decode_expired_chunk(double,start,end)
         wrong={"candles":[["2026-10-01T09:15:00+05:30",100,101,99,100,1,1]]}
         with self.assertRaisesRegex(ValueError,"INVALID_SOURCE_SESSION"):
@@ -153,7 +153,7 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
             ([],"HISTORICAL_DATA_OBJECT_MISSING"),
             ({},"HISTORICAL_CANDLE_ARRAY_MISSING"),
             ({"candles":None},"HISTORICAL_CANDLE_ARRAY_MISSING"),
-            ({"candles":[["masked"]]*31},"HISTORICAL_CANDLE_WINDOW_OVERSIZED")
+            ({"candles":[["masked"]]*121},"HISTORICAL_CANDLE_WINDOW_OVERSIZED")
         ]:
             with self.assertRaisesRegex(ValueError,"^"+reason+"$"):
                 m.decode_expired_chunk(payload,first,last)
