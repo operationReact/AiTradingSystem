@@ -104,3 +104,33 @@ walk-forward OOS evaluation or independently certify anything. The output
 has `independentHistoricalCertified=0/43` and never accesses broker orders.
 It must not be used to override evidence gates or reinterpret synthetic tests
 as genuine historical observations.
+
+## 2026-11-24 owner-rights and official calendar blocker audit
+
+The exact-host `str176_v102_source_probe.py` now reports **five** private,
+bounded aggregate integers rather than three: existing V102 rows,
+rights-and-as-of-eligible V102 rows, possible 7-session source groups,
+**fully authorized provider count** and **verified recent NSE_FO calendar
+session rows**. A fully authorized provider requires independently
+stored, current, unrevoked `VERIFIED` grants for **both RAW_RETENTION and
+MODEL_INFERENCE**, separately in each domain:
+`nse_fo_completed_ohlcv`, `nse_fo_final_oi`,
+`nse_fo_trading_calendar`. It audits only the exact supported
+`UPSTOX_ANALYTICS` and `ANGEL_ONE_SMARTAPI` provider identities.
+No provider rights are inferred from API login, Plus subscription,
+existing private SQLite candles, personal use or a fabricated receipt.
+
+The calendar count includes only current, source-verified, provider-linked
+NSE session records in the last 26 calendar days. An empty rights count
+means the first V102 ingestion prerequisite is unavailable; an empty
+calendar count means official calendar custody is unavailable. A positive
+count proves only DB receipt coverage, not cryptographic licence validity,
+authentic final-OI publication, complete contract master, a fill, an OOS
+backtest or independent strategy acceptance.
+
+The operator-only exact-host workflow remains single-request-file,
+read-only PostgreSQL, no provider token, zero source-data export, no orders,
+no rights writes. Previous three-number host receipts remain historical
+evidence of the earlier contract version; the new five-number receipt
+must be verified independently on the exact host after a separate
+approved one-file dev request.
