@@ -1,6 +1,6 @@
 package in.aitradingsystem.tradingrooms;
 
-import in.aitradingsystem.marketdata.MarketSessionCalendar;
+import in.aitradingsystem.marketdata.FnoHistoricalSessionCalendar;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -50,19 +50,19 @@ public class Fno176SourceLinkedWalkForwardV1 {
         String sourceWindowReceiptSha256, String evaluatorReasonCode) {}
 
     private final Fno176VerifiedHistoricalReplayService replaySource;
-    private final MarketSessionCalendar calendar;
+    private final FnoHistoricalSessionCalendar calendar;
     private final Clock clock;
 
     @Autowired
     public Fno176SourceLinkedWalkForwardV1(
             Fno176VerifiedHistoricalReplayService replaySource,
-            MarketSessionCalendar calendar) {
+            FnoHistoricalSessionCalendar calendar) {
         this(replaySource, calendar, Clock.systemUTC());
     }
 
     Fno176SourceLinkedWalkForwardV1(
             Fno176VerifiedHistoricalReplayService replaySource,
-            MarketSessionCalendar calendar, Clock clock) {
+            FnoHistoricalSessionCalendar calendar, Clock clock) {
         this.replaySource = Objects.requireNonNull(replaySource);
         this.calendar = Objects.requireNonNull(calendar);
         this.clock = Objects.requireNonNull(clock);
@@ -98,16 +98,16 @@ public class Fno176SourceLinkedWalkForwardV1 {
         int training = 0, outOfSample = 0, candidates = 0, oosCandidates = 0;
         for (var day = firstDecisionDay; !day.isAfter(lastDecisionDay);
                 day = day.plusDays(1)) {
+            Instant decisionAt = day.atTime(DECISION_AT).atZone(IST).toInstant();
+            if (decisionAt.isAfter(clock.instant()))
+                return blocked("STR176_FUTURE_DECISION_NOT_OBSERVED");
             final boolean tradingDay;
             try {
-                tradingDay = calendar.isTradingDay(day);
+                tradingDay = calendar.isTradingDay(day, decisionAt);
             } catch (RuntimeException unavailable) {
                 return blocked("STR176_ORIGINAL_TRADING_CALENDAR_UNAVAILABLE");
             }
             if (!tradingDay) continue;
-            Instant decisionAt = day.atTime(DECISION_AT).atZone(IST).toInstant();
-            if (decisionAt.isAfter(clock.instant()))
-                return blocked("STR176_FUTURE_DECISION_NOT_OBSERVED");
             final Fno176VerifiedHistoricalReplayService.Evidence proof;
             try {
                 proof = replaySource.inspect(contractKey, decisionAt);
