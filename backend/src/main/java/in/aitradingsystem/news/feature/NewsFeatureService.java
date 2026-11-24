@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -31,12 +32,15 @@ public class NewsFeatureService {
     private final JdbcClient jdbc;
     private final ObjectMapper mapper;
     private final boolean enabled;
+    private final ObjectProvider<FnoUnderlyingCatalogueAdapter> fnoAdapter;
 
     public NewsFeatureService(JdbcClient jdbc, ObjectMapper mapper,
-            @Value("${app.news.mind-context.enabled:false}") boolean enabled) {
+            @Value("${app.news.mind-context.enabled:false}") boolean enabled,
+            ObjectProvider<FnoUnderlyingCatalogueAdapter> fnoAdapter) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.enabled = enabled;
+        this.fnoAdapter = fnoAdapter;
     }
 
     /** Rollout flag. When false, scans do not attach news context at all. */
@@ -53,7 +57,19 @@ public class NewsFeatureService {
         }
     }
 
+    /**
+     * As-of news context for one instrument, with the F&amp;O underlying resolution attached when the
+     * catalogue adapter is available. The resolution never changes a news fact. Without the adapter
+     * the F&amp;O fields stay null, which reads as "not resolved", never as "not listed".
+     */
     public NewsContext contextFor(long instrumentId, String tradingSymbol, Instant asOf) {
+        NewsContext context = contextFromNews(instrumentId, tradingSymbol, asOf);
+        FnoUnderlyingCatalogueAdapter adapter = fnoAdapter.getIfAvailable();
+        if (adapter == null) return context;
+        return context.withFno(adapter.resolve(baseSymbol(tradingSymbol)));
+    }
+
+    private NewsContext contextFromNews(long instrumentId, String tradingSymbol, Instant asOf) {
         String base = baseSymbol(tradingSymbol);
         if (!SAFE_BASE_SYMBOL.matcher(base).matches()) {
             return new NewsContext(NewsFeaturePolicy.CONTRACT, instrumentId, tradingSymbol, asOf,
