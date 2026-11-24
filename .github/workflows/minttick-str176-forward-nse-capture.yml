@@ -46,13 +46,13 @@ jobs:
           set -euo pipefail
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/str176-forward-nse-capture.json'
           python3 - <<'PY'
-          import json,sys
+          import sys
+          from datetime import datetime,timezone
           from pathlib import Path
           sys.path.insert(0,'infra/ec2-paper')
-          from str176_forward_nse_capture import EXACT
+          from str176_forward_nse_capture import load_request
           p=Path('infra/ec2-paper/requests/str176-forward-nse-capture.json')
-          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
-          assert json.loads(p.read_text())==EXACT
+          load_request(p,datetime.now(timezone.utc))
           PY
       - uses: aws-actions/configure-aws-credentials@v4
         with:
