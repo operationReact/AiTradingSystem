@@ -81,6 +81,41 @@ class GeminiNewsAnalysisProviderTest {
             .hasMessageContaining("structured text content");
     }
 
+    @Test
+    void processObservationSeparatesResponseWithIdFromLaterFailure() throws Exception {
+        // Stub the transport boundary: these fixtures do not verify real Gemini.
+        JsonNode response = mapper.readTree("""
+            {"status":"completed","id":"fixture-id","steps":[
+              {"type":"model_output","content":[{"type":"text","text":"fixture-output"}]}]}
+            """);
+        java.util.concurrent.atomic.AtomicReference<JsonNode> next =
+            new java.util.concurrent.atomic.AtomicReference<>(response);
+        NewsProperties props = new NewsProperties("GEMINI", "gemini-2.5-flash",
+            "claude-test", "test-key", "", 1000, 5000, 2);
+        var provider = new GeminiNewsAnalysisProvider(props, mapper) {
+            @Override
+            protected JsonNode post(String path, Map<String, String> headers, Object body) {
+                return next.get();
+            }
+        };
+        assertThat(provider.latestObservation()).isNull();
+        provider.complete("system", "user");
+        var first = provider.latestObservation();
+        assertThat(first.outcome()).isEqualTo("COMPLETED_WITH_REQUEST_ID");
+        assertThat(first.toString()).doesNotContain("fixture-id", "fixture-output", "test-key");
+        next.set(mapper.readTree("{\"status\":\"failed\"}"));
+        assertThatThrownBy(() -> provider.complete("system", "user"))
+            .isInstanceOf(AiProviderException.class);
+        assertThat(provider.latestObservation().outcome()).isEqualTo("INVALID_RESPONSE");
+        assertThat(provider.latestObservation().finishedAt()).isAfterOrEqualTo(first.finishedAt());
+        next.set(mapper.readTree("""
+            {"status":"completed","steps":[{"type":"model_output",
+              "content":[{"type":"text","text":"fixture-output"}]}]}
+            """));
+        provider.complete("system", "user");
+        assertThat(provider.latestObservation().outcome()).isEqualTo("COMPLETED_WITHOUT_REQUEST_ID");
+    }
+
     private GeminiNewsAnalysisProvider provider() {
         NewsProperties props = new NewsProperties(
             "GEMINI",
