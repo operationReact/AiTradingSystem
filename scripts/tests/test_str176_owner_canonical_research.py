@@ -90,6 +90,9 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         self.assertGreater(result["decisionWindows"],0)
         self.assertEqual(0,result["candidateWindows"])
         self.assertEqual(0,result["simulatedRoundTrips"])
+        self.assertEqual(result["decisionWindows"],
+                         sum(result["diagnosticReasons"].values()))
+        self.assertTrue(set(result["diagnosticReasons"])<=replay.REASONS)
         self.assertEqual("RESEARCH_SIMULATED_AFTER_COST_NOT_CERTIFIED",result["state"])
         self.assertFalse(result["historicalStrategyE2ECertified"])
         self.assertFalse(result["providerFirstPublishedAtVerified"])
@@ -110,12 +113,16 @@ class OwnerRetrospectiveTests(unittest.TestCase):
               for i,(d,p) in enumerate(zip(dates,prices))]
         a=replay.momentum(rows[:7],expiry,dates[7])
         self.assertEqual("LONG",a)
+        self.assertEqual(("LONG","UPWARD_BREAKOUT"),
+            replay.momentum(rows[:7],expiry,dates[7],details=True))
         changed=list(rows)
         changed[7]=sample(dates[7],Decimal("500"),50000,130000)
         changed[8]=sample(dates[8],Decimal("5"),50000,130000)
         self.assertEqual(a,replay.momentum(changed[:7],expiry,dates[7]))
         self.assertEqual("BLOCKED",replay.momentum(rows[:7],
             expiry,date(2026,12,20)))
+        self.assertEqual(("BLOCKED","EXPIRY_OUT_OF_SCOPE"),
+            replay.momentum(rows[:7],expiry,date(2026,12,20),details=True))
 
     def test_simulated_next_open_and_costs_are_actual_accounting_not_fills(self):
         metadata={}
@@ -138,6 +145,8 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         self.assertGreater(out["counts"]["simulatedRoundTrips"],0)
         self.assertGreater(out["counts"]["trainingTrades"],0)
         self.assertGreater(out["counts"]["outOfSampleTrades"],0)
+        self.assertEqual(out["counts"]["decisionWindows"],
+            sum(v for k,v in out["counts"].items() if k.startswith("reason:")))
         self.assertIsInstance(out["oosNetPaise"],int)
         self.assertGreaterEqual(out["oosMaxDrawdownPaise"],0)
 
