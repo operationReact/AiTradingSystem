@@ -48,6 +48,8 @@ class GeminiRuntimePreflightTest(unittest.TestCase):
             'OSError: [Errno 28] No space left on device: fixture-private-path': 'FILESYSTEM_DISK_FULL',
             'PermissionError: fixture-private-path': 'FILESYSTEM_PERMISSION_DENIED',
             'FileNotFoundError: fixture-private-path': 'FILESYSTEM_FILE_MISSING',
+            "FileNotFoundError: [Errno 2] No such file: '/opt/aitradingsystem-paper/monitor/.owner-charts-previous/fixture-private.json'": 'HISTORY_CACHE_FILE_MISSING',
+            "FileNotFoundError: [Errno 2] No such file or directory: '2885.json'": 'HISTORY_CACHE_FILE_MISSING',
         }
         for error, expected in cases.items():
             raw = error + '\nMINTTICK_DEPLOY_FAILED_STAGE:history_precheck\n'

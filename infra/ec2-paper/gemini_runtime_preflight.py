@@ -39,6 +39,8 @@ HISTORY_FAILURES = {
     "OVERSIZE_MONTHLY_CHART", "INVALID_CHART_TOKEN", "INVALID_MONTHLY_TOKEN",
     "HISTORY_SCHEMA_MISSING", "HISTORY_SQLITE_OPERATIONAL_FAILURE", "FILESYSTEM_DISK_FULL",
     "FILESYSTEM_PERMISSION_DENIED", "FILESYSTEM_FILE_MISSING",
+    "HISTORY_CACHE_FILE_MISSING", "PUBLICATION_BUSY", "UNTRUSTED_PUBLICATION_LOCK",
+    "PUBLICATION_HANDOVER_BUSY", "PUBLICATION_HANDOVER_UNAVAILABLE",
 }
 COLLECTOR_FILES = {"authProbe": ("probe_owner_angelone_auth.py", 0o600),
                    "collector": ("owner_personal_angelone_history.py", 0o600),
@@ -174,6 +176,9 @@ def classify_history_failure(text):
     if "PermissionError:" in text:
         return "FILESYSTEM_PERMISSION_DENIED"
     if "FileNotFoundError:" in text:
+        if ('/opt/aitradingsystem-paper/monitor/' in text
+                or re.search(r"FileNotFoundError:[^\n]*['\"][0-9]{1,12}\.json['\"](?:\r?\n|$)", text)):
+            return "HISTORY_CACHE_FILE_MISSING"
         return "FILESYSTEM_FILE_MISSING"
     return "UNCLASSIFIED_HISTORY_FAILURE"
 
