@@ -1,0 +1,11 @@
+{
+  "kind": "minttick-str176-owner-futures-60day-private-v1",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "max_contract_months": 12,
+  "max_provider_gets": 25,
+  "no_market_export": true,
+  "no_orders": true,
+  "no_rights_change": true
+}
