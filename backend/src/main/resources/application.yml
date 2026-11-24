@@ -142,6 +142,12 @@ app:
         max-requests-per-run: ${OFFICIAL_SOURCE_MAX_REQUESTS_PER_RUN:25}
   news:
     retention-days: ${NEWS_RETENTION_DAYS:90}
+    # Source-backed RSS receipt → immutable event ledger projection. Does not
+    # call an AI provider, infer an issuer, or authorize orders. Off until all
+    # source rights, provenance and runtime gates have been reviewed.
+    event-ledger:
+      enabled: ${NEWS_EVENT_LEDGER_ENABLED:false}
+      interval-ms: ${NEWS_EVENT_LEDGER_INTERVAL_MS:300000}
     ingestion:
       enabled: ${NEWS_INGESTION_ENABLED:false}
       interval-ms: ${NEWS_INGESTION_INTERVAL_MS:900000}
@@ -159,7 +165,8 @@ app:
       enabled: ${NEWS_MIND_CONTEXT_ENABLED:false}
     # Bridge from approved RSS ingestion (news_item) into the analyzer store (news_articles).
     # Fail-closed: off by default, and nothing is published unless its source id is listed. The
-    # list is the rights gate; no licence or redistribution right is asserted by the code.
+    # list is only an operator allowlist. The stored default-deny source policy
+    # independently gates INGEST, RETAIN, DISPLAY and NLP_TRANSFER uses.
     analyzer-bridge:
       enabled: ${NEWS_ANALYZER_BRIDGE_ENABLED:false}
       approved-sources: ${NEWS_ANALYZER_APPROVED_SOURCES:}
