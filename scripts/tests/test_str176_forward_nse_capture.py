@@ -12,6 +12,23 @@ DAY=date.fromisoformat(m.EXACT["session_date"])
 OBS=datetime(2026,11,24,15,0,tzinfo=timezone.utc)
 COUNTS={"indexFutures":3,"indexOptions":25}
 class CaptureTest(unittest.TestCase):
+    def test_failure_receipts_never_publish_arbitrary_host_output(self):
+        self.assertEqual("SOURCE_FILE_NOT_AVAILABLE",m.failure_receipt(
+            m.FAILURE_MARKER+"SOURCE_FILE_NOT_AVAILABLE\n"))
+        self.assertEqual("HOST_CAPTURE_NO_SAFE_RECEIPT",m.failure_receipt(
+            m.FAILURE_MARKER+"unexpected private value\n"))
+        self.assertEqual("HOST_CAPTURE_NO_SAFE_RECEIPT",m.failure_receipt(
+            m.FAILURE_MARKER+"SOURCE_HTTP_REJECTED\n"+m.FAILURE_MARKER+"SOURCE_TOO_LARGE"))
+        self.assertEqual("SOURCE_CAPTURE_UNEXPECTED_FAILURE",m.safe_reason(
+            m.Blocked("untrusted private value")))
+        self.assertEqual("PRIVATE_STORAGE_UNAVAILABLE",m.safe_reason(OSError("private path")))
+
+    def test_transport_bundles_reviewed_parser_and_compiles(self):
+        source=m.transport()
+        compile(source,"<protected-host>","exec")
+        self.assertIn(b"fno_personal_nse_archive_probe",source)
+        self.assertIn(b"def read_udiff",source)
+
     def test_scope_is_bounded_and_not_before_final_eod(self):
         m.require_scope(DAY,OBS)
         for bad in (OBS-timedelta(hours=8),OBS+timedelta(days=3)):
