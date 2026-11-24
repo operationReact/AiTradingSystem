@@ -6,6 +6,10 @@ on:
     paths:
       - '.github/workflows/minttick-fno43-historical-operator-readonly.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176HistoricalEligibilityController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno176HistoricalEligibilityControllerTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayServiceTest.java'
@@ -15,6 +19,10 @@ on:
     paths:
       - '.github/workflows/minttick-fno43-historical-operator-readonly.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176HistoricalEligibilityController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno176HistoricalEligibilityControllerTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayServiceTest.java'
@@ -40,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=AdminFno43HistoricalReplayControllerTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest,Fno181182VerifiedHistoricalReplayServiceTest,Fno183184VerifiedHistoricalReplayServiceTest' test
+            '-Dtest=AdminFno43HistoricalReplayControllerTest,AdminFno176HistoricalEligibilityControllerTest,FnoVerifiedCompletedOhlcvOiStoreTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest,Fno181182VerifiedHistoricalReplayServiceTest,Fno183184VerifiedHistoricalReplayServiceTest' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno43HistoricalReplayControllerTest.xml
       - name: Enforce GET with role only and no market-data or broker route
         shell: bash
@@ -67,6 +75,30 @@ jobs:
           assert src.count('false,false,false,false') == 2
           assert src.count('ResponseEntity.ok().cacheControl(CacheControl.noStore())') == 2
           assert src.count('@PreAuthorize("hasAnyRole(\'ADMIN\', \'OPERATOR\')")') == 2
+          PY
+      - name: Ensure STR-176 original-source inventory never implies certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          ctl=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176HistoricalEligibilityController.java').read_text()
+          store=Path('backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java').read_text()
+          for needed in ('@GetMapping("/str176-original-source")',
+                         '@PreAuthorize("hasAnyRole(', 'CacheControl.noStore()',
+                         'POTENTIAL_SOURCE_INPUT_ONLY_NOT_E2E',
+                         'false,false'):
+              assert needed in ctl,needed
+          for needed in ("ohlcv_rights.receipt_status = 'VERIFIED'",
+                         "oi_rights.receipt_status = 'VERIFIED'",
+                         'cal.session_status = \'TRADING\'',
+                         's.ohlcv_first_available_at <= ?',
+                         's.oi_first_available_at <= ?',
+                         'HAVING COUNT(DISTINCT session_date) >= 7'):
+              assert needed in store,needed
+          for forbidden in ('@PostMapping','submitOrder','placeOrder',
+                            'get-parameter','MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert forbidden not in ctl,forbidden
           PY
       - name: Print honest read-only historical source evidence tier
         if: always()

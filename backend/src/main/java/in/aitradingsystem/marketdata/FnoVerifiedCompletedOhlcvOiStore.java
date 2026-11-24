@@ -72,6 +72,87 @@ public class FnoVerifiedCompletedOhlcvOiStore {
         ORDER BY s.session_date, s.provider_code
         """;
 
+    /** Aggregate original-source eligibility, never a strategy certification. */
+    private static final String ELIGIBILITY_SQL = """
+        WITH verified_source AS (
+          SELECT s.instrument_key, s.provider_code, s.session_date
+          FROM fno_verified_completed_ohlcv_oi_session s
+          JOIN golden_data_provider p ON p.provider_code = s.provider_code
+              AND p.source_kind = 'EXTERNAL'
+          JOIN golden_source_rights_receipt ohlcv_rights
+              ON ohlcv_rights.receipt_id = s.ohlcv_rights_receipt_id
+              AND ohlcv_rights.provider_id = p.provider_id
+              AND ohlcv_rights.source_domain = 'nse_fo_completed_ohlcv'
+              AND ohlcv_rights.permitted_use = 'MODEL_INFERENCE'
+              AND ohlcv_rights.receipt_status = 'VERIFIED'
+          JOIN golden_source_rights_receipt oi_rights
+              ON oi_rights.receipt_id = s.oi_rights_receipt_id
+              AND oi_rights.provider_id = p.provider_id
+              AND oi_rights.source_domain = 'nse_fo_final_oi'
+              AND oi_rights.permitted_use = 'MODEL_INFERENCE'
+              AND oi_rights.receipt_status = 'VERIFIED'
+          JOIN golden_historical_exchange_session_evidence cal
+              ON cal.evidence_id = s.calendar_evidence_id
+              AND cal.provider_id = p.provider_id
+              AND cal.source_domain = 'nse_fo_trading_calendar'
+              AND cal.exchange = 'NSE'
+              AND cal.session_date = s.session_date
+              AND cal.session_status = 'TRADING'
+          WHERE s.session_date BETWEEN ? AND ?
+            AND s.expiry BETWEEN ? AND ?
+            AND s.retain_until >= ?
+            AND s.captured_at <= ?
+            AND s.ohlcv_first_available_at >= cal.session_close_at
+            AND s.oi_first_available_at >= cal.session_close_at
+            AND s.ohlcv_first_available_at <= ?
+            AND s.oi_first_available_at <= ?
+            AND cal.first_available_at <= ?
+            AND cal.verified_at <= ?
+            AND cal.captured_at <= ?
+            AND ohlcv_rights.valid_from <= ?
+            AND (ohlcv_rights.valid_to IS NULL OR ohlcv_rights.valid_to > ?)
+            AND ohlcv_rights.verified_at <= ?
+            AND ohlcv_rights.captured_at <= ?
+            AND oi_rights.valid_from <= ?
+            AND (oi_rights.valid_to IS NULL OR oi_rights.valid_to > ?)
+            AND oi_rights.verified_at <= ?
+            AND oi_rights.captured_at <= ?
+        )
+        SELECT
+          (SELECT COUNT(*) FROM fno_verified_completed_ohlcv_oi_session) AS total_rows,
+          (SELECT COUNT(*) FROM verified_source) AS eligible_rows,
+          (SELECT COUNT(*) FROM (
+              SELECT provider_code, instrument_key
+              FROM verified_source
+              GROUP BY provider_code, instrument_key
+              HAVING COUNT(DISTINCT session_date) >= 7
+          ) candidates) AS possible_seven_session_windows
+        """;
+
+    /** Only counts; neither eligible source rows nor seven dates prove STR-176 E2E. */
+    public record HistoricalEligibility(
+        long totalOriginalRows, long rightsJoinedAsOfRows,
+        long possibleSevenSessionWindows) {}
+
+    public HistoricalEligibility inspectHistoricalEligibility(Instant asOf) {
+        Objects.requireNonNull(asOf, "asOf");
+        var today = asOf.atZone(IST).toLocalDate();
+        var last = today.minusDays(1);
+        var first = last.minusDays(25);
+        Object[] bind = new Object[19];
+        bind[0] = Date.valueOf(first);
+        bind[1] = Date.valueOf(last);
+        bind[2] = Date.valueOf(today.plusDays(7));
+        bind[3] = Date.valueOf(today.plusDays(120));
+        bind[4] = Date.valueOf(today);
+        java.util.Arrays.fill(bind, 5, bind.length, Timestamp.from(asOf));
+        return jdbc.queryForObject(ELIGIBILITY_SQL, (rs, index) ->
+            new HistoricalEligibility(
+                rs.getLong("total_rows"),
+                rs.getLong("eligible_rows"),
+                rs.getLong("possible_seven_session_windows")), bind);
+    }
+
     public record VerifiedBar(
         String provider, String instrumentKey, String underlyingKey,
         LocalDate listedFrom, LocalDate expiry, int lotSize, LocalDate sessionDate,
