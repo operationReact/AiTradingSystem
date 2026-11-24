@@ -1,0 +1,13 @@
+{
+  "kind": "minttick-str176-nse-reconciled-readonly-v1",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "target_expiry": "2025-12-30",
+  "max_upstox_gets": 49,
+  "max_nse_gets": 66,
+  "no_raw_data_export": true,
+  "no_db_writes": true,
+  "no_orders": true,
+  "independent_historical_e2e": false
+}
