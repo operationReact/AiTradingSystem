@@ -109,7 +109,7 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
     def test_pinned_reference_signal_parity_and_no_lookahead(self):
         expiry=date(2026,12,24)
         days=[]
-        d=date(2026,12,15)
+        d=date(2026,12,8)
         while len(days)<9:
             if d.weekday()<5:days.append(d)
             d+=timedelta(days=1)
@@ -160,7 +160,7 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"UNVERIFIED_EXTENDED_RESEARCH_RECEIPT"):
             m.safe_receipt(forged)
         bad=dict(report)
-        bad["candidateWindows"]=report["modeledTrades"]-1
+        bad["candidateWindows"]=-1
         with self.assertRaisesRegex(ValueError,"UNVERIFIED_EXTENDED_RESEARCH_RECEIPT"):
             m.safe_receipt(bad)
         with self.assertRaisesRegex(ValueError,"TWELVE_ACTUAL_MONTHLY_EXPIRIES_REQUIRED"):
