@@ -245,12 +245,20 @@ def host():
 
 
 def bundle():
+    # Strip only lexical comments for transport, preserving strings, executable
+    # tokens, module identity and the existing fixed SSM payload size guard.
+    import io
+    import tokenize
+    def transport(source):
+        return tokenize.untokenize(t for t in
+            tokenize.generate_tokens(io.StringIO(source).readline)
+            if t.type!=tokenize.COMMENT)
     root=Path(__file__).resolve().parent
     prefix="import sys,types\n"
     for name in MODULES:
-        source=(root/(name+".py")).read_text()
+        source=transport((root/(name+".py")).read_text())
         prefix+=f"m=types.ModuleType({name!r});sys.modules[{name!r}]=m;exec({source!r},m.__dict__)\n"
-    return (prefix+Path(__file__).read_text()).replace(
+    return (prefix+transport(Path(__file__).read_text())).replace(
         "from __future__ import annotations\n","").encode()
 
 
