@@ -556,3 +556,38 @@ without instrument identifiers, prices or private broker values.
 
 Do **not** optimize the 100-bps breakout/11,000-bps volume lift or 20-bps
 minimum cost-adjusted edge solely to manufacture trading signals.
+
+## 2026-11-24 actual owner host retrospective receipt — diagnostic follow-up
+
+The exact PAPER-instance protected [STR-176 retrospective workflow
+#45363819619](https://github.com/operationReact/AiTradingSystem/actions/runs/45363819619)
+**completed successfully** against the actual owner-private canonical cache
+(not CI fixtures): 3,929 original canonical research rows, 12 source-mapped
+Upstox NIFTY futures contracts, 171 futures OHLCV/OI daily rows, **75**
+historical candidate decision windows, **31** eligible numerical reference
+evaluator windows, **zero** research breakout candidate signals and
+**zero** modeled trades. Remaining 44 windows failed quality/scope
+validation. No trade/PnL performance inference is valid when zero trades
+occurred. The test presumed previous-day EOD was available before next
+day's simulated open; it did not authenticate the historical first-publication
+timestamps, independently verify Java evaluator parity or record real fills.
+
+The subsequent diagnostic instrument keeps every STR-176 numerical threshold,
+date window, future-contract mapping, simulation cost and order/rights guard
+**unchanged**. `momentum(..., details=True)` returns the exact existing
+signal plus a **single mutually exclusive** bounded reason category for each
+window. It reports `diagnosticReasons` with counts checked to sum exactly
+to `decisionWindows`: (a) source quality (seven distinct ordered sessions,
+positive final OI, exchange gaps, daily outlier protections, base volumes),
+(b) expiry/time-scope restrictions, (c) insufficient source OI/volume
+participation and (d) breakout/trend conditions not met. All categories
+are aggregated; prices, identities, packet bytes and provider credentials
+remain private and are never exported. The reasons explain why the current
+pilot reached **31/75** numeric decisions and zero signals but do not
+relax criteria to manufacture trades.
+
+This is **research pipeline progress**; independent historical E2E
+certification remains **0/43**. If the next host audit identifies
+non-trading-day schedule, coverage or mismatched contract metadata, resolve
+those causes with authenticated source evidence, *not* guessed timestamps or
+parameter fitting to previously seen outcomes.
