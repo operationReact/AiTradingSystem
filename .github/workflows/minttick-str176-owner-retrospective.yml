@@ -1,0 +1,85 @@
+name: MintTick STR176 private 12-month EOD retrospective (NO ORDERS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-owner-retrospective.yml'
+      - 'infra/ec2-paper/str176_owner_canonical_research.py'
+      - 'scripts/tests/test_str176_owner_canonical_research.py'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/str176-owner-retrospective-readonly.json'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify 12-month source-identity/one-lot EOD research simulation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/str176_owner_canonical_research.py
+          python3 -m unittest discover -s scripts/tests -p 'test_str176_owner_canonical_research.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/str176_owner_canonical_research.py').read_text()
+          for x in ('?mode=ro','PRAGMA query_only=ON',
+                    'COST_BPS=30', 'historicalStrategyE2ECertified',
+                    'providerFirstPublishedAtVerified', 'original', 
+                    'SOURCE_FUTURES_COHORTS_INCOMPLETE',
+                    'SIMULATED_OPENS_AND_UNVERIFIED_ORIGINAL_PUBLICATION'):
+              assert x in s,x
+          for forbidden in ('placeOrder','submitOrder','put-parameter',
+                            'INSERT INTO', 'DELETE FROM', 'UPDATE fno_'):
+              assert forbidden not in s,forbidden
+          PY
+  host-proof:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Permit only reviewed single-file owner retrospective request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+            'infra/ec2-paper/requests/str176-owner-retrospective-readonly.json'
+          python3 - <<'PY'
+          import sys,json
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from str176_owner_canonical_research import EXACT
+          p=Path('infra/ec2-paper/requests/str176-owner-retrospective-readonly.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())==EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-str176-private-research
+      - name: Run actual private canonical EOD research with read-only Upstox metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/str176_owner_canonical_research.py runner
+# Real private data never exported. Reversible read-only SSM call, no
+# live/paper orders, no rights edits, no market file creation, no certified E2E.
