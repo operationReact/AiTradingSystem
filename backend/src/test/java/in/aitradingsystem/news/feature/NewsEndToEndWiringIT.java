@@ -42,6 +42,7 @@ class NewsEndToEndWiringIT extends AbstractPostgresIT {
     @Autowired NewsSourceHealthRepository health;
     @Autowired ResearchScanRepository scans;
     @Autowired NewsFeatureService features;
+    @Autowired in.aitradingsystem.news.policy.NewsSourcePolicyService policy;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
 
@@ -68,7 +69,8 @@ class NewsEndToEndWiringIT extends AbstractPostgresIT {
             .update();
 
         // 2. Bridge: approved source only, into the analyzer store.
-        NewsArticleBridge bridge = new NewsArticleBridge(jdbc, news, health, List.of("moneycontrol"), Clock.systemUTC());
+        in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport.approveFixture(jdbc, "moneycontrol");
+        NewsArticleBridge bridge = new NewsArticleBridge(jdbc, news, health, policy, List.of("moneycontrol"), Clock.systemUTC());
         bridge.runOnce();
         var article = jdbc.sql("SELECT id, source FROM news_articles WHERE url = :url")
             .param("url", url).query((rs, n) -> new Object[] {rs.getObject("id", UUID.class), rs.getString("source")})
@@ -95,7 +97,7 @@ class NewsEndToEndWiringIT extends AbstractPostgresIT {
             new NewsProperties("FAKE", "m", "m", null, null, 5000, 30000, 2),
             List.of(provider), new NewsAnalysisParser(mapper), news);
         // The fixture article comes from the approved "moneycontrol" source, so it is the only approved id here.
-        new NewsAnalysisScheduler(jdbc, analysis, Clock.systemUTC(), 20, List.of("moneycontrol")).runOnce();
+        new NewsAnalysisScheduler(jdbc, analysis, Clock.systemUTC(), 20, List.of("moneycontrol"), policy).runOnce();
         String analysisStatus = jdbc.sql("""
                 SELECT status FROM news_analyses WHERE article_id = :id ORDER BY created_at DESC LIMIT 1
                 """).param("id", articleId).query(String.class).single();

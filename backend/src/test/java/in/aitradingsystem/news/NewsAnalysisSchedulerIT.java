@@ -35,6 +35,7 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
     @Autowired NewsService news;
     @Autowired ObjectMapper mapper;
+    @Autowired in.aitradingsystem.news.policy.NewsSourcePolicyService policy;
 
     static final class FakeProvider implements NewsAnalysisProvider {
         final boolean configured;
@@ -86,7 +87,10 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
     }
 
     private NewsAnalysisScheduler scheduler(NewsAnalysisService service, Instant at, List<String> approved) {
-        return new NewsAnalysisScheduler(jdbc, service, Clock.fixed(at, ZoneOffset.UTC), 20, approved);
+        for (String source : approved) {
+            in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport.approveFixture(jdbc, source);
+        }
+        return new NewsAnalysisScheduler(jdbc, service, Clock.fixed(at, ZoneOffset.UTC), 20, approved, policy);
     }
 
     @Test
@@ -168,4 +172,20 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
         assertThat(analysisRows(unapproved)).isZero();
     }
 
+    /** Revocation stops automated analysis before any provider call (MI-PR02 rights gate). */
+    @Test
+    void revokedSourceStopsAutomatedAnalysisBeforeAnyProviderCall() {
+        String source = "rights-" + UUID.randomUUID();
+        UUID article = ingestArticle(Instant.now().minusSeconds(120), source);
+        FakeProvider provider = new FakeProvider(true, false);
+        NewsAnalysisScheduler scheduler = scheduler(analysis(provider), Instant.now(), List.of(source));
+        jdbc.sql("UPDATE news_source_policy SET license_state = 'REVOKED' WHERE source_id = :id")
+            .param("id", source).update();
+
+        Map<NewsAnalysisScheduler.Outcome, Integer> result = scheduler.runOnce();
+
+        assertThat(result).containsEntry(NewsAnalysisScheduler.Outcome.RIGHTS_BLOCKED, 1);
+        assertThat(provider.calls.get()).isZero();
+        assertThat(analysisRows(article)).isZero();
+    }
 }

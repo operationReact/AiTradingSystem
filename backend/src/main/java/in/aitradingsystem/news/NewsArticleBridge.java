@@ -36,20 +36,23 @@ public class NewsArticleBridge {
     static final int MAX_ROWS_PER_RUN = 500;
 
     public enum Outcome { INGESTED, DUPLICATE, SKIPPED_UNAPPROVED_SOURCE, SKIPPED_INVALID_URL,
-        SKIPPED_STALE, SKIPPED_FUTURE_DATED, SKIPPED_MISSING_FIELDS, FAILED }
+        SKIPPED_STALE, SKIPPED_FUTURE_DATED, SKIPPED_MISSING_FIELDS, SKIPPED_RIGHTS_NOT_PERMITTED, FAILED }
 
     private final JdbcClient jdbc;
     private final NewsService news;
     private final NewsSourceHealthRepository sourceHealth;
+    private final in.aitradingsystem.news.policy.NewsSourcePolicyService policy;
     private final Set<String> approvedSources;
     private final Clock clock;
 
     public NewsArticleBridge(JdbcClient jdbc, NewsService news, NewsSourceHealthRepository sourceHealth,
+                             in.aitradingsystem.news.policy.NewsSourcePolicyService policy,
                              @Value("${app.news.analyzer-bridge.approved-sources:}") List<String> approvedSources,
                              Clock clock) {
         this.jdbc = jdbc;
         this.news = news;
         this.sourceHealth = sourceHealth;
+        this.policy = policy;
         this.approvedSources = approvedSources == null ? Set.of()
             : approvedSources.stream().map(s -> s.trim()).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toUnmodifiableSet());
         this.clock = clock;
@@ -101,6 +104,15 @@ public class NewsArticleBridge {
 
         Instant startedAt = now;
         for (String source : approvedSources) {
+            // Rights gate (MI-PR02): default-deny unless the stored policy permits ingest for this source now.
+            var rights = policy.decide(source, in.aitradingsystem.news.policy.NewsSourcePolicy.Use.INGEST, now);
+            if (!rights.permitted()) {
+                long denied = rows.stream().filter(r -> source.equals(r.source())).count();
+                if (denied > 0) counts.merge(Outcome.SKIPPED_RIGHTS_NOT_PERMITTED, (int) denied, Integer::sum);
+                sourceHealth.record(source, startedAt, clock.instant(), "FAILED", (int) denied, 0, 0,
+                    "RIGHTS_NOT_PERMITTED", rights.name());
+                continue;
+            }
             List<ArticleInput> eligible = new ArrayList<>();
             int fetched = 0;
             for (Row r : rows) {

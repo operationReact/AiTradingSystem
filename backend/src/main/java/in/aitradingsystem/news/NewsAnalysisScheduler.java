@@ -40,29 +40,41 @@ public class NewsAnalysisScheduler {
     static final Duration LOOKBACK = Duration.ofDays(30);
     static final int MAX_PER_RUN = 20;
 
-    public enum Outcome { ANALYZED, FAILED, CONFIGURATION_BLOCKED, SOURCE_APPROVAL_BLOCKED, NOTHING_ELIGIBLE }
+    public enum Outcome { ANALYZED, FAILED, CONFIGURATION_BLOCKED, SOURCE_APPROVAL_BLOCKED, RIGHTS_BLOCKED, NOTHING_ELIGIBLE }
 
     private final JdbcClient jdbc;
     private final NewsAnalysisService analysis;
     private final Clock clock;
     private final int maxPerRun;
     private final Set<String> approvedSources;
+    private final in.aitradingsystem.news.policy.NewsSourcePolicyService policy;
 
     public NewsAnalysisScheduler(JdbcClient jdbc, NewsAnalysisService analysis, Clock clock,
                                  @Value("${app.news.analysis-scheduler.max-per-run:20}") int maxPerRun,
-                                 @Value("${app.news.analyzer-bridge.approved-sources:}") List<String> approvedSources) {
+                                 @Value("${app.news.analyzer-bridge.approved-sources:}") List<String> approvedSources,
+                                 in.aitradingsystem.news.policy.NewsSourcePolicyService policy) {
         this.jdbc = jdbc;
         this.analysis = analysis;
         this.clock = clock;
+        this.policy = policy;
         this.maxPerRun = Math.max(1, Math.min(maxPerRun, MAX_PER_RUN));
         this.approvedSources = approvedSources == null ? Set.of()
             : approvedSources.stream().filter(s -> s != null && !s.isBlank())
                 .map(String::trim).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
+    /** Approved sources whose stored policy permits NLP transfer at this instant. Default-deny. */
+    List<String> permittedSources(Instant now) {
+        return approvedSources.stream()
+            .filter(s -> policy.permitted(s, in.aitradingsystem.news.policy.NewsSourcePolicy.Use.NLP_TRANSFER, now))
+            .sorted()
+            .toList();
+    }
+
     /** Articles needing analysis now, oldest-published first within the freshness window. */
     List<UUID> eligibleArticles(Instant now) {
-        if (approvedSources.isEmpty()) return List.of();
+        List<String> permitted = permittedSources(now);
+        if (permitted.isEmpty()) return List.of();
         return jdbc.sql("""
                 SELECT a.id
                   FROM news_articles a
@@ -80,7 +92,7 @@ public class NewsAnalysisScheduler {
                  ORDER BY a.published_at DESC
                  LIMIT :limit
                 """)
-            .param("approvedSources", approvedSources)
+            .param("approvedSources", permitted)
             .param("lookbackStart", OffsetDateTime.ofInstant(now.minus(LOOKBACK), ZoneOffset.UTC))
             .param("retryBefore", OffsetDateTime.ofInstant(now.minus(RETRY_BACKOFF), ZoneOffset.UTC))
             .param("maxFailed", MAX_FAILED_ATTEMPTS)
@@ -95,6 +107,12 @@ public class NewsAnalysisScheduler {
         Map<Outcome, Integer> counts = new EnumMap<>(Outcome.class);
         if (approvedSources.isEmpty()) {
             counts.put(Outcome.SOURCE_APPROVAL_BLOCKED, 1);
+            return counts;
+        }
+        // Rights gate (MI-PR02): article text may reach an external model only from a source whose stored policy
+        // permits NLP_TRANSFER now. No permitted source means nothing is sent, and the run says so.
+        if (permittedSources(now).isEmpty()) {
+            counts.put(Outcome.RIGHTS_BLOCKED, 1);
             return counts;
         }
         List<UUID> ids = eligibleArticles(now);
