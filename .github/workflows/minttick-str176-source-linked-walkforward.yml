@@ -4,6 +4,8 @@ on:
     branches: [dev]
     paths:
       - '.github/workflows/minttick-str176-source-linked-walkforward.yml'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoHistoricalSessionCalendar.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoHistoricalSessionCalendarTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176WalkForwardController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1Test.java'
@@ -37,16 +39,19 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=Fno176SourceLinkedWalkForwardV1Test,AdminFno176WalkForwardControllerTest,Fno176VerifiedHistoricalReplayServiceTest,FnoHistoricalAfterCostWalkForwardV1Test' test
+            '-Dtest=Fno176SourceLinkedWalkForwardV1Test,AdminFno176WalkForwardControllerTest,Fno176VerifiedHistoricalReplayServiceTest,FnoHistoricalAfterCostWalkForwardV1Test,FnoHistoricalSessionCalendarTest' test
       - name: Require no invented order or E2E acceptance
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           svc=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1.java').read_text()
+          cal=Path('backend/src/main/java/in/aitradingsystem/marketdata/FnoHistoricalSessionCalendar.java').read_text()
+          for text in ('e.first_available_at<=?','e.verified_at<=?','e.captured_at<=?', 'rights.isPermitted(row.provider(),DOMAIN,use,asOf)', 'rights.isPermitted(row.provider(),DOMAIN,use,now)'):
+              assert text in cal,text
           ctl=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176WalkForwardController.java').read_text()
           for text in ('replaySource.inspect(contractKey, decisionAt)',
-                       'calendar.isTradingDay(day)',
+                       'calendar.isTradingDay(day, decisionAt)',
                        'FnoHistoricalAfterCostWalkForwardV1.evaluate',
                        'STR176_COMPLETED_FILLS_NOT_LINKED_TO_RESEARCH_CANDIDATES',
                        'SOURCE_LINKED_WALK_FORWARD_NO_ORIGINAL_FILLS_NOT_E2E'):

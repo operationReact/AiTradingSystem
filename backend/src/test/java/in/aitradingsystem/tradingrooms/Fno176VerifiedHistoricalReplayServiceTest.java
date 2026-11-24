@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
-import in.aitradingsystem.marketdata.MarketSessionCalendar;
+import in.aitradingsystem.marketdata.FnoHistoricalSessionCalendar;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -33,7 +33,7 @@ class Fno176VerifiedHistoricalReplayServiceTest {
     };
     private final FnoVerifiedCompletedOhlcvOiStore source =
         mock(FnoVerifiedCompletedOhlcvOiStore.class);
-    private final MarketSessionCalendar calendar=mock(MarketSessionCalendar.class);
+    private final FnoHistoricalSessionCalendar calendar=mock(FnoHistoricalSessionCalendar.class);
 
     private Fno176VerifiedHistoricalReplayService service(
             boolean research, boolean history, boolean discovery) {
@@ -68,7 +68,7 @@ class Fno176VerifiedHistoricalReplayServiceTest {
     private void eligible(List<FnoVerifiedCompletedOhlcvOiStore.ReplayProofBar> bars) {
         when(source.readExactReplayContract(eq(KEY),any(),any(),eq(AS_OF)))
             .thenReturn(bars);
-        when(calendar.isTradingDay(any(LocalDate.class))).thenAnswer(call->{
+        when(calendar.isTradingDay(any(LocalDate.class),eq(AS_OF))).thenAnswer(call->{
             LocalDate day=call.getArgument(0);
             return day.getDayOfWeek()!=DayOfWeek.SATURDAY
                 && day.getDayOfWeek()!=DayOfWeek.SUNDAY;
@@ -164,11 +164,11 @@ class Fno176VerifiedHistoricalReplayServiceTest {
         assertEquals("STR176_VERIFIED_CALENDAR_SESSION_GAP",blocked.reasonCode());
         assertNull(blocked.replay());
         assertFalse(blocked.brokerOrdersPlaced());
-        when(calendar.isTradingDay(missing)).thenReturn(false);
+        when(calendar.isTradingDay(missing,AS_OF)).thenReturn(false);
         var holiday=service(true,true,true).inspect(KEY,AS_OF);
         assertEquals("SOURCE_JOINED_EVALUATOR_RAN",holiday.state());
         assertFalse(holiday.independentlyVerifiedHistoricalE2E());
-        when(calendar.isTradingDay(missing)).thenThrow(
+        when(calendar.isTradingDay(missing,AS_OF)).thenThrow(
             new IllegalStateException("calendar unavailable"));
         var unavailable=service(true,true,true).inspect(KEY,AS_OF);
         assertEquals("STR176_VERIFIED_CALENDAR_UNAVAILABLE",unavailable.reasonCode());
@@ -177,7 +177,7 @@ class Fno176VerifiedHistoricalReplayServiceTest {
 
     @Test void calendarOutageInSourceOrMissingSessionCheckIsFailClosed(){
         eligible(sourceBars());
-        when(calendar.isTradingDay(DATES[0]))
+        when(calendar.isTradingDay(DATES[0],AS_OF))
             .thenThrow(new IllegalStateException("private calendar source unavailable"));
         var sourceOutage=service(true,true,true).inspect(KEY,AS_OF);
         assertEquals("STR176_VERIFIED_CALENDAR_UNAVAILABLE",sourceOutage.reasonCode());
@@ -192,7 +192,7 @@ class Fno176VerifiedHistoricalReplayServiceTest {
         eligible(sourceBars());
         // The first actual gap is Saturday 14 Nov, between Friday and Monday.
         // A calendar outage here must not be interpreted as "non-trading".
-        when(calendar.isTradingDay(LocalDate.of(2026,11,14)))
+        when(calendar.isTradingDay(LocalDate.of(2026,11,14),AS_OF))
             .thenThrow(new IllegalStateException("calendar unavailable on gap"));
         var gapOutage=service(true,true,true).inspect(KEY,AS_OF);
         assertEquals("STR176_VERIFIED_CALENDAR_UNAVAILABLE",gapOutage.reasonCode());

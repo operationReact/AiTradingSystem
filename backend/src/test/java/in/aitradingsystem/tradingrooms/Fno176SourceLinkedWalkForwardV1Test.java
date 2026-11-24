@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import in.aitradingsystem.marketdata.MarketSessionCalendar;
+import in.aitradingsystem.marketdata.FnoHistoricalSessionCalendar;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -29,7 +29,7 @@ class Fno176SourceLinkedWalkForwardV1Test {
 
     private final Fno176VerifiedHistoricalReplayService source =
         mock(Fno176VerifiedHistoricalReplayService.class);
-    private final MarketSessionCalendar calendar=mock(MarketSessionCalendar.class);
+    private final FnoHistoricalSessionCalendar calendar=mock(FnoHistoricalSessionCalendar.class);
     private final Fno176SourceLinkedWalkForwardV1 service=
         new Fno176SourceLinkedWalkForwardV1(source,calendar,NOW);
 
@@ -54,8 +54,9 @@ class Fno176SourceLinkedWalkForwardV1Test {
     }
 
     private void available() {
-        when(calendar.isTradingDay(any(LocalDate.class))).thenAnswer(call->{
+        when(calendar.isTradingDay(any(LocalDate.class),any(Instant.class))).thenAnswer(call->{
             LocalDate d=call.getArgument(0);
+            assertEquals(scheduled(d),call.getArgument(1));
             return d.getDayOfWeek()!=DayOfWeek.SATURDAY
                 && d.getDayOfWeek()!=DayOfWeek.SUNDAY;
         });
@@ -188,7 +189,7 @@ class Fno176SourceLinkedWalkForwardV1Test {
 
     @Test void failedTradingCalendarNeverCountsAsHolidayOrMissingData() {
         available();
-        when(calendar.isTradingDay(LocalDate.of(2026,11,21)))
+        when(calendar.isTradingDay(LocalDate.of(2026,11,21),scheduled(LocalDate.of(2026,11,21))))
             .thenThrow(new IllegalStateException("private calendar credentials"));
         var report=service.inspect(KEY,FIRST,LAST,TRAIN_END,null);
         assertEquals("STR176_ORIGINAL_TRADING_CALENDAR_UNAVAILABLE",

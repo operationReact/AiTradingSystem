@@ -1,7 +1,7 @@
 package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
-import in.aitradingsystem.marketdata.MarketSessionCalendar;
+import in.aitradingsystem.marketdata.FnoHistoricalSessionCalendar;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -29,13 +29,13 @@ public final class Fno176VerifiedHistoricalReplayService {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final String STRATEGY = FnoFuturesMomentumV1.STRATEGY_ID;
     private final FnoVerifiedCompletedOhlcvOiStore source;
-    private final MarketSessionCalendar calendar;
+    private final FnoHistoricalSessionCalendar calendar;
     private final Clock clock;
     private final boolean approvedResearch, approvedCompletedSource, approvedDiscovery;
 
     @Autowired
     public Fno176VerifiedHistoricalReplayService(
-            FnoVerifiedCompletedOhlcvOiStore source, MarketSessionCalendar calendar,
+            FnoVerifiedCompletedOhlcvOiStore source, FnoHistoricalSessionCalendar calendar,
             @Value("${minttick.fno-research.research-rights-verified:false}")
             boolean approvedResearch,
             @Value("${minttick.fno-research.completed-ohlcv-research-rights-verified:false}")
@@ -47,7 +47,7 @@ public final class Fno176VerifiedHistoricalReplayService {
     }
 
     Fno176VerifiedHistoricalReplayService(
-            FnoVerifiedCompletedOhlcvOiStore source, MarketSessionCalendar calendar,
+            FnoVerifiedCompletedOhlcvOiStore source, FnoHistoricalSessionCalendar calendar,
             Clock clock, boolean approvedResearch,
             boolean approvedCompletedSource, boolean approvedDiscovery) {
         this.source = Objects.requireNonNull(source);
@@ -124,7 +124,7 @@ public final class Fno176VerifiedHistoricalReplayService {
             // A provider/calendar outage is UNKNOWN, never proof of a holiday
             // or a source-verified trading session.
             try {
-                if (!calendar.isTradingDay(b.sessionDate()))
+                if (!calendar.isTradingDay(b.sessionDate(), asOf))
                     return denied("STR176_ORIGINAL_CONTRACT_OR_CUSTODY_INCONSISTENT",
                         rows.size());
             } catch (RuntimeException unavailable) {
@@ -144,7 +144,7 @@ public final class Fno176VerifiedHistoricalReplayService {
                     gap.isBefore(day); gap = gap.plusDays(1)) {
                 final boolean sessionExpected;
                 try {
-                    sessionExpected = calendar.isTradingDay(gap);
+                    sessionExpected = calendar.isTradingDay(gap, asOf);
                 } catch (RuntimeException unavailable) {
                     return denied("STR176_VERIFIED_CALENDAR_UNAVAILABLE", 0);
                 }
@@ -160,7 +160,7 @@ public final class Fno176VerifiedHistoricalReplayService {
         for (var gap = prior.plusDays(1); !gap.isAfter(last); gap = gap.plusDays(1)) {
             final boolean sessionExpected;
             try {
-                sessionExpected = calendar.isTradingDay(gap);
+                sessionExpected = calendar.isTradingDay(gap, asOf);
             } catch (RuntimeException unavailable) {
                 return denied("STR176_VERIFIED_CALENDAR_UNAVAILABLE", 0);
             }
