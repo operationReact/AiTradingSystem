@@ -6,6 +6,8 @@ on:
       - '.github/workflows/minttick-str176-owner-futures-60day-capture.yml'
       - 'infra/ec2-paper/str176_private_futures_capture.py'
       - 'scripts/tests/test_str176_private_futures_capture.py'
+      - 'infra/ec2-paper/str176_private_futures_aftercost.py'
+      - 'scripts/tests/test_str176_private_futures_aftercost.py'
       - 'docs/architecture/fno-43-historical-e2e-evidence.md'
   push:
     branches: [dev]
@@ -30,6 +32,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile infra/ec2-paper/str176_private_futures_capture.py
           python3 -m unittest discover -s scripts/tests -p 'test_str176_private_futures_capture.py' -v
+          python3 -m py_compile infra/ec2-paper/str176_private_futures_aftercost.py
+          python3 -m unittest discover -s scripts/tests -p 'test_str176_private_futures_aftercost.py' -v
           python3 - <<'PY'
           from pathlib import Path
           s=Path('infra/ec2-paper/str176_private_futures_capture.py').read_text()
@@ -48,7 +52,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && github.repository == 'operationReact/AiTradingSystem'
     needs: offline-source-acceptance
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 18
     permissions:
       contents: read
       id-token: write
@@ -82,5 +86,11 @@ jobs:
           set -euo pipefail
           set +x
           python3 infra/ec2-paper/str176_private_futures_capture.py runner
+      - name: Replay actual archived futures with independently reproduced STR-176 thresholds and after-cost OOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 infra/ec2-paper/str176_private_futures_aftercost.py runner
 
 # No customer/paper/live orders, rights changes, release, EC2 lifecycle changes.
