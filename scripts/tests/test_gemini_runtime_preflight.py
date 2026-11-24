@@ -14,6 +14,16 @@ SPEC.loader.exec_module(probe)
 
 
 class GeminiRuntimePreflightTest(unittest.TestCase):
+    def test_history_failure_exports_only_allowlisted_code_from_relevant_stage(self):
+        raw = ('Traceback fixture-private-path\n'
+               'owner_history_progress.ProgressUnavailable: DUPLICATE_ARCHIVE_SESSION\n'
+               'MINTTICK_DEPLOY_FAILED_STAGE:history_precheck\n')
+        self.assertEqual('DUPLICATE_ARCHIVE_SESSION', probe.classify_history_failure(raw))
+        self.assertEqual('NOT_OBSERVED', probe.classify_history_failure(raw.replace('history_precheck', 'host_activation')))
+        self.assertEqual('UNCLASSIFIED_HISTORY_FAILURE', probe.classify_history_failure(
+            raw.replace('DUPLICATE_ARCHIVE_SESSION', 'PRIVATE_SECRET_VALUE')))
+        self.assertNotIn('fixture', probe.classify_history_failure(raw))
+
     def test_pr_validation_cannot_supersede_shared_host_deployment_queue(self):
         workflow = (ROOT / '.github/workflows/minttick-gemini-runtime-preflight.yml').read_text()
         self.assertNotIn('concurrency:\n  group: aitrading-paper-ec2-manual-lifecycle', workflow)
