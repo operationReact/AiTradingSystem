@@ -35,7 +35,7 @@ def safe_failure_code(error):
         return f"HTTP_{error.code}" if 100 <= error.code <= 599 else "HTTP_ERROR"
     if isinstance(error, urllib.error.URLError):
         reason = error.reason
-        if isinstance(reason, (TimeoutError, TimeoutError.__mro__[1])):
+        if isinstance(reason, TimeoutError):
             return "URL_TIMEOUT"
         if isinstance(reason, OSError) and type(reason.errno) is int:
             return f"URL_OS_ERROR_{reason.errno}"
