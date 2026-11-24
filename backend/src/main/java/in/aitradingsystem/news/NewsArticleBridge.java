@@ -117,6 +117,8 @@ public class NewsArticleBridge {
                     null, r.publishedAt()));
             }
             int inserted = 0;
+            int rowFailures = 0;
+            boolean sourceFailed = false;
             try {
                 // One article per ingest call: a single bad row fails only itself, never the source batch.
                 // NewsService.ingest deduplicates on the normalized URL hash.
@@ -127,15 +129,26 @@ public class NewsArticleBridge {
                         counts.merge(Outcome.INGESTED, result.inserted(), Integer::sum);
                         counts.merge(Outcome.DUPLICATE, result.duplicates(), Integer::sum);
                     } catch (RuntimeException e) {
+                        rowFailures++;
                         counts.merge(Outcome.FAILED, 1, Integer::sum);
                     }
                 }
-                sourceHealth.record(source, startedAt, clock.instant(), "SUCCESS", fetched, inserted, 0, null, null);
             } catch (RuntimeException e) {
-                counts.merge(Outcome.FAILED, eligible.size(), Integer::sum);
+                sourceFailed = true;
+                counts.merge(Outcome.FAILED, eligible.size() - rowFailures, Integer::sum);
                 log.warn("News analyzer bridge failed for approved source {}", source);
-                sourceHealth.record(source, startedAt, clock.instant(), "FAILED", fetched, 0, 0,
-                    e.getClass().getSimpleName(), "Bridge publish failed");
+            }
+            // Health is truthful: SUCCESS only when every eligible row published, PARTIAL when some rows
+            // failed, FAILED only for a source-level error. Recorded outside the row loop, so a recording
+            // error is never counted as a row failure.
+            if (sourceFailed) {
+                sourceHealth.record(source, startedAt, clock.instant(), "FAILED", fetched, inserted, 0,
+                    "BRIDGE_SOURCE_ERROR", "Bridge publish failed before every row was attempted");
+            } else if (rowFailures > 0) {
+                sourceHealth.record(source, startedAt, clock.instant(), "PARTIAL", fetched, inserted, 0,
+                    "ROW_INGEST_FAILED", rowFailures + " of " + eligible.size() + " eligible rows failed to publish");
+            } else {
+                sourceHealth.record(source, startedAt, clock.instant(), "SUCCESS", fetched, inserted, 0, null, null);
             }
         }
         return counts;
