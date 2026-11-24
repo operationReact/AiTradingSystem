@@ -43,6 +43,10 @@ class NewsAdminHealthSnapshot {
       throw const FormatException('Invalid news health counters');
     }
     final sources = sourceRows.map(NewsAdminSourceStatus.fromJson).toList(growable: false);
+    final model = NewsAdminModelStatus.fromJson(json['model']);
+    if (model.lastGeminiAttemptAt?.isAfter(observedAt) ?? false) {
+      throw const FormatException('Gemini attempt is newer than health snapshot');
+    }
     if (sources.map((source) => source.sourceId).toSet().length != sources.length) {
       throw const FormatException('Duplicate publisher source in news health');
     }
@@ -53,7 +57,7 @@ class NewsAdminHealthSnapshot {
       analyzerBridgeEnabled: _boolean(json, 'analyzerBridgeEnabled'),
       analysisSchedulerEnabled: _boolean(json, 'analysisSchedulerEnabled'),
       mindContextEnabled: _boolean(json, 'mindContextEnabled'),
-      model: NewsAdminModelStatus.fromJson(json['model']),
+      model: model,
       receiptCount: receipt,
       eventCount: event,
       eventVersionCount: version,
@@ -71,6 +75,8 @@ class NewsAdminModelStatus {
     this.selectedProviderConfigured,
     this.recordedGeminiAnalysisReceipts,
     this.geminiReadiness,
+    this.lastGeminiAttemptAt,
+    this.lastGeminiAttemptOutcome,
   });
 
   final String selectedProvider;
@@ -80,6 +86,8 @@ class NewsAdminModelStatus {
   final bool? selectedProviderConfigured;
   final int? recordedGeminiAnalysisReceipts;
   final String? geminiReadiness;
+  final DateTime? lastGeminiAttemptAt;
+  final String? lastGeminiAttemptOutcome;
 
   factory NewsAdminModelStatus.fromJson(Object? raw) {
     final json = _map(raw);
@@ -87,6 +95,19 @@ class NewsAdminModelStatus {
     final configured = json['selectedProviderConfigured'];
     final receipts = json['recordedGeminiAnalysisReceipts'];
     final readiness = json['geminiReadiness'];
+    final attemptAt = json['lastGeminiAttemptAt'];
+    final outcome = json['lastGeminiAttemptOutcome'];
+    final attempt = attemptAt is String ? DateTime.tryParse(attemptAt) : null;
+    if (json.containsKey('lastGeminiAttemptAt') || json.containsKey('lastGeminiAttemptOutcome')) {
+      const outcomes = {'NO_OBSERVATION', 'COMPLETED_WITH_REQUEST_ID',
+        'COMPLETED_WITHOUT_REQUEST_ID', 'UNCONFIGURED', 'TIMEOUT',
+        'RATE_LIMITED', 'HTTP_ERROR', 'INVALID_RESPONSE'};
+      if (outcome is! String || !outcomes.contains(outcome) ||
+          (attemptAt != null && attempt == null) ||
+          ((outcome == 'NO_OBSERVATION') != (attemptAt == null))) {
+        throw const FormatException('Inconsistent Gemini runtime observation');
+      }
+    }
     final hasDiagnostics = ['selectedProviderConfigured', 'recordedGeminiAnalysisReceipts',
       'geminiReadiness'].any(json.containsKey);
     if (hasDiagnostics) {
@@ -110,6 +131,8 @@ class NewsAdminModelStatus {
       selectedProviderConfigured: configured as bool?,
       recordedGeminiAnalysisReceipts: receipts as int?,
       geminiReadiness: readiness as String?,
+      lastGeminiAttemptAt: attempt?.toUtc(),
+      lastGeminiAttemptOutcome: outcome as String?,
     );
   }
 }
