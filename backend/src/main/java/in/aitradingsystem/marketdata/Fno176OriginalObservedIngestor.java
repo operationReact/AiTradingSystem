@@ -36,7 +36,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
  */
 public final class Fno176OriginalObservedIngestor {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final int MAX_BYTES = 1_048_576;
+    private static final int MAX_ORIGINAL_CANDLE_BYTES = 1_048_576;
+    // Matches the existing Upstox published master compressed-file cap.
+    private static final int MAX_CONTRACT_MASTER_BYTES = 20 * 1024 * 1024;
     private static final String DIGEST = "[a-f0-9]{64}";
 
     /**
@@ -49,8 +51,9 @@ public final class Fno176OriginalObservedIngestor {
         public OriginalPackets {
             if (!("UPSTOX_ANALYTICS".equals(providerCode)
                     || "ANGEL_ONE_SMARTAPI".equals(providerCode))
-                    || !bounded(ohlcvPacket) || !bounded(finalOiPacket)
-                    || !bounded(contractMasterPacket))
+                    || !bounded(ohlcvPacket, MAX_ORIGINAL_CANDLE_BYTES)
+                    || !bounded(finalOiPacket, MAX_ORIGINAL_CANDLE_BYTES)
+                    || !bounded(contractMasterPacket, MAX_CONTRACT_MASTER_BYTES))
                 throw new IllegalArgumentException("INVALID_ORIGINAL_SOURCE_PACKETS");
             ohlcvPacket = ohlcvPacket.clone();
             finalOiPacket = finalOiPacket.clone();
@@ -276,8 +279,8 @@ public final class Fno176OriginalObservedIngestor {
         return v != null && v.signum() > 0 && v.scale() <= 6
             && v.precision() - v.scale() <= 14;
     }
-    private static boolean bounded(byte[] value) {
-        return value != null && value.length >= 1 && value.length <= MAX_BYTES;
+    private static boolean bounded(byte[] value, int limit) {
+        return value != null && value.length >= 1 && value.length <= limit;
     }
     private static String sha256(byte[] bytes) {
         try {
