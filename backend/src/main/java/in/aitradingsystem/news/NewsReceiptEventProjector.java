@@ -58,7 +58,7 @@ public class NewsReceiptEventProjector {
                    AND 'RETAIN' = ANY(p.permitted_uses)
                    AND p.effective_from <= CURRENT_TIMESTAMP
                    AND (p.effective_to IS NULL OR CURRENT_TIMESTAMP < p.effective_to)
-                   AND (? IS NULL OR n.source = ?)
+                   AND (CAST(? AS VARCHAR) IS NULL OR n.source = CAST(? AS VARCHAR))
                    AND NOT EXISTS (
                        SELECT 1 FROM news_ingest_receipt r
                         WHERE r.source_id = n.source AND r.content_hash = n.content_hash
