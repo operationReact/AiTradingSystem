@@ -224,7 +224,11 @@ def signal(window,expiry,as_of):
 def evaluate(universe,metadata,cost_bps):
     if cost_bps not in (20,30,50) or len(metadata)!=12:
         raise ValueError("RESEARCH_SCENARIO_INVALID")
-    split=sorted(metadata)[8]
+    # Expiry cohorts overlap in calendar time with 90-day source histories.
+    # Do not score OOS decisions until every training contract has expired.
+    ordered_expiries=sorted(metadata)
+    split=ordered_expiries[8]
+    training_end=ordered_expiries[7]
     counts=Counter()
     train_net=oos_net=equity=peak=drawdown=0
     for expiry in sorted(metadata):
@@ -238,6 +242,9 @@ def evaluate(universe,metadata,cost_bps):
         latest_exit=None
         for i in range(6,len(rows)-2):
             decision_day=rows[i+1][0]
+            if expiry>=split and decision_day<=training_end:
+                counts["purgedPreOosWindows"]+=1
+                continue
             outcome=signal(rows[i-6:i+1],expiry,decision_day)
             counts["decisionWindows"]+=1
             if outcome=="BLOCKED":
@@ -281,6 +288,7 @@ def evaluate(universe,metadata,cost_bps):
         "state":state,"sourceFuturesBars":counts["sourceFuturesRows"],
         "eligibleFuturesCohorts":counts["eligibleFuturesCohorts"],
         "decisionWindows":counts["decisionWindows"],
+        "purgedPreOosWindows":counts["purgedPreOosWindows"],
         "evaluatedWindows":counts["evaluatedWindows"],
         "blockedWindows":counts["blockedWindows"],
         "candidateWindows":counts["candidateWindows"],
@@ -303,7 +311,8 @@ def research(fetch, reference_date):
     cheaper=evaluate(source,metadata,20)
     stress=evaluate(source,metadata,50)
     if (any(v["decisionWindows"]!=primary["decisionWindows"] or
-            v["candidateWindows"]!=primary["candidateWindows"] for v in
+            v["candidateWindows"]!=primary["candidateWindows"] or
+            v["purgedPreOosWindows"]!=primary["purgedPreOosWindows"] for v in
             (cheaper,stress)) or primary["sourceFuturesBars"]>MAX_BARS):
         raise ValueError("RESEARCH_SIGNAL_COHORT_DRIFT")
     return {
@@ -332,13 +341,14 @@ def safe_receipt(r):
             or r.get("orders") is not False or r.get("writes") is not False):
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     for k in ("sourceFuturesBars","eligibleFuturesCohorts",
-              "decisionWindows","evaluatedWindows","blockedWindows",
+              "decisionWindows","purgedPreOosWindows","evaluatedWindows","blockedWindows",
               "candidateWindows","overlappingCandidatesSkipped",
               "modeledTrades","trainingTrades","outOfSampleTrades",
               "outOfSampleLosses"):
         if type(r.get(k)) is not int or not 0<=r[k]<=MAX_BARS:
             raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     if (r["evaluatedWindows"]+r["blockedWindows"]!=r["decisionWindows"]
+            or r["decisionWindows"]+r["purgedPreOosWindows"]>r["sourceFuturesBars"]
             or r["trainingTrades"]+r["outOfSampleTrades"]!=r["modeledTrades"]
             or r["modeledTrades"]>r["candidateWindows"]
             or r["eligibleFuturesCohorts"]>MAX_FUTURES):
