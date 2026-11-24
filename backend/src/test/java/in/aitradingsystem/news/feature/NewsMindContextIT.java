@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.scanner.ResearchScanRepository;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
@@ -40,6 +41,7 @@ class NewsMindContextIT extends AbstractPostgresIT {
     }
 
     private String article(String sym, Instant publishedAt) {
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "TEST-SOURCE");
         String url = "https://news.example.test/markets/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
             "TEST-SOURCE", null, "Headline for " + sym, url, "Excerpt " + sym, publishedAt))));
