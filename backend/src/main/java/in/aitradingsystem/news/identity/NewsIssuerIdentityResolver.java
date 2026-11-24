@@ -138,7 +138,7 @@ public final class NewsIssuerIdentityResolver {
         if (input == null) return "";
         return Normalizer.normalize(input, Normalizer.Form.NFKC)
             .toUpperCase(Locale.ROOT)
-            .replaceAll("[\\p{Punct}\\p{IsPunctuation}]+", " ")
+            .replaceAll("[\\p{P}\\p{S}]+", " ")
             .replaceAll("\\s+", " ")
             .trim();
     }
