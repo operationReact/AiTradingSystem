@@ -14,17 +14,26 @@ class NewsHealthAdminPage extends StatefulWidget {
 }
 
 class _NewsHealthAdminPageState extends State<NewsHealthAdminPage> {
-  late Future<NewsHealthSnapshot> _snapshot;
+  late Future<NewsHealthSnapshot?> _snapshot;
+
+  // A denied ADMIN request may fail immediately. Keep the rejected future
+  // internal until FutureBuilder subscribes; never leak a tap-handler error.
+  Future<NewsHealthSnapshot?> _loadHealth() async {
+    try {
+      return await widget.repository.fetch();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _snapshot = widget.repository.fetch();
+    _snapshot = _loadHealth();
   }
 
   void _refresh() {
-    final next = widget.repository.fetch();
-    setState(() { _snapshot = next; });
+    setState(() { _snapshot = _loadHealth(); });
   }
 
   @override
