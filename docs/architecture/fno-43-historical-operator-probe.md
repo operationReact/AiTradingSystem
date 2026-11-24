@@ -78,3 +78,29 @@ Deploying this diagnostic after code CI is separate from calling it.
 Until authenticated exact-host output and independent historical after-cost
 proof exist, certified historical STR-176 remains **0/1**, and full
 STR-170..212 certification remains **0/43**.
+
+## Protected original V102 source audit without backend deployment
+
+`infra/ec2-paper/str176_v102_source_probe.py` and
+`.github/workflows/minttick-str176-v102-host-readonly.yml` perform a bounded,
+read-only original PostgreSQL V102 prerequisite audit on the **existing exact**
+owner PAPER EC2 instance, without restarting the backend. The workflow is
+triggered on dev solely by an additional reviewed, one-file JSON request:
+`infra/ec2-paper/requests/str176-v102-readonly.json`.
+
+It runs a fixed `BEGIN READ ONLY` SQL query inside the existing PostgreSQL
+container. SQL joins original source OHLCV/OI receipts, separate independently
+verified research-use rights, original first-known/capture timestamps, the
+NSE historical trading-calendar evidence and retention/expiry requirements.
+The only result leaving the host is three aggregate counts: stored V102 rows,
+rights-and-as-of-eligible rows, and provider/contract candidate groups with
+seven distinct eligible session dates. If any query, schema, permission,
+host-security or output validation fails, all counts are **unknown**, not zero.
+
+This audit does not identify which source rows are usable by the real
+strategy after full calendar/price/lot validation, and it does not replay a
+strategy, estimate bid/ask fills, account for transaction costs, perform
+walk-forward OOS evaluation or independently certify anything. The output
+has `independentHistoricalCertified=0/43` and never accesses broker orders.
+It must not be used to override evidence gates or reinterpret synthetic tests
+as genuine historical observations.
