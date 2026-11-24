@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -11,6 +12,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -23,6 +26,23 @@ class NewsBacktestAnnotatorIT extends AbstractPostgresIT {
     @Autowired NewsService news;
     @Autowired NewsBacktestAnnotator annotator;
 
+    @BeforeEach
+    void approveOnlyFictionalHistoricalSource() {
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "TEST-SOURCE");
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET effective_from = :known, updated_at = :known
+                 WHERE source_id = 'TEST-SOURCE'
+                """)
+            .param("known", OffsetDateTime.ofInstant(
+                Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC)).update();
+    }
+
+    @AfterEach
+    void resetFictionalRights() {
+        NewsSourcePolicyTestSupport.resetToPending(jdbc, "TEST-SOURCE");
+    }
+
     private static String symbol() {
         return "B" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
     }
@@ -31,8 +51,17 @@ class NewsBacktestAnnotatorIT extends AbstractPostgresIT {
         String url = "https://news.example.test/backtest/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
             "TEST-SOURCE", null, "Backtest headline", url, "Backtest excerpt", publishedAt))));
-        return jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+        String id = jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
             .param("url", url).query(String.class).single();
+        // Synthetic fixture mimics a source actually ingested before historical
+        // research; real backfilled publisher dates alone must never pass.
+        jdbc.sql("""
+                UPDATE news_articles SET ingested_at = :known
+                 WHERE id = CAST(:id AS uuid)
+                """)
+            .param("known", OffsetDateTime.ofInstant(publishedAt, ZoneOffset.UTC))
+            .param("id", id).update();
+        return id;
     }
 
     private void analysis(String articleId, Instant createdAt, String status, String symbols,

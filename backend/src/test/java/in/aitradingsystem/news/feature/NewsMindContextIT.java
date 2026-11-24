@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.scanner.ResearchScanRepository;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
@@ -13,6 +14,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +37,26 @@ class NewsMindContextIT extends AbstractPostgresIT {
     @Autowired ResearchScanRepository scans;
     @Autowired MockMvc mvc;
 
+    @BeforeEach
+    void sourceRightsFixturePredatesHistoricalResearch() {
+        // Fictional rights timestamps prove a synthetic historical scenario; they
+        // are NOT evidence of approval for any actual news publisher.
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "TEST-SOURCE");
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET effective_from = :known, updated_at = :known
+                 WHERE source_id = 'TEST-SOURCE'
+                """)
+            .param("known", OffsetDateTime.ofInstant(
+                Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC))
+            .update();
+    }
+
+    @AfterEach
+    void restoreDefaultDeny() {
+        NewsSourcePolicyTestSupport.resetToPending(jdbc, "TEST-SOURCE");
+    }
+
     /** Unique base symbol per test so shared database rows cannot interfere. */
     private static String symbol() {
         return "T" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
@@ -43,8 +66,18 @@ class NewsMindContextIT extends AbstractPostgresIT {
         String url = "https://news.example.test/markets/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
             "TEST-SOURCE", null, "Headline for " + sym, url, "Excerpt " + sym, publishedAt))));
-        return jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+        String id = jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
             .param("url", url).query(String.class).single();
+        // Backdate the *fictional test ingestion*, not the production pipeline.
+        // Without this, real ingestion would have occurred days after the as-of
+        // scan and must be excluded by the new point-in-time gate.
+        jdbc.sql("""
+                UPDATE news_articles SET ingested_at = :observed
+                 WHERE id = CAST(:id AS uuid)
+                """)
+            .param("observed", OffsetDateTime.ofInstant(publishedAt, ZoneOffset.UTC))
+            .param("id", id).update();
+        return id;
     }
 
     private void analysis(String articleId, Instant createdAt, String status, String symbols,
@@ -74,6 +107,54 @@ class NewsMindContextIT extends AbstractPostgresIT {
 
     private NewsContext context(String sym, Instant asOf) {
         return features.contextFor(4242L, sym + "-EQ", asOf);
+    }
+
+    @Test
+    void revokedOrNewlyApprovedPublisherCannotLeakIntoHistoricalMindEvidence() {
+        String sym = symbol();
+        String a = article(sym, PUBLISHED);
+        analysis(a, ANALYZED, "ANALYZED", "[\"" + sym + "\"]", "POSITIVE",
+            "0.600", "0.800", "0.700", "INTRADAY", false);
+        assertThat(context(sym, ANALYZED.plusSeconds(120)).status())
+            .isEqualTo(NewsContext.STATUS_INCLUDED_EVIDENCE);
+
+        // A current revocation removes the source from new research reads.
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET license_state='REVOKED', updated_at=now()
+                 WHERE source_id='TEST-SOURCE'
+                """).update();
+        NewsContext revoked = context(sym, ANALYZED.plusSeconds(120));
+        assertThat(revoked.status()).isEqualTo(NewsContext.STATUS_NO_COVERAGE);
+        assertThat(revoked.evidence()).isEmpty();
+
+        // Even an APPROVED row with a retroactive effective date cannot be
+        // treated as a historical approval if the review was entered later.
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET license_state='APPROVED', updated_at=now()
+                 WHERE source_id='TEST-SOURCE'
+                """).update();
+        assertThat(context(sym, ANALYZED.plusSeconds(120)).status())
+            .isEqualTo(NewsContext.STATUS_NO_COVERAGE);
+    }
+
+    @Test
+    void publisherDateAloneCannotBackdateAnArticleFetchedAfterTheResearchSignal() {
+        String sym = symbol();
+        String url = "https://news.example.test/future-ingest/" + UUID.randomUUID();
+        // Do NOT rewrite ingested_at for this fixture: the published date
+        // is old, but this article was first stored *after* the historical scan.
+        news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
+            "TEST-SOURCE", null, "Headline " + sym, url, "Late known source", PUBLISHED))));
+        String id = jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+            .param("url", url).query(String.class).single();
+        analysis(id, ANALYZED, "ANALYZED", "[\"" + sym + "\"]", "POSITIVE",
+            "0.600", "0.800", "0.700", "INTRADAY", false);
+
+        NewsContext historical = context(sym, ANALYZED.plusSeconds(120));
+        assertThat(historical.status()).isEqualTo(NewsContext.STATUS_NO_COVERAGE);
+        assertThat(historical.evidence()).isEmpty();
     }
 
     @Test

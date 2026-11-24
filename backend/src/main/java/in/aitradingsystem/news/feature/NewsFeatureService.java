@@ -20,7 +20,10 @@ import org.springframework.stereotype.Service;
  * (news_articles, news_analyses); it does not ingest, scrape or call an AI provider.
  *
  * <p>Timestamp rule: only the latest analysis created at or before {@code asOf} is considered for
- * each article, and the article must have been published at or before {@code asOf}.
+ * each article, and the article must have been published AND locally ingested by {@code asOf}.
+ * Sources are independently required to have current and at-decision stored rights for
+ * INGEST, RETAIN, DISPLAY and NLP_TRANSFER. A publisher timestamp cannot backdate when
+ * MintTick actually observed an article. This still does not verify model-reported issuer impact.
  */
 @Service
 public class NewsFeatureService {
@@ -90,7 +93,19 @@ public class NewsFeatureService {
                              an.created_at AS analysis_created_at, an.category
                         FROM news_articles a
                         JOIN news_analyses an ON an.article_id = a.id
-                       WHERE a.published_at <= :asOf
+                        JOIN news_source_policy rights ON rights.source_id = a.source
+                       WHERE rights.license_state = 'APPROVED'
+                         AND 'INGEST' = ANY(rights.permitted_uses)
+                         AND 'RETAIN' = ANY(rights.permitted_uses)
+                         AND 'DISPLAY' = ANY(rights.permitted_uses)
+                         AND 'NLP_TRANSFER' = ANY(rights.permitted_uses)
+                         AND rights.effective_from <= :asOf
+                         AND rights.updated_at <= :asOf
+                         AND rights.effective_from <= CURRENT_TIMESTAMP
+                         AND (rights.effective_to IS NULL OR :asOf < rights.effective_to)
+                         AND (rights.effective_to IS NULL OR CURRENT_TIMESTAMP < rights.effective_to)
+                         AND a.ingested_at <= :asOf
+                         AND a.published_at <= :asOf
                          AND a.published_at > :lookbackStart
                          AND an.created_at <= :asOf
                          AND a.id IN (

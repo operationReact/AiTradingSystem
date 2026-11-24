@@ -3,6 +3,7 @@ package in.aitradingsystem.news.feature;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -11,6 +12,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -23,6 +26,16 @@ class NewsFeatureEnrichmentIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
     @Autowired NewsService news;
     @Autowired NewsFeatureService features;
+
+    @BeforeEach
+    void approveSyntheticSource() {
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "fixture-source");
+    }
+
+    @AfterEach
+    void resetSyntheticSource() {
+        NewsSourcePolicyTestSupport.resetToPending(jdbc, "fixture-source");
+    }
 
     private static String symbol() {
         return "E" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
