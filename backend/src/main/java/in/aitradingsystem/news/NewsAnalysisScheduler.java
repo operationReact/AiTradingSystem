@@ -10,6 +10,7 @@ import java.time.ZoneOffset;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,9 @@ import org.springframework.stereotype.Component;
 /**
  * Schedules the existing NewsAnalysisService over articles that have no analysis yet, or whose latest
  * analysis failed and is eligible for a bounded retry. It adds no provider logic of its own.
+ *
+ * <p>Only articles from the explicit, empty-by-default approved-source list are eligible.
+ * The scheduler never analyzes operator-ingested or legacy articles from unapproved sources.
  *
  * <p>Retry policy: a FAILED analysis is retried only after {@link #RETRY_BACKOFF}, and an article is
  * attempted at most {@link #MAX_FAILED_ATTEMPTS} times in total. With no server-side credential the
@@ -36,27 +40,34 @@ public class NewsAnalysisScheduler {
     static final Duration LOOKBACK = Duration.ofDays(30);
     static final int MAX_PER_RUN = 20;
 
-    public enum Outcome { ANALYZED, FAILED, CONFIGURATION_BLOCKED, NOTHING_ELIGIBLE }
+    public enum Outcome { ANALYZED, FAILED, CONFIGURATION_BLOCKED, SOURCE_APPROVAL_BLOCKED, NOTHING_ELIGIBLE }
 
     private final JdbcClient jdbc;
     private final NewsAnalysisService analysis;
     private final Clock clock;
     private final int maxPerRun;
+    private final Set<String> approvedSources;
 
     public NewsAnalysisScheduler(JdbcClient jdbc, NewsAnalysisService analysis, Clock clock,
-                                 @Value("${app.news.analysis-scheduler.max-per-run:20}") int maxPerRun) {
+                                 @Value("${app.news.analysis-scheduler.max-per-run:20}") int maxPerRun,
+                                 @Value("${app.news.analyzer-bridge.approved-sources:}") List<String> approvedSources) {
         this.jdbc = jdbc;
         this.analysis = analysis;
         this.clock = clock;
         this.maxPerRun = Math.max(1, Math.min(maxPerRun, MAX_PER_RUN));
+        this.approvedSources = approvedSources == null ? Set.of()
+            : approvedSources.stream().filter(s -> s != null && !s.isBlank())
+                .map(String::trim).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /** Articles needing analysis now, oldest-published first within the freshness window. */
     List<UUID> eligibleArticles(Instant now) {
+        if (approvedSources.isEmpty()) return List.of();
         return jdbc.sql("""
                 SELECT a.id
                   FROM news_articles a
-                 WHERE a.published_at > :lookbackStart
+                 WHERE a.source IN (:approvedSources)
+                   AND a.published_at > :lookbackStart
                    AND (
                          NOT EXISTS (SELECT 1 FROM news_analyses x WHERE x.article_id = a.id)
                       OR (
@@ -69,6 +80,7 @@ public class NewsAnalysisScheduler {
                  ORDER BY a.published_at DESC
                  LIMIT :limit
                 """)
+            .param("approvedSources", approvedSources)
             .param("lookbackStart", OffsetDateTime.ofInstant(now.minus(LOOKBACK), ZoneOffset.UTC))
             .param("retryBefore", OffsetDateTime.ofInstant(now.minus(RETRY_BACKOFF), ZoneOffset.UTC))
             .param("maxFailed", MAX_FAILED_ATTEMPTS)
@@ -81,6 +93,10 @@ public class NewsAnalysisScheduler {
     public Map<Outcome, Integer> runOnce() {
         Instant now = clock.instant();
         Map<Outcome, Integer> counts = new EnumMap<>(Outcome.class);
+        if (approvedSources.isEmpty()) {
+            counts.put(Outcome.SOURCE_APPROVAL_BLOCKED, 1);
+            return counts;
+        }
         List<UUID> ids = eligibleArticles(now);
         if (ids.isEmpty()) {
             counts.put(Outcome.NOTHING_ELIGIBLE, 1);

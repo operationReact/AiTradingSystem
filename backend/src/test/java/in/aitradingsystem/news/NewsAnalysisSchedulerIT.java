@@ -65,9 +65,13 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
     }
 
     private UUID ingestArticle(Instant publishedAt) {
+        return ingestArticle(publishedAt, "fixture-source");
+    }
+
+    private UUID ingestArticle(Instant publishedAt, String source) {
         String url = "https://news.example.test/scheduler/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
-            "fixture-source", null, "Fixture headline", url, "Fixture excerpt", publishedAt))));
+            source, null, "Fixture headline", url, "Fixture excerpt", publishedAt))));
         return jdbc.sql("SELECT id FROM news_articles WHERE url = :url")
             .param("url", url).query(UUID.class).single();
     }
@@ -78,7 +82,11 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
     }
 
     private NewsAnalysisScheduler scheduler(NewsAnalysisService service, Instant at) {
-        return new NewsAnalysisScheduler(jdbc, service, Clock.fixed(at, ZoneOffset.UTC), 20);
+        return scheduler(service, at, List.of("fixture-source"));
+    }
+
+    private NewsAnalysisScheduler scheduler(NewsAnalysisService service, Instant at, List<String> approved) {
+        return new NewsAnalysisScheduler(jdbc, service, Clock.fixed(at, ZoneOffset.UTC), 20, approved);
     }
 
     @Test
@@ -136,4 +144,28 @@ class NewsAnalysisSchedulerIT extends AbstractPostgresIT {
             .param("id", article).query(Long.class).single();
         assertThat(failed).isEqualTo(3);
     }
+    @Test
+    void noApprovedSourceBlocksAnalysisEvenWithConfiguredProvider() {
+        UUID article = ingestArticle(Instant.now().minusSeconds(120));
+        FakeProvider provider = new FakeProvider(true, false);
+
+        Map<NewsAnalysisScheduler.Outcome, Integer> result =
+            scheduler(analysis(provider), Instant.now(), List.of()).runOnce();
+
+        assertThat(result).containsEntry(NewsAnalysisScheduler.Outcome.SOURCE_APPROVAL_BLOCKED, 1);
+        assertThat(provider.calls.get()).isZero();
+        assertThat(analysisRows(article)).isZero();
+    }
+
+    @Test
+    void storedArticleFromUnapprovedSourceIsNeverAnalyzed() {
+        UUID unapproved = ingestArticle(Instant.now().minusSeconds(120), "not-approved");
+        FakeProvider provider = new FakeProvider(true, false);
+
+        scheduler(analysis(provider), Instant.now()).runOnce();
+
+        assertThat(provider.calls.get()).isZero();
+        assertThat(analysisRows(unapproved)).isZero();
+    }
+
 }
