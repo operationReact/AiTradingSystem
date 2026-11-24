@@ -5,6 +5,8 @@ import in.aitradingsystem.news.NewsEventReadRepository.EventCard;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,7 +34,13 @@ public class CustomerNewsEventsController {
     public PageResponse<EventCard> events(
         @RequestParam(defaultValue = "0") @Min(0) @Max(200) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
-        @RequestParam(required = false) @Size(max = 80) String sourceId) {
-        return events.events(page, size, sourceId);
+        @RequestParam(required = false) @Size(max = 80) String sourceId,
+        @RequestParam(required = false) @Size(max = 40) String category,
+        @RequestParam(required = false) @Size(max = 100) String q,
+        @RequestParam(defaultValue = "0") @Min(0) @Max(30) int windowDays) {
+        if (windowDays != 0 && windowDays != 1 && windowDays != 7 && windowDays != 30) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported event window");
+        }
+        return events.events(page, size, sourceId, category, q, windowDays);
     }
 }

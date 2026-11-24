@@ -117,6 +117,53 @@ class CustomerNewsEventsControllerIT extends AbstractPostgresIT {
     }
 
     @Test
+    void sourceBackedHeadlineSearchAndCategoryAreExactAndParameterized() throws Exception {
+        String source = uniqueSource();
+        Instant observed = Instant.now().minusSeconds(90).truncatedTo(ChronoUnit.MICROS);
+        event(source, observed, observed);
+
+        String prefix = "/api/customer/market-intelligence/events";
+        String matched = mvc.perform(get(prefix).with(customer())
+                .param("sourceId", source)
+                .param("q", "cOrPoRaTe")
+                .param("category", "unclassified"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(mapper.readTree(matched).path("totalItems").asInt()).isEqualTo(1);
+
+        String otherCategory = mvc.perform(get(prefix).with(customer())
+                .param("sourceId", source).param("category", "REGULATORY"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(mapper.readTree(otherCategory).path("totalItems").asInt()).isZero();
+
+        String wildcardLiteral = mvc.perform(get(prefix).with(customer())
+                .param("sourceId", source).param("q", "%"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(mapper.readTree(wildcardLiteral).path("totalItems").asInt()).isZero();
+    }
+
+    @Test
+    void eventWindowDoesNotBackdateOldEvidenceOrAcceptUnknownWindow() throws Exception {
+        String source = uniqueSource();
+        Instant historical = Instant.now().minusSeconds(40L * 86400)
+            .truncatedTo(ChronoUnit.MICROS);
+        event(source, historical, historical);
+        String path = "/api/customer/market-intelligence/events";
+
+        String all = mvc.perform(get(path).with(customer())
+                .param("sourceId", source).param("windowDays", "0"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(mapper.readTree(all).path("totalItems").asInt()).isEqualTo(1);
+
+        String month = mvc.perform(get(path).with(customer())
+                .param("sourceId", source).param("windowDays", "30"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(mapper.readTree(month).path("totalItems").asInt()).isZero();
+
+        mvc.perform(get(path).with(customer()).param("windowDays", "2"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void requiresCustomerRoleAndBoundsPagination() throws Exception {
         mvc.perform(get("/api/customer/market-intelligence/events"))
             .andExpect(status().isUnauthorized());
