@@ -1,0 +1,86 @@
+name: MintTick STR176 owner-private 60-day original futures data (NO ORDERS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-owner-futures-60day-capture.yml'
+      - 'infra/ec2-paper/str176_private_futures_capture.py'
+      - 'scripts/tests/test_str176_private_futures_capture.py'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/str176-private-futures-60day.json'
+permissions:
+  contents: read
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+jobs:
+  offline-source-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify real-source boundary and independent no-network tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/str176_private_futures_capture.py
+          python3 -m unittest discover -s scripts/tests -p 'test_str176_private_futures_capture.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/str176_private_futures_capture.py').read_text()
+          for required in ('len(expiries)!=12', 'timedelta(days=60)',
+                           'validate_candles(', 'original_sha256',
+                           'original_http BLOB', 'historicalE2ECertified',
+                           'fno_private_bulk_worker', 'owner.ssm_token()'):
+              assert required in s,required
+          for forbidden in ('placeOrder','submitOrder','put-parameter',
+                            'start-instances','stop-instances',
+                            'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert forbidden not in s,forbidden
+          PY
+
+  exact-host-source-capture:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && github.repository == 'operationReact/AiTradingSystem'
+    needs: offline-source-acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file owner private historical collection request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/str176-private-futures-60day.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from str176_private_futures_capture import EXACT
+          p=Path('infra/ec2-paper/requests/str176-private-futures-60day.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())==EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-owner-str176-historical-read-only-broker
+      - name: Collect only actual owner-authorized expired futures GETs and keep original bytes private
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 infra/ec2-paper/str176_private_futures_capture.py runner
+
+# No customer/paper/live orders, rights changes, release, EC2 lifecycle changes.
