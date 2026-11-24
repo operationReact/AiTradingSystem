@@ -8,6 +8,8 @@ import in.aitradingsystem.news.analysis.AiErrorCode;
 import in.aitradingsystem.news.analysis.AiProviderException;
 import in.aitradingsystem.news.analysis.NewsAnalysisParser;
 import in.aitradingsystem.news.analysis.NewsAnalysisProvider;
+import in.aitradingsystem.news.policy.NewsSourcePolicy.Use;
+import in.aitradingsystem.news.policy.NewsSourcePolicyService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -19,7 +21,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Agent 3 (News Analyst). Produces advisory, schema-validated analysis only. Its output never
@@ -51,16 +55,19 @@ public class NewsAnalysisService {
     private final Map<String, NewsAnalysisProvider> providers;
     private final NewsAnalysisParser parser;
     private final NewsService news;
+    private final NewsSourcePolicyService policy;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
     public NewsAnalysisService(JdbcClient jdbc, ObjectMapper mapper, NewsProperties props,
-        List<NewsAnalysisProvider> providers, NewsAnalysisParser parser, NewsService news) {
+        List<NewsAnalysisProvider> providers, NewsAnalysisParser parser, NewsService news,
+        NewsSourcePolicyService policy) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.props = props;
         this.providers = providers.stream().collect(java.util.stream.Collectors.toMap(NewsAnalysisProvider::name, p -> p));
         this.parser = parser;
         this.news = news;
+        this.policy = policy;
     }
 
     /** Thrown when another analysis for the same article is already running. */
@@ -77,6 +84,8 @@ public class NewsAnalysisService {
     public AnalysisView analyze(UUID articleId, boolean force) {
         NewsService.ArticleView article = news.findArticle(articleId)
             .orElseThrow(() -> new NotFoundException("News article not found: " + articleId));
+
+        requireModelTransferRight(article.source());
 
         if (!force && article.analysis() != null && "ANALYZED".equals(article.analysis().status())) {
             return article.analysis();
@@ -100,6 +109,8 @@ public class NewsAnalysisService {
         long start = System.nanoTime();
         for (int attempt = 1; attempt <= props.maxAttempts(); attempt++) {
             try {
+                // Revocation during a long-running analysis also blocks subsequent model requests.
+                requireModelTransferRight(article.source());
                 NewsAnalysisProvider.Completion completion = provider.complete(SYSTEM_PROMPT, userPrompt);
                 NewsAnalysisParser.Result result = parser.parse(completion.text());
                 return persist(
@@ -127,6 +138,13 @@ public class NewsAnalysisService {
             null,
             userPrompt,
             null);
+    }
+
+    private void requireModelTransferRight(String source) {
+        if (!policy.permitted(source, Use.NLP_TRANSFER, Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "News source is not approved for external model analysis");
+        }
     }
 
     private AnalysisView persist(
