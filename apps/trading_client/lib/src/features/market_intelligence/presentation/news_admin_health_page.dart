@@ -4,13 +4,16 @@ import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
 import '../data/news_admin_health_repository.dart';
+import '../data/historical_news_coverage_repository.dart';
+import 'historical_news_coverage_screen.dart';
 
 /// Diagnostic screen only. This does not expose an enable/approve/execute action.
 /// The backend separately requires an ADMIN role on every data request.
 class NewsAdminHealthPage extends StatefulWidget {
-  const NewsAdminHealthPage({required this.repository, super.key});
+  const NewsAdminHealthPage({required this.repository, this.coverageRepository, super.key});
 
   final NewsAdminHealthRepository repository;
+  final HistoricalNewsCoverageRepository? coverageRepository;
 
   @override
   State<NewsAdminHealthPage> createState() => _NewsAdminHealthPageState();
@@ -119,6 +122,14 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
                         ),
                       const SizedBox(height: 12),
                       _metrics(_snapshot!),
+                      if (widget.coverageRepository != null && _failure == null)
+                        OutlinedButton(
+                          key: const ValueKey('news-health-historical-coverage'),
+                          onPressed: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(
+                            builder: (_) => HistoricalNewsCoverageScreen(
+                              repository: widget.coverageRepository!, initialCutoff: _snapshot!.observedAt))),
+                          child: const Text('Historical news coverage'),
+                        ),
                       const SizedBox(height: 12),
                       Text('Pipeline', style: theme.textTheme.titleSmall),
                       const SizedBox(height: 4),
