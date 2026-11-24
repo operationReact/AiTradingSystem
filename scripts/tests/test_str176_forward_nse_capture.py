@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"infra/ec2-paper"))
 m=importlib.import_module("str176_forward_nse_capture")
 DAY=date.fromisoformat(m.EXACT["session_date"])
-OBS=datetime(2026,11,24,15,0,tzinfo=timezone.utc)
+OBS=datetime(2026,11,23,15,0,tzinfo=timezone.utc)
 COUNTS={"indexFutures":3,"indexOptions":25}
 class CaptureTest(unittest.TestCase):
     def test_failure_receipts_never_publish_arbitrary_host_output(self):
@@ -28,6 +28,11 @@ class CaptureTest(unittest.TestCase):
         compile(source,"<protected-host>","exec")
         self.assertIn(b"fno_personal_nse_archive_probe",source)
         self.assertIn(b"def read_udiff",source)
+
+    def test_archive_url_matches_published_nse_archive(self):
+        self.assertEqual(
+            "https://nsearchives.nseindia.in/content/fo/BhavCopy_NSE_FO_0_0_0_20261123_F_0000.csv.zip",
+            m.archive_url(DAY))
 
     def test_scope_is_bounded_and_not_before_final_eod(self):
         m.require_scope(DAY,OBS)
