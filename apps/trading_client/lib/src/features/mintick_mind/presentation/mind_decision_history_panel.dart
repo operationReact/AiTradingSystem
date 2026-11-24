@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../data/mind_decision_history_repository.dart';
+import '../data/mind_verified_news_repository.dart';
+import 'mind_verified_news_panel.dart';
 import 'mind_widgets.dart';
 
 /// Persisted research candidate history. Research evidence only: no order, no
 /// execution and no live money. Search filters the loaded records on the client.
 class MindDecisionHistoryPanel extends StatefulWidget {
-  const MindDecisionHistoryPanel({required this.repository, super.key});
+  const MindDecisionHistoryPanel({required this.repository, this.verifiedNewsRepository, super.key});
 
   final MindDecisionHistoryRepository repository;
+  final MindVerifiedNewsRepository? verifiedNewsRepository;
 
   @override
   State<MindDecisionHistoryPanel> createState() => _MindDecisionHistoryPanelState();
@@ -143,6 +146,33 @@ class _MindDecisionHistoryPanelState extends State<MindDecisionHistoryPanel> {
                       _NewsImpact(
                         key: ValueKey('mind-news-impact-${d.candidateFingerprint}'),
                         news: d.news),
+                      if (widget.verifiedNewsRepository != null && d.instrumentId != null)
+                        TextButton.icon(
+                          key: ValueKey('mind-verified-news-${d.candidateFingerprint}'),
+                          icon: const Icon(Icons.article_outlined, size: 16),
+                          label: const Text('Verified issuer news'),
+                          onPressed: () async {
+                            final repository = widget.verifiedNewsRepository!;
+                            await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+                              builder: (_) => Scaffold(
+                                appBar: AppBar(title: const Text('Verified issuer news')),
+                                body: SafeArea(
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(16),
+                                    child: MindVerifiedNewsPanel(
+                                      instrumentId: d.instrumentId!,
+                                      asOf: d.dataCutoffAt,
+                                      repository: repository,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ));
+                          },
+                        )
+                      else if (widget.verifiedNewsRepository != null)
+                        Text('Verified issuer news unavailable: original instrument ID not recorded.',
+                          style: type.labelSmall),
                       Text(
                         'Fingerprint ${d.candidateFingerprint.length > 12 ? d.candidateFingerprint.substring(0, 12) : d.candidateFingerprint}…'
                         '${d.catalogueVersion == null ? '' : ' · catalogue ${d.catalogueVersion}'}',
