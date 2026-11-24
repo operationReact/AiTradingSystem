@@ -46,7 +46,7 @@ def valid_receipt(receipt):
               "GEMINI_BINDING_MISSING", "PROVIDER_CALL_FAILED", "VERIFIED"}
     if not isinstance(receipt, dict) or set(receipt) != allowed:
         return False
-    if receipt["status"] not in states:
+    if not isinstance(receipt["status"], str) or receipt["status"] not in states:
         return False
     if receipt["deployedSha"] is not None and (
             not isinstance(receipt["deployedSha"], str)
