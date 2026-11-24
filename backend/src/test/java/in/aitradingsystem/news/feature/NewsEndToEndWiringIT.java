@@ -95,7 +95,7 @@ class NewsEndToEndWiringIT extends AbstractPostgresIT {
         };
         NewsAnalysisService analysis = new NewsAnalysisService(jdbc, mapper,
             new NewsProperties("FAKE", "m", "m", null, null, 5000, 30000, 2),
-            List.of(provider), new NewsAnalysisParser(mapper), news);
+            List.of(provider), new NewsAnalysisParser(mapper), news, policy);
         // The fixture article comes from the approved "moneycontrol" source, so it is the only approved id here.
         new NewsAnalysisScheduler(jdbc, analysis, Clock.systemUTC(), 20, List.of("moneycontrol"), policy).runOnce();
         String analysisStatus = jdbc.sql("""
