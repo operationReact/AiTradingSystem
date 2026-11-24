@@ -29,6 +29,18 @@ test -f runtime.env && test ! -L runtime.env || { echo "Missing safe host-local 
 test -f paper-compose.yml && test ! -L paper-compose.yml || { echo "Missing safe Compose file" >&2; exit 2; }
 chmod 0600 runtime.env
 
+# Prepare an empty, isolated STR-176 intake mount for the unprivileged backend.
+# Existing reviewer packets are never changed by deployment; unexpected path
+# ownership, mode or symlinks fail closed. The application mounts it read-only.
+intake="$root/fno176-attested-intake"
+if [ ! -e "$intake" ] && [ ! -L "$intake" ]; then
+  install -d -o 10001 -g 10001 -m 0700 -- "$intake"
+fi
+test -d "$intake" && test ! -L "$intake" || { echo "Unsafe STR-176 intake path" >&2; exit 2; }
+test "$(stat -c '%u:%g:%a' "$intake")" = '10001:10001:700' || {
+  echo "Unsafe STR-176 intake directory permissions" >&2; exit 2;
+}
+
 stage=IMAGE_CHECK
 # Images are built on GitHub ARM64 and transferred to this host.
 # Do not build with the small 4GiB host. Do not silently pull app images.

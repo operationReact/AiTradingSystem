@@ -41,6 +41,13 @@ class PaperAppRuntimeContract(unittest.TestCase):
             'NEWS_MIND_CONTEXT_ENABLED: ${NEWS_MIND_CONTEXT_ENABLED:-false}',
             'OFFICIAL_SOURCE_SCHEDULER_ENABLED: "false"',
             'AI_RESEARCH_WORKER_CLIENT_ENABLED: "false"',
+            'MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_ENABLED: ${MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_ENABLED:-false}',
+            'MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_DIRECTORY: /run/minttick-fno176-intake',
+            'MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_REVIEWER_PUBLIC_KEY: ${MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_REVIEWER_PUBLIC_KEY:-}',
+            'source: /opt/aitradingsystem-paper/fno176-attested-intake',
+            'target: /run/minttick-fno176-intake',
+            'read_only: true',
+            'create_host_path: false',
             'APP_DEV_SESSION_BOOTSTRAP_ENABLED: "false"',
             'APP_SESSION_COOKIE_SECURE: "true"',
             "mem_limit: 1536m",
@@ -91,6 +98,20 @@ class PaperAppRuntimeContract(unittest.TestCase):
                 self.assertNotIn(forbidden,script)
         result=subprocess.run(["bash","-n",str(RUN)],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_str176_intake_mount_is_isolated_default_off_and_fail_closed(self):
+        compose=COMPOSE.read_text(encoding="utf-8")
+        script=RUN.read_text(encoding="utf-8")
+        intake=compose.split("source: /opt/aitradingsystem-paper/fno176-attested-intake",1)[1].split("ports:",1)[0]
+        self.assertIn("read_only: true",intake)
+        self.assertIn("create_host_path: false",intake)
+        self.assertIn("MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_ENABLED:-false",compose)
+        self.assertIn("MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_REVIEWER_PUBLIC_KEY:-",compose)
+        self.assertIn('install -d -o 10001 -g 10001 -m 0700',script)
+        self.assertIn("test ! -L \"$intake\"",script)
+        self.assertIn("10001:10001:700",script)
+        self.assertIn('MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED: ${MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED:-false}',compose)
+        self.assertNotIn("MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_ENABLED=true",script)
 
     def test_fail_closed_invalid_release_before_host_operations(self):
         result=subprocess.run(["bash",str(RUN),"invalid-sha"],
