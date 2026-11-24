@@ -182,6 +182,17 @@ class Fno176OriginalObservedIngestorTest {
         assertThrows(IllegalArgumentException.class,() ->
             new Fno176OriginalObservedIngestor.OriginalPackets(
                 "UPSTOX_ANALYTICS",new byte[0],new byte[]{1},new byte[]{2}));
+        // The official instrument-master gzip can exceed the 1 MiB candle cap.
+        byte[] publishedMaster=new byte[2 * 1024 * 1024];
+        java.util.Arrays.fill(publishedMaster,(byte)'X');
+        var masterPackets=new Fno176OriginalObservedIngestor.OriginalPackets(
+            "UPSTOX_ANALYTICS",new byte[]{1},new byte[]{2},publishedMaster);
+        assertEquals(publishedMaster.length,masterPackets.contractMasterPacket().length);
+        assertThrows(IllegalArgumentException.class,() ->
+            new Fno176OriginalObservedIngestor.OriginalPackets(
+                "UPSTOX_ANALYTICS",new byte[1_048_577],new byte[]{2},
+                new byte[]{3}));
+
     }
 
     private static String hash(byte[] bytes) throws Exception {
