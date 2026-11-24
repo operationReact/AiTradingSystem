@@ -155,24 +155,36 @@ def _bps(numerator,denominator):
     if denominator<=0:return Decimal(0)
     return numerator*Decimal(10000)/denominator
 
-def momentum(window,expiry,as_of):
-    """Independent numerical reference of STR-176 production threshold logic.
-    No next-session price enters this function; Java fixture parity is separate.
-    """
-    if len(window)!=7:return "BLOCKED"
+REASONS=frozenset((
+    "INVALID_WINDOW_SESSIONS", "MISSING_VOLUME_OR_OI",
+    "SESSION_GAP", "EXPIRY_OUT_OF_SCOPE", "STALE_SESSION",
+    "PRICE_RANGE_OUTLIER", "PRICE_STEP_OUTLIER",
+    "BASELINE_VOLUME_MISSING", "VOLUME_OR_OI_PARTICIPATION_LOW",
+    "BREAKOUT_NOT_CONFIRMED", "UPWARD_BREAKOUT", "DOWNWARD_BREAKOUT"
+))
+
+def momentum(window,expiry,as_of,*,details=False):
+    """STR-176 numerical reference; optional codes do not alter signals."""
+    def result(state,why):
+        return (state,why) if details else state
+    if len(window)!=7:return result("BLOCKED","INVALID_WINDOW_SESSIONS")
     dates=[r[0] for r in window]
-    if len(set(dates))!=7 or dates!=sorted(dates):return "BLOCKED"
-    if any(r[6]<=0 or r[5]<0 for r in window):return "BLOCKED"
+    if len(set(dates))!=7 or dates!=sorted(dates):
+        return result("BLOCKED","INVALID_WINDOW_SESSIONS")
+    if any(r[6]<=0 or r[5]<0 for r in window):
+        return result("BLOCKED","MISSING_VOLUME_OR_OI")
     if not all(1<=(b-a).days<=5 for a,b in zip(dates,dates[1:])):
-        return "BLOCKED"
-    if not 7<=(expiry-as_of).days<=120:return "BLOCKED"
+        return result("BLOCKED","SESSION_GAP")
+    if not 7<=(expiry-as_of).days<=120:
+        return result("BLOCKED","EXPIRY_OUT_OF_SCOPE")
     if (as_of-dates[-1]).days<1 or (as_of-dates[-1]).days>5:
-        return "BLOCKED"
-    for i,r in enumerate(window):
+        return result("BLOCKED","STALE_SESSION")
+    for j,r in enumerate(window):
         _,op,high,low,close,volume,oi,_=r
-        if _bps(high-low,close)>Decimal(800):return "BLOCKED"
-        if i and abs(_bps(close-window[i-1][4],window[i-1][4]))>Decimal(2500):
-            return "BLOCKED"
+        if _bps(high-low,close)>Decimal(800):
+            return result("BLOCKED","PRICE_RANGE_OUTLIER")
+        if j and abs(_bps(close-window[j-1][4],window[j-1][4]))>Decimal(2500):
+            return result("BLOCKED","PRICE_STEP_OUTLIER")
     prior_high=max(r[2] for r in window[:-1])
     prior_low=min(r[3] for r in window[:-1])
     last=window[-1]
@@ -180,19 +192,20 @@ def momentum(window,expiry,as_of):
     down=_bps(prior_low-last[4],prior_low)
     baseline=sum(x[5] for x in window[:3])
     recent=sum(x[5] for x in window[4:])
-    if baseline<=0:return "BLOCKED"
+    if baseline<=0:return result("BLOCKED","BASELINE_VOLUME_MISSING")
     volume_lift=_bps(Decimal(recent),Decimal(baseline))
     participation=_bps(Decimal(last[5]),Decimal(last[6]))
-    changes=[(window[i][4]>window[i-1][4],window[i][4]<window[i-1][4])
-             for i in range(4,7)]
+    changes=[(window[j][4]>window[j-1][4],window[j][4]<window[j-1][4])
+             for j in range(4,7)]
     rises=sum(a for a,b in changes)
     falls=sum(b for a,b in changes)
-    if volume_lift<11000 or participation<2000:return "NO_SIGNAL"
+    if volume_lift<11000 or participation<2000:
+        return result("NO_SIGNAL","VOLUME_OR_OI_PARTICIPATION_LOW")
     if up>=100 and rises>=2 and falls==0 and up-20>30:
-        return "LONG"
+        return result("LONG","UPWARD_BREAKOUT")
     if down>=100 and falls>=2 and rises==0 and down-20>30:
-        return "SHORT"
-    return "NO_SIGNAL"
+        return result("SHORT","DOWNWARD_BREAKOUT")
+    return result("NO_SIGNAL","BREAKOUT_NOT_CONFIRMED")
 
 def evaluate(groups, metadata, *, cost_bps=COST_BPS):
     """Chronological contract-group walkforward, one-lot modeled next opens."""
@@ -218,7 +231,9 @@ def evaluate(groups, metadata, *, cost_bps=COST_BPS):
         for index in range(6,len(rows)-2):
             first=rows[index]
             decision_day=rows[index+1][0]
-            decision=momentum(rows[index-6:index+1],expiry,decision_day)
+            decision,why=momentum(rows[index-6:index+1],expiry,decision_day,details=True)
+            if why not in REASONS:raise ValueError("UNKNOWN_EVALUATOR_REASON")
+            counters["reason:"+why]+=1
             counters["decisionWindows"]+=1
             if decision=="BLOCKED":
                 counters["dataBlockedWindows"]+=1
@@ -271,6 +286,8 @@ def run_research(root=ROOT,now=None,fetch=None):
         "sourceRows":sum(len(rows) for rows in groups.values()),
         "sourceFuturesRows":counts.get("sourceFuturesRows",0),
         "sourceFuturesContracts":counts.get("futuresCohorts",0),
+        "diagnosticReasons":{k[7:]:v for k,v in counts.items()
+                             if k.startswith("reason:")},
         "decisionWindows":counts.get("decisionWindows",0),
         "evaluatorWindows":counts.get("researchEvaluatorRuns",0),
         "candidateWindows":counts.get("candidateWindows",0),
@@ -300,6 +317,13 @@ def safe_receipt(r):
             or r.get("providerFirstPublishedAtVerified") is not False
             or r.get("certifiedStrategies")!=0
             or r.get("orders") is not False or r.get("writes") is not False):
+        raise ValueError("STR176_PRIVATE_RECEIPT_INVALID")
+    reasons=r.get("diagnosticReasons")
+    if (not isinstance(reasons,dict)
+            or set(reasons)-REASONS
+            or any(type(value) is not int or not 0<=value<=MAX_ROWS
+                   for value in reasons.values())
+            or sum(reasons.values())!=r.get("decisionWindows")):
         raise ValueError("STR176_PRIVATE_RECEIPT_INVALID")
     for k in ("sourceFuturesRows","sourceFuturesContracts","decisionWindows",
               "evaluatorWindows","candidateWindows","simulatedRoundTrips",
