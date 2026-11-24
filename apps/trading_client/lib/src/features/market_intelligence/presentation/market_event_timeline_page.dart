@@ -18,7 +18,11 @@ class MarketEventTimelinePage extends StatefulWidget {
 
 class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
   final ScrollController _scroll = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   final List<MarketEventCard> _items = [];
+  String? _category;
+  String _query = '';
+  int _windowDays = 0;
   int _generation = 0;
   int _page = 0;
   bool _loading = false;
@@ -39,6 +43,7 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
     _generation++;
     _scroll.removeListener(_handleScroll);
     _scroll.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -57,7 +62,10 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
       _paginationError = null;
     });
     try {
-      final result = await widget.repository.events(page: 0);
+      final result = await widget.repository.events(
+        page: 0, category: _category, query: _query,
+        windowDays: _windowDays,
+      );
       if (!mounted || generation != _generation) return;
       setState(() {
         _items
@@ -87,7 +95,10 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
       _paginationError = null;
     });
     try {
-      final result = await widget.repository.events(page: requested);
+      final result = await widget.repository.events(
+        page: requested, category: _category, query: _query,
+        windowDays: _windowDays,
+      );
       if (!mounted || generation != _generation) return;
       final seen = _items.map((item) => item.eventId).toSet();
       setState(() {
@@ -121,11 +132,15 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
           ),
         ],
       ),
-      body: _loading && _items.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : _items.isEmpty
-              ? _emptyState()
-              : RefreshIndicator(
+      body: Column(
+        children: [
+          _filterBar(),
+          Expanded(
+            child: _loading && _items.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : _items.isEmpty
+                    ? _emptyState()
+                    : RefreshIndicator(
                   onRefresh: _reload,
                   child: ListView.builder(
                     controller: _scroll,
@@ -198,7 +213,104 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
                     },
                   ),
                 ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _filterBar() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+      child: Column(
+        children: [
+          TextField(
+            key: const ValueKey('market-event-search-input'),
+            controller: _searchController,
+            maxLength: 100,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _applySearch(),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Search publisher headlines',
+              counterText: '',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: IconButton(
+                key: const ValueKey('market-event-search-apply'),
+                tooltip: 'Search headlines',
+                icon: const Icon(Icons.arrow_forward_rounded, size: 19),
+                onPressed: _applySearch,
+              ),
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 7),
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _categoryChip('All', null),
+                _categoryChip('Results', 'RESULTS'),
+                _categoryChip('Regulatory', 'REGULATORY'),
+                _categoryChip('Unclassified', 'UNCLASSIFIED'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _dayChip('All dates', 0),
+                _dayChip('24h', 1),
+                _dayChip('7d', 7),
+                _dayChip('30d', 30),
+              ],
+            ),
+          ),
+          Divider(height: 7, color: scheme.outlineVariant),
+        ],
+      ),
+    );
+  }
+
+  Widget _categoryChip(String label, String? value) => Padding(
+    padding: const EdgeInsets.only(right: 6),
+    child: ChoiceChip(
+      key: ValueKey('market-event-category-${value ?? 'ALL'}'),
+      label: Text(label),
+      selected: _category == value,
+      onSelected: (_) {
+        if (_category == value) return;
+        setState(() => _category = value);
+        unawaited(_reload());
+      },
+    ),
+  );
+
+  Widget _dayChip(String label, int days) => Padding(
+    padding: const EdgeInsets.only(right: 6),
+    child: ChoiceChip(
+      key: ValueKey('market-event-window-$days'),
+      label: Text(label),
+      selected: _windowDays == days,
+      onSelected: (_) {
+        if (_windowDays == days) return;
+        setState(() => _windowDays = days);
+        unawaited(_reload());
+      },
+    ),
+  );
+
+  void _applySearch() {
+    final value = _searchController.text.trim();
+    FocusScope.of(context).unfocus();
+    if (value == _query) return;
+    setState(() => _query = value);
+    unawaited(_reload());
   }
 
   Widget _emptyState() => Center(
