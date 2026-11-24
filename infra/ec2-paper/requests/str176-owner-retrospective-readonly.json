@@ -1,11 +1,11 @@
 {
-    "kind": "minttick-str176-owner-retrospective-readonly-v1",
-    "account": "098859530205",
-    "region": "ap-south-1",
-    "instance_id": "i-09c01b470fb39b85a",
-    "max_provider_gets": 12,
-    "no_market_data_export": true,
-    "no_db_writes": true,
-    "no_orders": true,
-    "historical_e2e_claim": false
+  "kind": "minttick-str176-owner-retrospective-readonly-v1",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "max_provider_gets": 12,
+  "no_market_data_export": true,
+  "no_db_writes": true,
+  "no_orders": true,
+  "historical_e2e_claim": false
 }
