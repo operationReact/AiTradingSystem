@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../data/instrument_repository.dart';
+import '../../market_intelligence/data/market_news_repository.dart';
+import '../../market_intelligence/presentation/market_intelligence_page.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_fno_discovery_repository.dart';
 import '../domain/trading_room_draft.dart';
@@ -38,9 +40,10 @@ class MintTickCustomerMarketPage extends StatefulWidget {
   const MintTickCustomerMarketPage({
     required this.repository, this.onConnectBroker,
     this.rooms, this.fnoDiscovery, this.onOpenFnoRoom,
-    this.onCreateFnoRoom, super.key,
+    this.onCreateFnoRoom, this.marketNewsRepository, super.key,
   });
   final CustomerMarketRepository repository;
+  final MarketNewsRepository? marketNewsRepository;
   final VoidCallback? onConnectBroker;
   final TradingRoomDraftStore? rooms;
   final CustomerFnoDiscoveryRepository? fnoDiscovery;
@@ -185,6 +188,14 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   void _openSearch() {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => _MarketSearchPage(repository: widget.repository, onOpen: _openDetail),
+    ));
+  }
+
+  void _openMarketNews() {
+    final repository = widget.marketNewsRepository;
+    if (repository == null) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => MarketIntelligencePage(repository: repository),
     ));
   }
 
@@ -546,6 +557,12 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           Expanded(child: Semantics(header: true, child: Text('Markets',
               style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)))),
           if (!_showFno && _summary != null) _SessionChip(status: _summary!.market),
+          if (widget.marketNewsRepository != null) IconButton(
+            key: const ValueKey('market-intelligence-open'),
+            tooltip: 'Market intelligence',
+            onPressed: _openMarketNews,
+            icon: const Icon(Icons.article_outlined),
+          ),
           if (!_showFno) IconButton(
             key: const ValueKey('market-search-open'),
             tooltip: 'Search NSE stocks',
