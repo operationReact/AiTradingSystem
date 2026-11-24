@@ -173,6 +173,13 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         cold=[sample(d,100,40000,100000) for d in dates[:7]]
         self.assertEqual(("NO_SIGNAL","VOLUME_OR_OI_PARTICIPATION_LOW"),
             replay.momentum(cold,expiry,dates[7],details=True))
+        # Participation succeeds, but a flat market cannot fabricate breakout.
+        active=[sample(d,100,50000 if i>=3 else 10000,130000)
+                for i,d in enumerate(dates[:7])]
+        self.assertEqual(("NO_SIGNAL","BREAKOUT_NOT_CONFIRMED"),
+            replay.momentum(active,expiry,dates[7],details=True))
+        self.assertEqual(replay.momentum(active,expiry,dates[7]),
+            replay.momentum(active,expiry,dates[7],details=True)[0])
 
     def test_private_receipt_rejects_invalid_diagnostic_totals_or_codes(self):
         keys=self.valid_source_cache()
