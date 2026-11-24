@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -28,6 +29,7 @@ class NewsBacktestAnnotatorIT extends AbstractPostgresIT {
     }
 
     private String article(Instant publishedAt) {
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "TEST-SOURCE");
         String url = "https://news.example.test/backtest/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
             "TEST-SOURCE", null, "Backtest headline", url, "Backtest excerpt", publishedAt))));
