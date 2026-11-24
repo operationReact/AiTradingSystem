@@ -1,0 +1,60 @@
+name: MintTick STR176 original-asof train OOS walkforward (READ ONLY)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-source-linked-walkforward.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176WalkForwardController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1Test.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno176WalkForwardControllerTest.java'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176WalkForwardController.java'
+
+permissions:
+  contents: read
+jobs:
+  original-asof-aftercost-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute actual source-boundary invocations with daily time and cost guards
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno176SourceLinkedWalkForwardV1Test,AdminFno176WalkForwardControllerTest,Fno176VerifiedHistoricalReplayServiceTest,FnoHistoricalAfterCostWalkForwardV1Test' test
+      - name: Require no invented order or E2E acceptance
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          svc=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176SourceLinkedWalkForwardV1.java').read_text()
+          ctl=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno176WalkForwardController.java').read_text()
+          for text in ('replaySource.inspect(contractKey, decisionAt)',
+                       'calendar.isTradingDay(day)',
+                       'FnoHistoricalAfterCostWalkForwardV1.evaluate',
+                       'STR176_COMPLETED_FILLS_NOT_LINKED_TO_RESEARCH_CANDIDATES',
+                       'SOURCE_LINKED_WALK_FORWARD_NO_ORIGINAL_FILLS_NOT_E2E'):
+              assert text in svc,text
+          for text in ('@PreAuthorize(', 'CacheControl.noStore()', 'false,false,false',
+                       '@GetMapping("/str176-walkforward")'):
+              assert text in ctl,text
+          for text in ('@PostMapping','@Scheduled','placeOrder(','submitOrder(',
+                       'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert text not in svc and text not in ctl,text
+          PY
