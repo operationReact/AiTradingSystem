@@ -770,3 +770,18 @@ before overlap skipping. This distinguishes zero OOS opportunity from
 missing/blocked OOS source without tuning thresholds or manufacturing fills.
 These new breakdown fields still require a subsequent genuine host receipt;
 the observed run above used the earlier generic invalid-session reason.
+
+
+### Exchange-confirmed Sunday calendar correction, research parser only
+
+NSE F&O [Circular 07/2026, download NSE/FAOP/72352](https://nsearchives.nseindia.com/content/circulars/FAOP72352.pdf),
+published January 16, 2026, independently confirms normal F&O trading on
+Sunday February 1, 2026, 09:15–15:30 IST for the Union Budget. The research
+parser now accepts this exact exchange-confirmed session date, retaining
+strict midnight daily-label, timezone, duplicate and OHLC/quantity checks.
+Every other weekend still blocks without its own official calendar proof.
+This is not blanket weekend permission, a complete holiday calendar,
+proof of original bar availability, or a change to Java production risk /
+strategy/trading guards. The observed generic INVALID_SOURCE_SESSION
+receipt does not identify a date; restored source coverage must be measured
+in the next actual host run, never assumed from the circular alone.

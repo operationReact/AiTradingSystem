@@ -41,6 +41,11 @@ SOURCE_DAYS=90
 PER_GET_DAYS=30
 MAX_BARS=1080
 FIXED_FRICTION_BPS=30
+# NSE F&O Circular 07/2026 (NSE/FAOP/72352), published 2026-01-16:
+# https://nsearchives.nseindia.com/content/circulars/FAOP72352.pdf
+# Confirms one real Sunday session, 09:15-15:30 IST. Research decoding only;
+# not a complete exchange holiday calendar or original candle publication proof.
+VERIFIED_SPECIAL_SESSION=date(2026,2,1)
 SAFE_STATE=frozenset((
     "RESEARCH_EXTENDED_EOD_NOT_CERTIFIED",
     "SOURCE_FUTURES_COHORTS_INCOMPLETE",
@@ -124,7 +129,7 @@ def decode_expired_chunk(payload, first, last):
             raise ValueError("HISTORICAL_NONCANONICAL_DAILY_TIME")
         if dt.date() in seen:
             raise ValueError("HISTORICAL_DUPLICATE_SESSION_DAY")
-        if dt.date().weekday()>=5:
+        if dt.date().weekday()>=5 and dt.date()!=VERIFIED_SPECIAL_SESSION:
             # A weekday heuristic cannot disprove an official special session.
             # Retain the block until independently verified calendar evidence.
             raise ValueError("HISTORICAL_WEEKEND_SESSION_UNVERIFIED")

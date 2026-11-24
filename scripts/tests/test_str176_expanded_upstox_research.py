@@ -331,6 +331,23 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
                 self.assertIn(code,m.QUARANTINE_CODES)
                 self.assertEqual(code,m.safe_block_code(ValueError(code)))
 
+    def test_only_exchange_verified_budget_sunday_is_accepted(self):
+        special=date(2026,2,1)
+        self.assertEqual(6,special.weekday())
+        row=["2026-02-01T00:00:00+05:30",100,102,99,101,5,10]
+        bars=m.decode_expired_chunk({"candles":[row]},special,special)
+        self.assertEqual([special],[r[0] for r in bars])
+        for d in (date(2026,1,31),date(2026,2,7),date(2026,2,8)):
+            bad=[d.isoformat()+"T00:00:00+05:30",*row[1:]]
+            with self.assertRaisesRegex(ValueError,"WEEKEND_SESSION_UNVERIFIED"):
+                m.decode_expired_chunk({"candles":[bad]},d,d)
+        for stamp,code in (("2026-02-01T09:15:00+05:30","NONCANONICAL_DAILY_TIME"),
+                           ("2026-02-01T00:00:00+00:00","TIMESTAMP_OFFSET_INVALID")):
+            with self.assertRaisesRegex(ValueError,code):
+                m.decode_expired_chunk({"candles":[[stamp,*row[1:]]]},special,special)
+        with self.assertRaisesRegex(ValueError,"DUPLICATE_SESSION_DAY"):
+            m.decode_expired_chunk({"candles":[row,row]},special,special)
+
     def test_split_outcomes_reconcile_and_cannot_forge_oos_activity(self):
         p=FakeAuthenticatedUpstox()
         report=m.safe_receipt(m.research(p.get,date(2026,11,24)))
