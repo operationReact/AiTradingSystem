@@ -52,6 +52,7 @@ class GeminiRuntimeVerifyTest(unittest.TestCase):
             "providerResponseCompleted": True, "challengeValidated": True,
             "requestIdPresent": True, "latencyMs": 1200, "httpStatus": None}
         self.assertTrue(check.valid_receipt(receipt))
+        self.assertFalse(check.valid_receipt(dict(receipt, status=[])))
         for field, invalid in (
                 ("providerResponseCompleted", "true"),
                 ("challengeValidated", 1),
