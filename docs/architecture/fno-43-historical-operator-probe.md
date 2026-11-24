@@ -43,3 +43,38 @@ claim those proofs, nor paper ledger or live broker execution. It does not
 enable new research/download rights or bypass permissions.
 
 Tracker: https://github.com/operationReact/AiTradingSystem/issues/1658
+
+## STR-176 actual V102 source-eligibility inventory (read-only)
+
+The protected `GET /api/admin/research/fno-43/str176-original-source`
+endpoint inspects the **actual** V102 PostgreSQL historical evidence table,
+not the 3,929-row owner-private SQLite research cache and not fictional JUnit
+fixtures. It reports only total source rows, rights/time/calendar-joined rows,
+and the number of contract/provider groups with at least seven distinct
+historical sessions within the bounded 26-calendar-day decision window.
+The endpoint returns fixed reason codes and never returns instrument keys,
+account identifiers, source digests, market prices, entitlements or broker
+credentials. Missing database migrations or backend errors return
+`SOURCE_STORE_UNAVAILABLE_OR_UNVERIFIED` with unknown (-1) counts, not
+misleading zero counts.
+
+Every potentially eligible session must be joined to independent verified
+`MODEL_INFERENCE` research-use receipts for OHLCV and final OI, the
+verified NSE historical trading calendar, exchange close, source capture
+cutoffs and original as-of availability. Contracts must not be too near or
+too far from expiry for STR-176. A seven-session group still does **not**
+prove consecutiveness across verified trading holidays, actual source
+publication truth, executed evaluator decisions, historical fills, transaction
+costs, walk-forward OOS results, or independent acceptance. All acceptance
+and order flags stay false.
+
+**Crucial distinction:** the existing `readiness` source-rights metric was
+initialized to literal zero and the existing `source-evidence` registry
+checks only original envelope families STR-203..212. Neither counter can
+establish whether V102 source rows for STR-176 exist. This dedicated query
+makes that first prerequisite measurable on a deployed backend.
+
+Deploying this diagnostic after code CI is separate from calling it.
+Until authenticated exact-host output and independent historical after-cost
+proof exist, certified historical STR-176 remains **0/1**, and full
+STR-170..212 certification remains **0/43**.
