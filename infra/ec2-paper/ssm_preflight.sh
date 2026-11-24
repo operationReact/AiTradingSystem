@@ -6,7 +6,7 @@ umask 077
 
 # Report only a bounded stage identifier if any host precondition fails.
 stage=identity
-trap 'rc=$?; printf "MINTTICK_PREFLIGHT_FAILED_STAGE:%s\\n" "$stage" >&2; exit "$rc"' ERR
+trap 'rc=$?; printf "MINTTICK_PREFLIGHT_FAILED_STAGE:%s\n" "$stage" >&2; exit "$rc"' ERR
 
 test "$(id -u)" -eq 0
 stage=architecture
