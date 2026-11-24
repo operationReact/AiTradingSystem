@@ -172,6 +172,28 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
             rows=p.get("/future/contract?expiry_date="+expiry.isoformat())
             m.chosen_future(rows+rows,expiry,"NSE_INDEX|Nifty 50")
 
+    def test_only_preapproved_host_block_code_can_leave_ssm_boundary(self):
+        good=ValueError("FNO_DISCOVERY_RATE_LIMITED")
+        self.assertEqual("FNO_DISCOVERY_RATE_LIMITED",
+                         m.safe_block_code(good))
+        private=ValueError("bearer-secret-do-not-export")
+        self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
+                         m.safe_block_code(private))
+        self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
+                         m.safe_block_code(RuntimeError("NSE_FO|private_key")))
+        source=m.SOURCE_MARKER+"BLOCKED:"
+        self.assertEqual("INVALID_SOURCE_SESSION",
+            m.ssm_block_code(source+"INVALID_SOURCE_SESSION"))
+        self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
+            m.ssm_block_code(source+"bearer-secret-do-not-export"))
+        self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
+            m.ssm_block_code(source+"INVALID_SOURCE_SESSION\\n"+
+                             source+"FNO_DISCOVERY_AUTH_REJECTED"))
+        self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
+            m.ssm_block_code(source+"INVALID_SOURCE_SESSION\\n"+"x"*9000))
+        self.assertTrue(all("NSE_FO|" not in code
+                            for code in m.SAFE_BLOCK_CODES))
+
     def test_no_hidden_write_order_and_no_claim_of_historic_publication(self):
         src=SRC.read_text()
         for required in ("max_provider_gets","source_days","historical_e2e",
