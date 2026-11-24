@@ -55,7 +55,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      issues: write
     env:
       AWS_REGION: ap-south-1
     steps:
@@ -87,16 +86,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 infra/ec2-paper/upstox_profile_probe.py runner > "$RUNNER_TEMP/upstox-profile-audit.txt" 2>&1
-      - name: Post only the sanitized profile result to the recovery issue
-        if: ${{ always() && github.event_name == 'push' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          GH_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          python3 infra/ec2-paper/upstox_profile_probe.py issue "$RUNNER_TEMP/upstox-profile-audit.txt"
+          python3 infra/ec2-paper/upstox_profile_probe.py runner \
+            | tee "$RUNNER_TEMP/upstox-profile-audit.txt"
+      - name: Retain sanitized profile receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstox-profile-readonly
+          path: "$RUNNER_TEMP/upstox-profile-audit.txt"
+          if-no-files-found: ignore
+          retention-days: 14
 
 # No names, emails, user identifiers, products, quotes, credentials, historical data, trading rights, EC2 resources,
 # workloads or broker orders are persisted or changed by this workflow.
