@@ -5,7 +5,9 @@ No AWS, provider credentials, broker accounts or paid EC2 required.
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
+import shutil
 import subprocess
 import unittest
 
@@ -44,7 +46,7 @@ class PaperAppRuntimeContract(unittest.TestCase):
             'TRADING_MODE: LIVE', '"5432:5432"', '"8080:8080"',
             '"8088:8080"', "BROKER_ORDER_EXECUTION_ENABLED: true",
             "ports:\n      - \"0.0.0.0", "ANGELONE_API_KEY:",
-            "GEMINI_API_KEY:", "ANTHROPIC_API_KEY:",
+            "ANTHROPIC_API_KEY:",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden,source)
@@ -92,6 +94,8 @@ class PaperAppRuntimeContract(unittest.TestCase):
         self.assertIn("Bad release SHA",result.stderr)
 
     def test_compose_resolves_required_env_without_cloud(self):
+        if not shutil.which("docker"):
+            self.skipTest("Docker CLI not available in this environment")
         docker=subprocess.run(["docker","compose","version"],
                               capture_output=True,text=True)
         if docker.returncode:
@@ -105,6 +109,34 @@ class PaperAppRuntimeContract(unittest.TestCase):
         p=subprocess.run(["docker","compose","-f",str(COMPOSE),
                          "config","--quiet"],env=env,capture_output=True,text=True)
         self.assertEqual(p.returncode,0,p.stderr)
+
+    def test_gemini_binding_is_backend_only_and_does_not_enable_analysis_or_trading(self):
+        if not shutil.which("docker"):
+            self.skipTest("Docker CLI not available in this environment")
+        if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode:
+            self.skipTest("Docker Compose not available in this environment")
+        env = {k: v for k, v in os.environ.items()
+               if k not in {"NEWS_ANALYSIS_PROVIDER", "GEMINI_API_KEY", "GEMINI_MODEL"}}
+        env.update(POSTGRES_PASSWORD="fixture-unused", APP_API_KEY="fixture-unused", RELEASE_SHA="0" * 40)
+        for configured in (False, True):
+            if configured:
+                env.update(NEWS_ANALYSIS_PROVIDER="GEMINI", GEMINI_MODEL="fixture-model",
+                           GEMINI_API_KEY="fixture-gemini-key")
+            p = subprocess.run(["docker", "compose", "--env-file", "/dev/null", "-f", str(COMPOSE),
+                                "config", "--format", "json"], env=env, capture_output=True, text=True)
+            self.assertEqual(0, p.returncode)
+            services = json.loads(p.stdout)["services"]
+            backend = services["backend"]["environment"]
+            self.assertEqual("GEMINI" if configured else "NONE", backend["NEWS_ANALYSIS_PROVIDER"])
+            self.assertEqual("fixture-gemini-key" if configured else "", backend["GEMINI_API_KEY"])
+            self.assertEqual("fixture-model" if configured else "gemini-2.5-flash", backend["GEMINI_MODEL"])
+            self.assertEqual("false", backend["NEWS_INGESTION_ENABLED"])
+            self.assertEqual("PAPER", backend["TRADING_MODE"])
+            self.assertNotIn("NEWS_ANALYSIS_SCHEDULER_ENABLED", backend)
+            for name, service in services.items():
+                if name != "backend":
+                    self.assertNotIn("GEMINI_API_KEY", service.get("environment", {}))
+            self.assertNotIn("fixture-gemini-key", json.dumps(services["web"]))
 
 
 if __name__=="__main__":
