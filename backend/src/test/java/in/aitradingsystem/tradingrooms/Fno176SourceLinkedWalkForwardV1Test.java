@@ -172,8 +172,8 @@ class Fno176SourceLinkedWalkForwardV1Test {
 
     @Test void actualFutureDecisionIsRejectedBeforeSourceRead() {
         available();
-        var futureFirst=LocalDate.of(2026,11,26);
-        var futureLast=LocalDate.of(2026,11,27);
+        var futureFirst=LocalDate.of(2026,11,27);
+        var futureLast=LocalDate.of(2026,11,28);
         var report=service.inspect(KEY,futureFirst,futureLast,futureFirst,null);
         assertEquals("STR176_FUTURE_DECISION_NOT_OBSERVED",report.reasonCode());
         assertEquals(0,report.historicalDecisions());
