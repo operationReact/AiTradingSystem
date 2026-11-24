@@ -180,7 +180,7 @@ class OwnerRetrospectiveTests(unittest.TestCase):
             root=self.root,now=NOW,fetch=self.future_metadata(keys))
         replay.safe_receipt(receipt)
         forged=dict(receipt)
-        forged["diagnosticReasons"]={"EXPIRY_OUT_OF_SCOPE": 75}
+        forged["diagnosticReasons"]={"EXPIRY_OUT_OF_SCOPE": receipt["decisionWindows"]-1}
         with self.assertRaisesRegex(ValueError,"STR176_PRIVATE_RECEIPT_INVALID"):
             replay.safe_receipt(forged)
         forged=dict(receipt)
