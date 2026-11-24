@@ -164,7 +164,8 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"UNVERIFIED_EXTENDED_RESEARCH_RECEIPT"):
             m.safe_receipt(bad)
         with self.assertRaisesRegex(ValueError,"TWELVE_ACTUAL_MONTHLY_EXPIRIES_REQUIRED"):
-            m.expiries_from_provider(months()[:6],date(2026,11,24))
+            m.expiries_from_provider([d.isoformat() for d in months()[:6]],
+                                           date(2026,11,24))
         with self.assertRaisesRegex(ValueError,"UPSTOX_ORIGINAL_FUTURES_MISSING_OR_AMBIGUOUS"):
             expiry=months()[0]
             p=FakeAuthenticatedUpstox()
