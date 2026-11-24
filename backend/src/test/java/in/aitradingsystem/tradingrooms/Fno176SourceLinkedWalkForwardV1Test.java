@@ -124,6 +124,43 @@ class Fno176SourceLinkedWalkForwardV1Test {
         assertFalse(result.independentlyVerifiedHistoricalE2E());
     }
 
+    @Test void selectiveFillsCannotOmitCandidateOutcomesFromEitherSplit() {
+        available();
+        when(source.inspect(eq(KEY),eq(scheduled(LocalDate.of(2026,11,24)))))
+            .thenReturn(proof(scheduled(LocalDate.of(2026,11,24)),true));
+        var result=service.inspect(KEY,FIRST,LAST,TRAIN_END,
+            List.of(trade(LocalDate.of(2026,11,20),10000),
+                    trade(LocalDate.of(2026,11,23),10000)));
+        assertEquals("SOURCE_LINKED_CANDIDATE_OUTCOMES_INCOMPLETE_NOT_E2E",result.state());
+        assertEquals("STR176_CANDIDATE_OUTCOMES_INCOMPLETE",result.reasonCode());
+        assertEquals(3,result.researchCandidateDecisions());
+        assertEquals(2,result.matchedCompletedTrades());
+        assertEquals(4,result.decisions().size());
+        assertNull(result.afterCost());
+        assertFalse(result.independentlyVerifiedHistoricalE2E());
+    }
+
+    @Test void zeroOosSignalsAreNotReportedAsMissingExecutionEvidence() {
+        available();
+        when(source.inspect(eq(KEY),eq(scheduled(LocalDate.of(2026,11,23)))))
+            .thenReturn(proof(scheduled(LocalDate.of(2026,11,23)),false));
+        var result=service.inspect(KEY,FIRST,LAST,TRAIN_END,null);
+        assertEquals("STR176_NO_OOS_RESEARCH_CANDIDATES",result.reasonCode());
+        assertEquals(2,result.outOfSampleDecisions());
+        assertEquals(1,result.researchCandidateDecisions());
+        assertNull(result.afterCost());
+        assertFalse(result.independentlyVerifiedHistoricalE2E());
+    }
+
+    @Test void zeroTrainingSignalsAreDistinctFromMissingFills() {
+        available();
+        when(source.inspect(eq(KEY),eq(scheduled(LocalDate.of(2026,11,20)))))
+            .thenReturn(proof(scheduled(LocalDate.of(2026,11,20)),false));
+        var result=service.inspect(KEY,FIRST,LAST,TRAIN_END,null);
+        assertEquals("STR176_NO_TRAINING_RESEARCH_CANDIDATES",result.reasonCode());
+        assertNull(result.afterCost());
+    }
+
     @Test void noSignalDatesCannotBeBackfilledWithImaginaryProfitableFills() {
         available();
         var report=service.inspect(KEY,FIRST,LAST,TRAIN_END,

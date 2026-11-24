@@ -95,7 +95,7 @@ public class Fno176SourceLinkedWalkForwardV1 {
 
         List<DecisionEvidence> evidence = new ArrayList<>();
         Map<Instant,String> originalCandidates = new HashMap<>();
-        int training = 0, outOfSample = 0, candidates = 0;
+        int training = 0, outOfSample = 0, candidates = 0, oosCandidates = 0;
         for (var day = firstDecisionDay; !day.isAfter(lastDecisionDay);
                 day = day.plusDays(1)) {
             final boolean tradingDay;
@@ -141,6 +141,7 @@ public class Fno176SourceLinkedWalkForwardV1 {
             if (oos) outOfSample++; else training++;
             if ("RESEARCH_CANDIDATE".equals(signal.result())) {
                 candidates++;
+                if (oos) oosCandidates++;
                 originalCandidates.put(decisionAt, signal.inputReceiptHash());
             }
             evidence.add(new DecisionEvidence(decisionAt, oos,
@@ -156,7 +157,9 @@ public class Fno176SourceLinkedWalkForwardV1 {
         if (completed == null || completed.isEmpty())
             return new Report(CONTRACT,STRATEGY,
                 "SOURCE_LINKED_WALK_FORWARD_NO_ORIGINAL_FILLS_NOT_E2E",
-                "STR176_INDEPENDENT_ORIGINAL_FILLS_REQUIRED",
+                oosCandidates == 0 ? "STR176_NO_OOS_RESEARCH_CANDIDATES"
+                    : oosCandidates == candidates ? "STR176_NO_TRAINING_RESEARCH_CANDIDATES"
+                    : "STR176_INDEPENDENT_ORIGINAL_FILLS_REQUIRED",
                 evidence.size(),training,outOfSample,candidates,0,
                 List.copyOf(evidence),null,false,false,false);
 
@@ -170,6 +173,16 @@ public class Fno176SourceLinkedWalkForwardV1 {
                     || !seenTrades.add(trade.entryDecisionAt()))
                 return blocked("STR176_COMPLETED_FILLS_NOT_LINKED_TO_RESEARCH_CANDIDATES");
         }
+
+        // Until an independently reviewed non-execution/skip ledger exists,
+        // incomplete candidate outcomes must not be selected for performance
+        // accounting. Even valid profitable fills can omit adverse candidates.
+        if (seenTrades.size() != originalCandidates.size())
+            return new Report(CONTRACT,STRATEGY,
+                "SOURCE_LINKED_CANDIDATE_OUTCOMES_INCOMPLETE_NOT_E2E",
+                "STR176_CANDIDATE_OUTCOMES_INCOMPLETE",
+                evidence.size(),training,outOfSample,candidates,seenTrades.size(),
+                List.copyOf(evidence),null,false,false,false);
 
         // This accounting module refuses crossed train/OOS trades and
         // computes net returns only from externally provided completed fills.
