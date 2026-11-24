@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/admin/research/fno-43")
-public final class AdminFno176HistoricalEligibilityController {
+public class AdminFno176HistoricalEligibilityController {
     public static final String CONTRACT="minttick.fno.str176.source-eligibility.v1";
     private final FnoVerifiedCompletedOhlcvOiStore source;
     private final Clock clock;
