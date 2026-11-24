@@ -2,7 +2,9 @@
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 import urllib.error
@@ -14,6 +16,21 @@ SPEC.loader.exec_module(probe)
 
 
 class GeminiRuntimePreflightTest(unittest.TestCase):
+    def test_installer_file_requirements_distinguish_missing_mode_owner_and_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'collector.py'
+            self.assertEqual('MISSING', probe.file_status(path, 0o600, os.geteuid()))
+            path.write_text('fixture')
+            path.chmod(0o600)
+            self.assertEqual('OK', probe.file_status(path, 0o600, os.geteuid()))
+            self.assertEqual('WRONG_OWNER', probe.file_status(path, 0o600, os.geteuid() + 1))
+            path.chmod(0o700)
+            self.assertEqual('WRONG_MODE', probe.file_status(path, 0o600, os.geteuid()))
+            self.assertEqual('OK', probe.file_status(path, 0o700, os.geteuid()))
+            link = Path(tmp) / 'link'
+            link.symlink_to(path)
+            self.assertEqual('SYMLINK', probe.file_status(link, 0o700, os.geteuid()))
+
     def test_history_failure_exports_only_allowlisted_code_from_relevant_stage(self):
         raw = ('Traceback fixture-private-path\n'
                'owner_history_progress.ProgressUnavailable: DUPLICATE_ARCHIVE_SESSION\n'
@@ -23,6 +40,19 @@ class GeminiRuntimePreflightTest(unittest.TestCase):
         self.assertEqual('UNCLASSIFIED_HISTORY_FAILURE', probe.classify_history_failure(
             raw.replace('DUPLICATE_ARCHIVE_SESSION', 'PRIVATE_SECRET_VALUE')))
         self.assertNotIn('fixture', probe.classify_history_failure(raw))
+
+    def test_history_failure_classifies_sqlite_and_filesystem_without_private_details(self):
+        cases = {
+            'sqlite3.OperationalError: no such table: fixture-private-table': 'HISTORY_SCHEMA_MISSING',
+            'sqlite3.OperationalError: fixture-private-message': 'HISTORY_SQLITE_OPERATIONAL_FAILURE',
+            'OSError: [Errno 28] No space left on device: fixture-private-path': 'FILESYSTEM_DISK_FULL',
+            'PermissionError: fixture-private-path': 'FILESYSTEM_PERMISSION_DENIED',
+            'FileNotFoundError: fixture-private-path': 'FILESYSTEM_FILE_MISSING',
+        }
+        for error, expected in cases.items():
+            raw = error + '\nMINTTICK_DEPLOY_FAILED_STAGE:history_precheck\n'
+            self.assertEqual(expected, probe.classify_history_failure(raw))
+            self.assertNotIn('fixture', probe.classify_history_failure(raw))
 
     def test_pr_validation_cannot_supersede_shared_host_deployment_queue(self):
         workflow = (ROOT / '.github/workflows/minttick-gemini-runtime-preflight.yml').read_text()
