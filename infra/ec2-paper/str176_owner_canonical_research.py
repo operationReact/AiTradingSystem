@@ -214,11 +214,9 @@ def momentum(window,expiry,as_of,*,details=False):
         return result("SHORT","DOWNWARD_BREAKOUT")
     return result("NO_SIGNAL","BREAKOUT_NOT_CONFIRMED")
 
-def evaluate(groups, metadata, *, cost_bps=COST_BPS, max_source_rows=25):
+def evaluate(groups, metadata, *, cost_bps=COST_BPS):
     """Chronological contract-group walkforward, one-lot modeled next opens."""
-    if (not isinstance(groups,dict) or not isinstance(metadata,dict)
-            or cost_bps not in (20,30,50)
-            or type(max_source_rows) is not int or not 9<=max_source_rows<=100):
+    if not isinstance(groups,dict) or not isinstance(metadata,dict) or cost_bps not in (20,30,50):
         raise ValueError("RESEARCH_INPUT_INVALID")
     all_expiries=sorted(metadata)
     if len(all_expiries)!=12:raise ValueError("NOT_TWELVE_SOURCE_COHORTS")
@@ -230,7 +228,7 @@ def evaluate(groups, metadata, *, cost_bps=COST_BPS, max_source_rows=25):
     for expiry in all_expiries:
         key,lot=metadata[expiry]
         rows=groups.get(key)
-        if rows is None or not 9<=len(rows)<=max_source_rows:
+        if rows is None or not 9<=len(rows)<=25:
             counters["cohortsMissingFullFuture"]=counters.get("cohortsMissingFullFuture",0)+1
             continue
         if len(set(x[0] for x in rows))!=len(rows):
