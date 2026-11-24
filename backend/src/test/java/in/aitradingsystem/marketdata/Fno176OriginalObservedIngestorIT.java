@@ -116,6 +116,44 @@ class Fno176OriginalObservedIngestorIT extends AbstractPostgresIT {
             Long.class,key));
     }
 
+    @Test void signedBatchPersistsExactOriginalBytesWithRealDatabaseObservedTime() throws Exception {
+        UUID p=provider();
+        UUID oh=grant(p,"nse_fo_completed_ohlcv","MODEL_INFERENCE");
+        grant(p,"nse_fo_completed_ohlcv","RAW_RETENTION");
+        UUID oi=grant(p,"nse_fo_final_oi","MODEL_INFERENCE");
+        grant(p,"nse_fo_final_oi","RAW_RETENTION");
+        grant(p,"nse_fo_trading_calendar","MODEL_INFERENCE");
+        grant(p,"nse_fo_trading_calendar","RAW_RETENTION");
+        var date=LocalDate.now(IST).minusDays(1);
+        String key="NSE_FO|SIGNED_"+UUID.randomUUID().toString().replace("-","");
+        var d=session(key,calendar(p,date),oh,oi);
+        var raw=packets();
+        var digest=java.security.MessageDigest.getInstance("SHA-256");
+        var hex=java.util.HexFormat.of();
+        var pair=java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var receipt=new Fno176AttestedSourceVerifier.Receipt(d,
+            hex.formatHex(digest.digest(raw.ohlcvPacket())),
+            hex.formatHex(digest.digest(raw.finalOiPacket())),
+            hex.formatHex(digest.digest(raw.contractMasterPacket())),
+            Instant.now(),new byte[0]);
+        var signer=java.security.Signature.getInstance("Ed25519");
+        signer.initSign(pair.getPrivate());
+        signer.update(Fno176AttestedSourceVerifier.signingBytes(receipt));
+        var signed=new Fno176AttestedSourceVerifier.Receipt(d,receipt.ohlcvSha256(),
+            receipt.oiSha256(),receipt.listingSha256(),receipt.reviewedAt(),signer.sign());
+        var intake=new Fno176AttestedBatchIntake(named,rights,pair.getPublic(),Clock.systemUTC());
+        var result=intake.ingest(java.util.List.of(new Fno176AttestedBatchIntake.Entry(raw,signed)));
+        assertEquals(1,result.stored());
+        assertFalse(result.independentlyHistoricalE2ECertified());
+        assertFalse(result.ordersPlaced());
+        var store=new FnoVerifiedCompletedOhlcvOiStore(jdbc);
+        var rows=store.readExactReplayContract(key,date,date,Instant.now().plusSeconds(60));
+        assertEquals(1,rows.size());
+        assertEquals(receipt.ohlcvSha256(),rows.getFirst().originalOhlcvDigest());
+        assertTrue(store.readExactReplayContract(key,date,date,
+            date.atTime(23,0).atZone(IST).toInstant()).isEmpty());
+    }
+
     @Test void sourceObservedNowIsNotRetroactivelyBackdatedAndReadReplayIsRightsJoined(){
         UUID provider=provider();
         UUID oh=grant(provider,"nse_fo_completed_ohlcv","MODEL_INFERENCE");
