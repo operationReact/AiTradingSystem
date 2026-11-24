@@ -468,3 +468,58 @@ historical strategy certification is accepted; PAPER/LIVE are separate.
 The protected one-file SSM request now invokes **capture then replay**,
 emitting only private aggregate decision, trade and after-cost counters.
 A genuine market replay failure must never be counted as 1/43.
+
+## STR-176 owner-private **actual-data retrospective simulation**, first executable pilot
+
+The 3,929-row short-lived canonical daily research SQLite archive on the
+existing PAPER EC2 has **not** populated V102 (last verified real V102 row count
+zero). To stop repeatedly reporting only 0% after source-code milestones,
+`str176_owner_canonical_research.py` performs an explicitly distinct,
+owner-private, reproducible **retrospective research** pilot on that real cache,
+while keeping true independent market E2E at zero until its higher bar passes.
+
+A single fixed, reviewed request invokes the script over existing AWS OIDC/SSM,
+never transmits source candles, account data, future contract keys, or tokens.
+It first validates owner-only file permissions, SQLite integrity, original
+seven-day retention expiration, exact 3,929 rows, 276 distinct contracts, 3,608
+Upstox and 321 source-reconciled NSE EOD records. A 12-call maximum authenticated
+Upstox expired-contract **read-only metadata** query identifies the *actual*
+12 monthly NIFTY futures keys and lot sizes; futures are not guessed from
+opaque contract IDs. If original metadata, retained cache, or contract cohorts
+are missing, the pilot fails or reports the concrete missing source.
+
+For each futures expiry and each legitimate seven-session source window,
+a separate conservative Python numerical STR-176 momentum reference evaluator
+uses only **those seven prior completed sessions** (previous six highs/lows,
+last three closes, volume/OI and cost-adjusted 100-bps breakout thresholds).
+A research signal is modeled entering at the **next** session's open and
+exiting at the following session's open, one lot, with 30 bps assumed
+round-trip friction (20 and 50 bps supported in the reference engine).
+The training/OOS split is frozen as the oldest **eight** calendar expiry cohorts
+vs latest **four**, with no post-hoc favorable subset selection. It
+calculates non-account after-cost simulated P&L, loss count and drawdown.
+Runner-local synthetic tests verify the input schema, true future metadata,
+decision-before-fill, tamper rejection and expiry.
+
+**Source-time and fill limitations:** The original Upstox daily time
+`00:00+05:30` is a session label, not a first-seen publication receipt;
+assuming EOD completeness before next session's open is a stated research
+assumption. An NSE-reconciled EOD OHLC/OI value alone does not prove the
+actual original vendor's as-of dissemination. Official NSE holiday calendars
+and historical bid/ask/top-of-book fills are not present in this cache.
+Modeled next-open executions plus assumed friction are **not** executed
+broker orders or independently verified market fills. Python reference
+logic is not by itself proof that the Java strategy implementation produced
+identical decisions; separate Java-vs-reference parity and independent
+replay remains necessary. Therefore, this pilot's nonzero evaluator/signals/
+simulated-trade counters are **meaningful actual historical research
+progress**, but never upgrade `independentHistoricalE2E` or PAPER/LIVE.
+Historical strategy certification remains **0/43** pending those independent
+acceptance checks.
+
+Progress checkpoints to report after actual host run are:
+`sourceRows`, `sourceFuturesContracts`, `decisionWindows`,
+`evaluatorWindows`, `candidateWindows`,
+`simulatedRoundTrips`, `trainingTrades`, `outOfSampleTrades`,
+`oosNetPaise`, `oosMaxDrawdownPaise`, and the fixed fail reason.
+A passing offline fixture is NOT evidence those actual host counters exist.
