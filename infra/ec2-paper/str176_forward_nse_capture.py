@@ -35,8 +35,8 @@ MAX_DB=128*1024*1024
 REQUEST=Path("infra/ec2-paper/requests/str176-forward-nse-capture.json")
 MARKER="MINTTICK_STR176_FORWARD_NSE:"
 KIND="minttick-str176-owner-forward-nse-original-v1"
-EXACT={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTANCE,
-       "session_date":"2026-11-25","max_archive_gets":1,
+FIXED_REQUEST={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTANCE,
+       "max_archive_gets":1,
        "owner_confirmed_private_research_retention":True,
        "no_market_export":True,"no_orders":True,"no_rights_change":True}
 SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
@@ -77,6 +77,34 @@ def failure_receipt(raw):
           if x.startswith(FAILURE_MARKER)]
     return rows[0] if len(rows)==1 and rows[0] in SAFE_REASONS else "HOST_CAPTURE_NO_SAFE_RECEIPT"
 
+def request_date(data,now):
+    if (type(data) is not dict or set(data)!=(set(FIXED_REQUEST)|{"session_date"})
+            or any(type(data.get(k)) is not type(v) or data.get(k)!=v
+                   for k,v in FIXED_REQUEST.items())):
+        raise Blocked("OWNER_REQUEST_REQUIRED")
+    raw_day=data.get("session_date")
+    if type(raw_day) is not str or not re.fullmatch(r"\d{4}-\d{2}-\d{2}",raw_day):
+        raise Blocked("OWNER_REQUEST_REQUIRED")
+    try:day=date.fromisoformat(raw_day)
+    except ValueError:raise Blocked("OWNER_REQUEST_REQUIRED") from None
+    if day.isoformat()!=raw_day:raise Blocked("OWNER_REQUEST_REQUIRED")
+    require_scope(day,now)
+    return day
+
+def _unique_object(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result:raise Blocked("OWNER_REQUEST_REQUIRED")
+        result[key]=value
+    return result
+
+def load_request(path,now):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>=1024:
+        raise Blocked("OWNER_REQUEST_REQUIRED")
+    try:data=json.loads(path.read_text(),object_pairs_hook=_unique_object)
+    except (ValueError,TypeError,UnicodeError):raise Blocked("OWNER_REQUEST_REQUIRED") from None
+    return request_date(data,now)
+
 def transport():
     # Ship the exact reviewed parser along with this runner. The previously
     # deployed host need not contain the corresponding parser module.
@@ -91,10 +119,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
 def require_scope(day,now):
-    if now.tzinfo is None or day!=date.fromisoformat(EXACT["session_date"]):
+    if now.tzinfo is None:
         raise Blocked("SOURCE_SCOPE_INVALID")
-    # The final EOD file may still be missing. No assumption that a
-    # date is a verified trading day; absence never means holiday.
+    if not isinstance(day,date) or isinstance(day,datetime):
+        raise Blocked("SOURCE_SCOPE_INVALID")
+    # The owner request selects a session date; this window prevents stale
+    # archive retrieval. A missing file is a safe failure, never a holiday proof.
     cutoff=datetime.combine(day,dt_time(18,30),tzinfo=IST)
     if not cutoff<=now.astimezone(IST)<=cutoff+timedelta(hours=36):
         raise Blocked("SOURCE_OBSERVATION_WINDOW_EXPIRED")
@@ -161,11 +191,13 @@ def persist(path,day,url,raw,observed,modified,counts):
             "originalBytes":len(raw),"originalPublicationVerified":False,
             "certificationStoreRowsAdded":0,"certifiedStrategies":0,"orders":False}
 
-def host():
+def host(session_date):
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         raise Blocked("EXACT_PRIVATE_HOST_REQUIRED")
     os.umask(0o077)
-    day=date.fromisoformat(EXACT["session_date"])
+    try:day=date.fromisoformat(session_date)
+    except (TypeError,ValueError):raise Blocked("SOURCE_SCOPE_INVALID") from None
+    if day.isoformat()!=session_date:raise Blocked("SOURCE_SCOPE_INVALID")
     require_scope(day,datetime.now(timezone.utc))
     private_dir(PRIVATE.parent)
     PRIVATE.mkdir(mode=0o700,exist_ok=True)
@@ -181,14 +213,14 @@ def host():
     report=persist(DB,day,url,raw,observed,modified,counts)
     print(MARKER+json.dumps(report,separators=(",",":"),sort_keys=True),flush=True)
 
-def validate_report(data):
+def validate_report(data,expected_day):
     keys={"state","newArchive","sessionDate","firstObservedAt","niftyFutures",
           "niftyOptions","originalBytes","originalPublicationVerified",
           "certificationStoreRowsAdded","certifiedStrategies","orders"}
     if (type(data) is not dict or set(data)!=keys
         or data["state"]!="ORIGINAL_EXCHANGE_EOD_RETAINED_NOT_CERTIFIED"
         or type(data["newArchive"]) is not bool
-        or data["sessionDate"]!=EXACT["session_date"]
+        or data["sessionDate"]!=expected_day.isoformat()
         or any(type(data[k]) is not int or not 1<=data[k]<=180000
                for k in ("niftyFutures","niftyOptions"))
         or type(data["originalBytes"]) is not int or not 1<=data["originalBytes"]<=MAX_ZIP
@@ -200,9 +232,7 @@ def validate_report(data):
     return data
 
 def runner():
-    if (REQUEST.is_symlink() or not REQUEST.is_file() or REQUEST.stat().st_size>=1024
-            or json.loads(REQUEST.read_text())!=EXACT):
-        raise Blocked("OWNER_REQUEST_REQUIRED")
+    day=load_request(REQUEST,datetime.now(timezone.utc))
     from verify_ssm_release import verify_aws
     from fno_private_bulk_ops import _aws
     try:verify_aws()
@@ -211,7 +241,7 @@ def runner():
     if len(payload)>20000 or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
         raise Blocked("TRANSPORT_BOUND")
     shell=("set -eu\numask 077\nprintf '%s' '"+payload+
-           "' | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - host\n")
+           "' | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - host "+day.isoformat()+"\n")
     sent=_aws("ssm","send-command","--document-name","AWS-RunShellScript",
               "--instance-ids",INSTANCE,"--timeout-seconds","90",
               "--comment","Owner private NSE forward original observation no orders",
@@ -227,7 +257,7 @@ def runner():
             out=result.get("StandardOutputContent","")
             rows=[x[len(MARKER):] for x in out.splitlines() if x.startswith(MARKER)]
             if len(out)>2048 or len(rows)!=1:raise Blocked("SOURCE_RECEIPT_INVALID")
-            print(MARKER+json.dumps(validate_report(json.loads(rows[0])),sort_keys=True),flush=True)
+            print(MARKER+json.dumps(validate_report(json.loads(rows[0]),day),sort_keys=True),flush=True)
             return
         if status in ("Failed","TimedOut","Cancelled"):
             if status=="TimedOut":raise Blocked("HOST_CAPTURE_TIMED_OUT")
@@ -239,7 +269,7 @@ def runner():
 
 if __name__=="__main__":
     try:
-        if sys.argv[1:]==["host"]:host()
+        if len(sys.argv)==3 and sys.argv[1]=="host":host(sys.argv[2])
         elif sys.argv[1:]==["runner"]:runner()
         else:raise Blocked("MODE_INVALID")
     except (Blocked,OSError,ValueError,KeyError,TypeError,sqlite3.Error,ImportError,RuntimeError) as exc:
