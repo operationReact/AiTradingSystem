@@ -42,6 +42,21 @@ class GeminiRuntimePreflightTest(unittest.TestCase):
     def test_blank_key_is_absent(self):
         self.assertFalse(probe.summarize_config(self.config('GEMINI_API_KEY=   '))['geminiKeyEnvironmentPresent'])
 
+    def test_host_settings_do_not_execute_or_export_secret_values(self):
+        summary = probe.summarize_host_settings('GEMINI_API_KEY="fixture-private-key"\nNEWS_ANALYSIS_PROVIDER=GEMINI\nOTHER=$(do-not-execute)')
+        self.assertEqual({'hostSettingsReadable': True, 'hostGeminiKeyPresent': True,
+                          'hostSelectedProviderEnvironment': 'GEMINI'}, summary)
+        self.assertNotIn('fixture', json.dumps(summary))
+        for value in ('', '""', "''", '   '):
+            self.assertFalse(probe.summarize_host_settings('GEMINI_API_KEY=' + value)['hostGeminiKeyPresent'])
+        with self.assertRaises(ValueError):
+            probe.summarize_host_settings('GEMINI_API_KEY=a\nGEMINI_API_KEY=b')
+
+    def test_unreadable_host_settings_are_unknown_instead_of_absent(self):
+        self.assertIsNone(probe.report()['hostGeminiKeyPresent'])
+        with self.assertRaises(ValueError):
+            probe.validate_report({**probe.report(), 'hostGeminiKeyPresent': False})
+
     def test_revision_mismatch_duplicate_env_and_unknown_image_are_rejected(self):
         for config in (self.config('APP_BUILD_REVISION=' + 'b' * 40),
                        {**self.config(), 'Image': 'arbitrary:latest'},

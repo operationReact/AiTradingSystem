@@ -26,7 +26,7 @@ MARKER = "MINTTICK_GEMINI_PREFLIGHT:"
 SHA = re.compile(r"[0-9a-f]{40}")
 STATUSES = {"INSPECTED", "INVALID_HOST", "BACKEND_UNAVAILABLE", "INVALID_RESPONSE"}
 BOOL_FIELDS = ("geminiKeyEnvironmentPresent", "geminiModelEnvironmentPresent",
-               "operatorKeyEnvironmentPresent", "providerCallAttempted",
+               "operatorKeyEnvironmentPresent", "hostSettingsReadable", "providerCallAttempted",
                "runtimeConnectivityVerified")
 
 
@@ -38,13 +38,15 @@ def expected_request():
 
 def report(status="INSPECTED", **fields):
     result = {"status": status, "deployedSha": None, "selectedProviderEnvironment": "UNKNOWN",
+              "hostGeminiKeyPresent": None, "hostSelectedProviderEnvironment": "UNKNOWN",
               "adminHealthHttpStatus": None, **dict.fromkeys(BOOL_FIELDS, False)}
     result.update(fields)
     return validate_report(result)
 
 
 def validate_report(value):
-    keys = {"status", "deployedSha", "selectedProviderEnvironment", "adminHealthHttpStatus", *BOOL_FIELDS}
+    keys = {"status", "deployedSha", "selectedProviderEnvironment", "adminHealthHttpStatus",
+            "hostGeminiKeyPresent", "hostSelectedProviderEnvironment", *BOOL_FIELDS}
     if not isinstance(value, dict) or set(value) != keys or value["status"] not in STATUSES:
         raise ValueError("INVALID_PREFLIGHT_REPORT")
     if value["deployedSha"] is not None and (not isinstance(value["deployedSha"], str)
@@ -52,6 +54,13 @@ def validate_report(value):
         raise ValueError("INVALID_DEPLOYED_SHA")
     if value["selectedProviderEnvironment"] not in {"NONE", "GEMINI", "CLAUDE", "UNKNOWN"}:
         raise ValueError("INVALID_PROVIDER")
+    if value["hostSelectedProviderEnvironment"] not in {"NONE", "GEMINI", "CLAUDE", "UNKNOWN"}:
+        raise ValueError("INVALID_HOST_PROVIDER")
+    present = value["hostGeminiKeyPresent"]
+    if present is not None and type(present) is not bool:
+        raise ValueError("INVALID_HOST_PRESENCE")
+    if value["hostSettingsReadable"] != (present is not None):
+        raise ValueError("INCONSISTENT_HOST_OBSERVATION")
     http = value["adminHealthHttpStatus"]
     if http is not None and (type(http) is not int or not 100 <= http <= 599):
         raise ValueError("INVALID_HTTP_STATUS")
@@ -93,6 +102,36 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def summarize_host_settings(text):
+    settings = {}
+    for line in text.splitlines():
+        # Read only the two exact supported bindings, never execute/source the file.
+        if not line.startswith(("GEMINI_API_KEY=", "NEWS_ANALYSIS_PROVIDER=")):
+            continue
+        key, value = line.split("=", 1)
+        if key in settings:
+            raise ValueError("DUPLICATE_HOST_SETTING")
+        value = value.strip()
+        if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
+            value = value[1:-1]
+        settings[key] = value
+    provider = settings.get("NEWS_ANALYSIS_PROVIDER", "NONE")
+    return {"hostSettingsReadable": True,
+            "hostGeminiKeyPresent": bool(settings.get("GEMINI_API_KEY", "").strip()),
+            "hostSelectedProviderEnvironment": provider if provider in {"NONE", "GEMINI", "CLAUDE"} else "UNKNOWN"}
+
+
+def host_settings():
+    path = Path("/opt/aitradingsystem-paper/runtime.env")
+    try:
+        if (path.is_symlink() or not path.is_file() or path.stat().st_uid != 0
+                or path.stat().st_mode & 0o077 or path.stat().st_size > 65536):
+            return {}
+        return summarize_host_settings(path.read_text())
+    except (OSError, ValueError, UnicodeError):
+        return {}
+
+
 def admin_health_status(key, opener):
     if not key:
         return None
@@ -125,6 +164,7 @@ def host():
             return report("BACKEND_UNAVAILABLE")
         config = json.loads(docker("inspect", "--format", "{{json .Config}}", ids[0]))
         result = summarize_config(config)
+        result.update(host_settings())
         key = next((row.split("=", 1)[1] for row in config["Env"] if row.startswith("APP_API_KEY=")), "")
         result["adminHealthHttpStatus"] = admin_health_status(
             key, urllib.request.build_opener(NoRedirect()))
