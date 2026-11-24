@@ -165,7 +165,7 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49):
         universe[key]=rows
         by_expiry[expiry]=(key,lot)
     if (metadata_requests!=12 or history_requests!=36
-            or metadata_requests+history_requests!=max_requests
+            or 1+metadata_requests+history_requests!=max_requests
             or len(universe)!=MAX_FUTURES):
         raise ValueError("UPSTOX_SOURCE_REQUEST_COUNT_CHANGED")
     return universe,by_expiry,metadata_requests,history_requests
