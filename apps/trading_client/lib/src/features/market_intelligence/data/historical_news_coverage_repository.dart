@@ -97,8 +97,8 @@ class HttpHistoricalNewsCoverageRepository implements HistoricalNewsCoverageRepo
     const limit = 25;
     final raw = await api.getJson('/api/admin/market-intelligence/historical-coverage',
       query: {'asOf': asOf.toUtc().toIso8601String(), 'offset': '$offset', 'limit': '$limit',
-        if (version != null) 'expectedVersion': version,
-        if (fingerprint != null) 'expectedFingerprint': fingerprint});
+        'expectedVersion': ?version,
+        'expectedFingerprint': ?fingerprint});
     return HistoricalNewsCoveragePage.decode(raw, asOf: asOf, offset: offset,
       limit: limit, version: version, fingerprint: fingerprint);
   }
