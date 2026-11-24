@@ -38,7 +38,7 @@ EXACT={"kind":"minttick-str176-nse-reconciled-readonly-v1",
        "no_db_writes":True,"no_orders":True,"independent_historical_e2e":False}
 MODULES=("str176_expanded_upstox_research","fno_personal_nse_december_compare")
 ALLOWED_FIELDS=frozenset("""state sourceFuturesBars eligibleFuturesCohorts decisionWindows
-windowOutcomesBySplit purgedPreOosWindows evaluatedWindows blockedWindows candidateWindows
+windowOutcomesBySplit windowReasonsBySplit purgedPreOosWindows evaluatedWindows blockedWindows candidateWindows
  overlappingCandidatesSkipped modeledTrades trainingTrades outOfSampleTrades outOfSampleLosses
  trainingNetPaise outOfSampleNetPaise outOfSampleMaxDrawdownPaise providerGets exchangeGets
  originalEligibleCohorts originalUpstoxQuarantinedCohorts exchangeReconciledCohorts
@@ -173,8 +173,8 @@ def research(fetch,reference_date,exchange_fetch):
     rebuilt={**universe,key:rows}
     scenarios={cost:core.evaluate(rebuilt,metadata,cost) for cost in (20,30,50)}
     primary=scenarios[30]
-    if any((r["decisionWindows"],r["candidateWindows"],r["windowOutcomesBySplit"])!=
-           (primary["decisionWindows"],primary["candidateWindows"],primary["windowOutcomesBySplit"])
+    if any((r["decisionWindows"],r["candidateWindows"],r["windowOutcomesBySplit"],r["windowReasonsBySplit"])!=
+           (primary["decisionWindows"],primary["candidateWindows"],primary["windowOutcomesBySplit"],primary["windowReasonsBySplit"])
            for r in scenarios.values()):
         raise ValueError("RESEARCH_SIGNAL_COHORT_DRIFT")
     result={**primary,"state":"NSE_RECONCILED_RESEARCH_NOT_CERTIFIED",
