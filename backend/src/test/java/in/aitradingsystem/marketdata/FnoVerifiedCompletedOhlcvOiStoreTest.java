@@ -116,6 +116,51 @@ class FnoVerifiedCompletedOhlcvOiStoreTest {
         }
     }
 
+
+    @Test
+    void str176OriginalSourceInventoryIsRightsJoinedAndAsOfBoundedNotCertified() {
+        JdbcTemplate jdbc=mock(JdbcTemplate.class);
+        var store=new FnoVerifiedCompletedOhlcvOiStore(jdbc);
+        store.inspectHistoricalEligibility(AS_OF);
+        var calls=mockingDetails(jdbc).getInvocations().stream()
+            .filter(x -> "queryForObject".equals(x.getMethod().getName())).toList();
+        assertEquals(1,calls.size());
+        Object[] args=calls.getFirst().getArguments();
+        String sql=(String)args[0];
+        assertEquals(19,sql.chars().filter(c -> c=='?').count());
+        assertEquals(21,args.length);
+        assertEquals(java.sql.Date.valueOf(AS_OF.atZone(
+            java.time.ZoneId.of("Asia/Kolkata")).toLocalDate().minusDays(26)),args[2]);
+        assertEquals(java.sql.Date.valueOf(AS_OF.atZone(
+            java.time.ZoneId.of("Asia/Kolkata")).toLocalDate().minusDays(1)),args[3]);
+        for(String gate:java.util.List.of(
+                "fno_verified_completed_ohlcv_oi_session",
+                "p.source_kind = 'EXTERNAL'",
+                "ohlcv_rights.receipt_status = 'VERIFIED'",
+                "oi_rights.receipt_status = 'VERIFIED'",
+                "ohlcv_rights.permitted_use = 'MODEL_INFERENCE'",
+                "oi_rights.permitted_use = 'MODEL_INFERENCE'",
+                "ohlcv_rights.verified_at <= ?",
+                "oi_rights.verified_at <= ?",
+                "ohlcv_rights.captured_at <= ?",
+                "oi_rights.captured_at <= ?",
+                "cal.session_status = 'TRADING'",
+                "cal.first_available_at <= ?",
+                "cal.verified_at <= ?",
+                "cal.captured_at <= ?",
+                "s.captured_at <= ?",
+                "s.ohlcv_first_available_at <= ?",
+                "s.oi_first_available_at <= ?",
+                "s.retain_until >= ?",
+                "HAVING COUNT(DISTINCT session_date) >= 7"))
+            assertTrue(sql.contains(gate),gate);
+        assertFalse(sql.toUpperCase().contains("INSERT INTO"));
+        assertFalse(sql.toUpperCase().contains("UPDATE "));
+        assertFalse(sql.toUpperCase().contains("DELETE FROM"));
+        assertFalse(sql.contains("market_candle"));
+        assertFalse(sql.contains("fno_closing_snapshot"));
+    }
+
     @Test
     void expiredResearchRowsAreErasedOnlyAfterRetentionDeadline() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
