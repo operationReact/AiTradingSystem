@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/minttick-str176-forward-observed-source-intake.yml'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestor.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176AttestedSourceVerifier.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176AttestedBatchIntake.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176AttestedBatchIntakeTest.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorTest.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorIT.java'
       - 'docs/architecture/fno-43-historical-e2e-evidence.md'
@@ -14,6 +17,9 @@ on:
     paths:
       - '.github/workflows/minttick-str176-forward-observed-source-intake.yml'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestor.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176AttestedSourceVerifier.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno176AttestedBatchIntake.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176AttestedBatchIntakeTest.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorTest.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno176OriginalObservedIngestorIT.java'
 
@@ -40,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=Fno176OriginalObservedIngestorTest,FnoVerifiedCompletedOhlcvOiStoreTest' test
+            '-Dtest=Fno176OriginalObservedIngestorTest,FnoVerifiedCompletedOhlcvOiStoreTest,Fno176AttestedBatchIntakeTest' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.marketdata.Fno176OriginalObservedIngestorTest.xml
       - name: Static no-retroactive-publication, no-credential and no-order gate
         shell: bash
