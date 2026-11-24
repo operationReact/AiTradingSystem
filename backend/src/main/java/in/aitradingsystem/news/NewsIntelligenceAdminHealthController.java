@@ -3,6 +3,7 @@ package in.aitradingsystem.news;
 import in.aitradingsystem.news.policy.NewsSourcePolicy.Use;
 import in.aitradingsystem.config.NewsProperties;
 import in.aitradingsystem.news.analysis.NewsAnalysisProvider;
+import in.aitradingsystem.news.analysis.GeminiNewsAnalysisProvider;
 import in.aitradingsystem.news.policy.NewsSourcePolicyService;
 import java.time.Duration;
 import java.time.Instant;
@@ -94,6 +95,14 @@ public class NewsIntelligenceAdminHealthController {
             : geminiReceipts != null && geminiReceipts > 0
                 ? "RECORDED_ANALYSIS_RECEIPTS_PRESENT" : "CONFIGURED_NO_RECORDED_RECEIPT";
 
+        // Process-local transport observations are separate from persisted analysis
+        // receipts and independent deployment certification. No probe is triggered here.
+        var observation = gemini.filter(GeminiNewsAnalysisProvider.class::isInstance)
+            .map(GeminiNewsAnalysisProvider.class::cast)
+            .map(GeminiNewsAnalysisProvider::latestObservation)
+            .filter(o -> !o.finishedAt().isAfter(now))
+            .orElse(null);
+
         return new Health(
             now,
             bool("app.news.ingestion.enabled"),
@@ -102,7 +111,9 @@ public class NewsIntelligenceAdminHealthController {
             bool("app.news.analysis-scheduler.enabled"),
             bool("app.news.mind-context.enabled"),
             new Model(provider, model, credentialBound, false, selectedReady,
-                geminiReceipts == null ? 0L : geminiReceipts, readiness),
+                geminiReceipts == null ? 0L : geminiReceipts, readiness,
+                observation == null ? null : observation.finishedAt(),
+                observation == null ? "NO_OBSERVATION" : observation.outcome()),
             count("news_ingest_receipt"),
             count("news_canonical_event"),
             count("news_event_version"),
@@ -122,7 +133,8 @@ public class NewsIntelligenceAdminHealthController {
     public record Model(String selectedProvider, String configuredGeminiModel,
                         boolean geminiKeyConfigured, boolean realProviderCallVerified,
                         boolean selectedProviderConfigured, long recordedGeminiAnalysisReceipts,
-                        String geminiReadiness) {}
+                        String geminiReadiness, Instant lastGeminiAttemptAt,
+                        String lastGeminiAttemptOutcome) {}
 
     public record Source(String sourceId, String publisher, String rightsState,
                          boolean canIngest, boolean canRetain, boolean canDisplay,
