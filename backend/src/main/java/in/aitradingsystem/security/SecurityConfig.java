@@ -53,6 +53,9 @@ public class SecurityConfig {
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // V4 governance intentionally excludes the legacy OPERATOR compatibility authority.
                 .requestMatchers("/api/admin/model-governance/**").hasRole("ADMIN")
+                // News intelligence source rights, provider readiness and pipeline health
+                // are ADMIN-only even though legacy /api/admin routes allow OPERATOR.
+                .requestMatchers("/api/admin/market-intelligence/**").hasRole("ADMIN")
                 // Admin routes must be evaluated before the generic authenticated GET rule below.
                 .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
                     .hasAnyRole("ADMIN", "OPERATOR")
