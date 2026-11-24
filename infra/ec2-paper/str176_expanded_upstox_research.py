@@ -100,7 +100,11 @@ def decode_expired_chunk(payload, first, last):
         raise ValueError("HISTORICAL_DATA_OBJECT_MISSING")
     if not isinstance(payload.get("candles"),list):
         raise ValueError("HISTORICAL_CANDLE_ARRAY_MISSING")
-    if len(payload["candles"])>PER_GET_DAYS:
+    # The real source exceeded 30 records for a 30-calendar-day query.
+    # Count is not itself sufficient to conclude invalid history: inspect
+    # individual source dates and duplicate daily sessions before rejection.
+    # Bound total parsed records separately against response abuse.
+    if len(payload["candles"])>PER_GET_DAYS*4:
         raise ValueError("HISTORICAL_CANDLE_WINDOW_OVERSIZED")
     result=[]
     seen=set()
@@ -112,10 +116,15 @@ def decode_expired_chunk(payload, first, last):
             raise ValueError("INVALID_SOURCE_SESSION")
         try:dt=datetime.fromisoformat(stamp)
         except ValueError:raise ValueError("INVALID_SOURCE_SESSION") from None
-        if (dt.utcoffset()!=timedelta(hours=5,minutes=30)
-                or dt.hour or dt.minute or dt.second or dt.microsecond
-                or not first<=dt.date()<=last or dt.date() in seen
-                or dt.date().weekday()>=5):
+        if dt.utcoffset()!=timedelta(hours=5,minutes=30):
+            raise ValueError("INVALID_SOURCE_SESSION")
+        if not first<=dt.date()<=last:
+            raise ValueError("HISTORICAL_BAR_OUTSIDE_REQUEST")
+        if dt.hour or dt.minute or dt.second or dt.microsecond:
+            raise ValueError("HISTORICAL_NONCANONICAL_DAILY_TIME")
+        if dt.date() in seen:
+            raise ValueError("HISTORICAL_DUPLICATE_SESSION_DAY")
+        if dt.date().weekday()>=5:
             raise ValueError("INVALID_SOURCE_SESSION")
         seen.add(dt.date())
         if (type(vol) is not int or vol<0 or vol>10**12
@@ -357,6 +366,9 @@ SAFE_BLOCK_CODES=frozenset((
   "HISTORICAL_DATA_OBJECT_MISSING",
   "HISTORICAL_CANDLE_ARRAY_MISSING",
   "HISTORICAL_CANDLE_WINDOW_OVERSIZED",
+  "HISTORICAL_BAR_OUTSIDE_REQUEST",
+  "HISTORICAL_NONCANONICAL_DAILY_TIME",
+  "HISTORICAL_DUPLICATE_SESSION_DAY",
   "ORIGINAL_SOURCE_PRICE_INVALID",
   "ORIGINAL_SOURCE_OHLC_INVALID",
   "DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS",
