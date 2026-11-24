@@ -356,3 +356,47 @@ without asking the owner to request an additional external permission.
 The next certification prerequisites remain original source data with
 valid exchange-calendar/contract metadata, genuine as-of feasibility,
 the evaluator replay, OOS costs and independent review.
+
+## STR-176 original-as-of daily walk-forward with after-cost link (2026-11-24)
+
+The original `Fno176VerifiedHistoricalReplayService.inspect` evaluates only
+**one** seven-session history window per call. That is not an independent
+multi-decision historical backtest, train/OOS split, or after-cost ledger.
+`Fno176SourceLinkedWalkForwardV1` closes that concrete engineering gap:
+
+- It makes a separate call to the **real rights-joined V102 source and real
+  STR-176 Java evaluator** for *every* official NSE trading day in a bounded
+  26-calendar-day range. Decisions run at **09:00 Asia/Kolkata the following
+  eligible session day**, so completed prior-day OHLCV/final-OI must already
+  have been available by that historical decision instant. It never queries
+  the final day then replays that hindsight snapshot on old decisions.
+- The operator chooses an explicit final training day. Every genuine
+  session must be present, with seven verified lookback sessions, a source
+  input digest and a real evaluator result. Missing calendar, unavailable
+  original source, or a blocked evaluator fails the **entire** range rather
+  than cherry-picking profitable days. The output distinguishes training and
+  chronological out-of-sample daily decisions.
+- Only original evaluator `RESEARCH_CANDIDATE` decision dates may match
+  externally provided completed fill/trade evidence. Trade records with no
+  corresponding source-derived candidate or repeated entry date fail closed.
+  `FnoHistoricalAfterCostWalkForwardV1` then computes actual supplied gross,
+  brokerage, statutory tax, spread/slippage, impact, financing, and capital
+  outcomes; rejects chronological overlap and training/OOS crosses.
+  Crucially the service **never invents fills or transaction costs**.
+- Authenticated ADMIN/OPERATOR-only, read-only
+  `GET /api/admin/research/fno-43/str176-walkforward` exposes only
+  state, fixed reason and bounded aggregate decision counts. It deliberately
+  accepts no arbitrary caller-supplied fill proof. It exports no original
+  futures keys, market prices, account data or original source digests.
+  Its response keeps historical certification, PAPER and LIVE flags false.
+- A real after-cost broker-fill/quote provenance source and independent
+  market replay acceptance are still required before a strategy is certified.
+  Green JUnit tests on **synthetic fixture dates** prove this code's
+  fail-closed behavior, not a real profitable or independently signed replay.
+
+The exact deployed PAPER V102 receipt from GitHub Actions #45349531935 had
+`v102Rows=0`, `rightsJoinedRows=0`,
+`fullyAuthorizedProviders=0`, and `verifiedCalendarRows=0`.
+Until actual source records and authentic market-as-of fill evidence exist
+and the runtime is deployed, this new service cannot independently certify
+any strategy. **Historical independent E2E remains 0/43.**
