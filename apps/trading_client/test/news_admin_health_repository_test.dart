@@ -67,6 +67,29 @@ void main() {
     mock.close();
   });
 
+  test('legacy response leaves Gemini diagnostics unknown, not zero', () {
+    final model = NewsAdminHealthSnapshot.fromJson(fixtureHealth()).model;
+    expect(model.selectedProviderConfigured, isNull);
+    expect(model.recordedGeminiAnalysisReceipts, isNull);
+    expect(model.geminiReadiness, isNull);
+  });
+
+  test('decodes recorded Gemini receipts without asserting live verification', () {
+    final model = (fixtureHealth()['model'] as Map<String, dynamic>)
+      ..['selectedProvider'] = 'GEMINI'
+      ..['selectedProviderConfigured'] = true
+      ..['recordedGeminiAnalysisReceipts'] = 17
+      ..['geminiReadiness'] = 'RECORDED_ANALYSIS_RECEIPTS_PRESENT';
+    final decoded = NewsAdminModelStatus.fromJson(model);
+    expect(decoded.recordedGeminiAnalysisReceipts, 17);
+    expect(decoded.selectedProviderConfigured, isTrue);
+    expect(decoded.realProviderCallVerified, isFalse);
+    expect(() => NewsAdminModelStatus.fromJson({...model, 'recordedGeminiAnalysisReceipts': -1}), throwsFormatException);
+    expect(() => NewsAdminModelStatus.fromJson({...model, 'recordedGeminiAnalysisReceipts': 0}), throwsFormatException);
+    expect(() => NewsAdminModelStatus.fromJson({...model, 'geminiKeyConfigured': false}), throwsFormatException);
+    expect(() => NewsAdminModelStatus.fromJson({...model}..remove('geminiReadiness')), throwsFormatException);
+  });
+
   test('rejects missing or false-typed readiness fields', () {
     final malformed = fixtureHealth()..['eventLedgerEnabled'] = 'true';
     expect(() => NewsAdminHealthSnapshot.fromJson(malformed), throwsFormatException);

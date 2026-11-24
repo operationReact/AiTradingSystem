@@ -28,6 +28,9 @@ class _FixtureAdminHealth implements NewsAdminHealthRepository {
         configuredGeminiModel: 'gemini-2.5-flash',
         geminiKeyConfigured: true,
         realProviderCallVerified: false,
+        selectedProviderConfigured: false,
+        recordedGeminiAnalysisReceipts: 17,
+        geminiReadiness: 'GEMINI_NOT_SELECTED',
       ),
       receiptCount: 7,
       eventCount: 3,
@@ -63,6 +66,10 @@ void main() {
     expect(find.byKey(const ValueKey('news-health-events')), findsOneWidget);
     expect(find.text('NOT VERIFIED'), findsOneWidget);
     expect(find.text('GEMINI_API_KEY'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Recorded Gemini analyses'), 100,
+      scrollable: find.byType(Scrollable).first);
+    expect(find.text('17'), findsOneWidget);
+    expect(find.text('Not selected'), findsOneWidget);
     // The dense status page is intentionally scrollable on a mobile viewport.
     await tester.scrollUntilVisible(
       find.text('FICTIONAL PUBLISHER'), 180,

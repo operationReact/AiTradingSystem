@@ -152,6 +152,14 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
                               _line('Credential configured', _yesNo(_snapshot!.model.geminiKeyConfigured)),
                               _line('Real provider call verified',
                                 _snapshot!.model.realProviderCallVerified ? 'VERIFIED' : 'NOT VERIFIED'),
+                              _line('Selected provider configured',
+                                _snapshot!.model.selectedProviderConfigured == null ? 'UNAVAILABLE'
+                                  : _yesNo(_snapshot!.model.selectedProviderConfigured!)),
+                              _line('Recorded Gemini analyses',
+                                _snapshot!.model.recordedGeminiAnalysisReceipts?.toString() ?? 'UNAVAILABLE'),
+                              _line('Gemini readiness', _geminiReadiness(_snapshot!.model.geminiReadiness)),
+                              const Text('Recorded analyses do not prove current provider connectivity.'),
+
                             ],
                           ),
                         ),
@@ -254,6 +262,14 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
       ],
     ),
   );
+
+  static String _geminiReadiness(String? status) => switch (status) {
+    'GEMINI_NOT_SELECTED' => 'Not selected',
+    'GEMINI_NOT_CONFIGURED' => 'Not configured',
+    'CONFIGURED_NO_RECORDED_RECEIPT' => 'Configured; no recorded receipts',
+    'RECORDED_ANALYSIS_RECEIPTS_PRESENT' => 'Recorded receipts present',
+    _ => 'UNAVAILABLE',
+  };
 
   static String _yesNo(bool enabled) => enabled ? 'YES' : 'NO';
 
