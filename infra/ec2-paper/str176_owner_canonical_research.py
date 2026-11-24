@@ -159,7 +159,8 @@ REASONS=frozenset((
     "INVALID_WINDOW_SESSIONS", "MISSING_VOLUME_OR_OI",
     "SESSION_GAP", "EXPIRY_OUT_OF_SCOPE", "STALE_SESSION",
     "PRICE_RANGE_OUTLIER", "PRICE_STEP_OUTLIER",
-    "BASELINE_VOLUME_MISSING", "VOLUME_OR_OI_PARTICIPATION_LOW",
+    "BASELINE_VOLUME_MISSING", "BOTH_VOLUME_FILTERS_LOW",
+    "VOLUME_LIFT_LOW", "VOLUME_TO_OI_LOW",
     "BREAKOUT_NOT_CONFIRMED", "UPWARD_BREAKOUT", "DOWNWARD_BREAKOUT"
 ))
 
@@ -199,8 +200,14 @@ def momentum(window,expiry,as_of,*,details=False):
              for j in range(4,7)]
     rises=sum(a for a,b in changes)
     falls=sum(b for a,b in changes)
-    if volume_lift<11000 or participation<2000:
-        return result("NO_SIGNAL","VOLUME_OR_OI_PARTICIPATION_LOW")
+    # Diagnose the actual broker-source unit and relative-activity filters
+    # separately. Only the fixed reason code changes, never the signal.
+    if volume_lift<11000 and participation<2000:
+        return result("NO_SIGNAL","BOTH_VOLUME_FILTERS_LOW")
+    if volume_lift<11000:
+        return result("NO_SIGNAL","VOLUME_LIFT_LOW")
+    if participation<2000:
+        return result("NO_SIGNAL","VOLUME_TO_OI_LOW")
     if up>=100 and rises>=2 and falls==0 and up-20>30:
         return result("LONG","UPWARD_BREAKOUT")
     if down>=100 and falls>=2 and rises==0 and down-20>30:
