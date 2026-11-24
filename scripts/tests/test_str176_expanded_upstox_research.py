@@ -187,10 +187,10 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
             m.ssm_block_code(source+"bearer-secret-do-not-export"))
         self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
-            m.ssm_block_code(source+"INVALID_SOURCE_SESSION\\n"+
+            m.ssm_block_code(source+"INVALID_SOURCE_SESSION\n"+
                              source+"FNO_DISCOVERY_AUTH_REJECTED"))
         self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
-            m.ssm_block_code(source+"INVALID_SOURCE_SESSION\\n"+"x"*9000))
+            m.ssm_block_code(source+"INVALID_SOURCE_SESSION\n"+"x"*9000))
         self.assertTrue(all("NSE_FO|" not in code
                             for code in m.SAFE_BLOCK_CODES))
 
