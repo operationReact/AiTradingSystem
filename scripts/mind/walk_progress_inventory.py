@@ -29,6 +29,26 @@ class WalkError(Exception):
     pass
 
 
+def safe_failure_code(error):
+    """Return a bounded cause code without including URLs, bodies, headers or tokens."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP_{error.code}" if 100 <= error.code <= 599 else "HTTP_ERROR"
+    if isinstance(error, urllib.error.URLError):
+        reason = error.reason
+        if isinstance(reason, (TimeoutError, TimeoutError.__mro__[1])):
+            return "URL_TIMEOUT"
+        if isinstance(reason, OSError) and type(reason.errno) is int:
+            return f"URL_OS_ERROR_{reason.errno}"
+        return "URL_ERROR"
+    if isinstance(error, json.JSONDecodeError):
+        return f"JSON_PARSE_ERROR_LINE_{error.lineno}_COLUMN_{error.colno}"
+    if isinstance(error, (TimeoutError,)):
+        return "TIMEOUT"
+    if isinstance(error, OSError) and type(error.errno) is int:
+        return f"OS_ERROR_{error.errno}"
+    return "UNEXPECTED_" + type(error).__name__
+
+
 def percent_done(done, total):
     # Mirrors MindCapabilityProgressService: round(done * 1000 / total) / 10.
     return 0.0 if total == 0 else round(done * 1000.0 / total) / 10.0
@@ -232,8 +252,8 @@ def main(argv):
     except WalkError as err:
         print("WALK_FAILED: " + str(err), file=sys.stderr)
         return 1
-    except Exception:
-        print("WALK_FAILED: TRANSPORT_OR_PARSE_ERROR", file=sys.stderr)
+    except Exception as err:
+        print("WALK_FAILED: " + safe_failure_code(err), file=sys.stderr)
         return 1
     print(f"WALK_PASSED: {result['items']} items in {result['pages']} pages")
     return 0
