@@ -100,6 +100,7 @@ public class NewsFeatureService {
                          AND 'DISPLAY' = ANY(rights.permitted_uses)
                          AND 'NLP_TRANSFER' = ANY(rights.permitted_uses)
                          AND rights.effective_from <= :asOf
+                         AND rights.updated_at <= :asOf
                          AND rights.effective_from <= CURRENT_TIMESTAMP
                          AND (rights.effective_to IS NULL OR :asOf < rights.effective_to)
                          AND (rights.effective_to IS NULL OR CURRENT_TIMESTAMP < rights.effective_to)
