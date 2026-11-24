@@ -124,6 +124,20 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         self.assertEqual(("BLOCKED","EXPIRY_OUT_OF_SCOPE"),
             replay.momentum(rows[:7],expiry,date(2026,12,20),details=True))
 
+    def test_volume_lift_and_volume_to_oi_rejections_are_distinct_and_unchanged(self):
+        expiry=date(2026,12,24)
+        days=weekdays(date(2026,12,15),9)
+        prices=[100,101,102,103,104,105,111]
+        def run(base_vol=30000,recent_vol=50000,oi=130000):
+            rows=[sample(d,p,recent_vol if i>=4 else base_vol,oi)
+                  for i,(d,p) in enumerate(zip(days[:7],prices))]
+            return replay.momentum(rows,expiry,days[7],details=True)
+        self.assertEqual(("LONG","UPWARD_BREAKOUT"),run())
+        self.assertEqual(("NO_SIGNAL","VOLUME_LIFT_LOW"),run(base_vol=100000))
+        self.assertEqual(("NO_SIGNAL","VOLUME_TO_OI_LOW"),run(oi=1000000))
+        self.assertEqual(("NO_SIGNAL","BOTH_VOLUME_FILTERS_LOW"),
+                         run(base_vol=100000,oi=1000000))
+
     def test_simulated_next_open_and_costs_are_actual_accounting_not_fills(self):
         metadata={}
         groups={}

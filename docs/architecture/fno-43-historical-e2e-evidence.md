@@ -556,3 +556,22 @@ without instrument identifiers, prices or private broker values.
 
 Do **not** optimize the 100-bps breakout/11,000-bps volume lift or 20-bps
 minimum cost-adjusted edge solely to manufacture trading signals.
+
+## Source-neutral diagnosis of the 26 no-signal participation failures
+
+Actual protected owner-host [run #45364820027](
+https://github.com/operationReact/AiTradingSystem/actions/runs/45364820027)
+verified, from its exact 75-window retrospective input:
+`EXPIRY_OUT_OF_SCOPE=44`, `VOLUME_OR_OI_PARTICIPATION_LOW=26`,
+and `BREAKOUT_NOT_CONFIRMED=5`. The 44 near-expiry windows were
+**correctly** rejected by the production 7-day-to-expiry gate;
+nothing should loosen that to make a larger progress percentage.
+The volume/OI branch's combined reason was insufficient to distinguish a
+genuine low-volume regime from a data-unit normalization mismatch.
+
+The follow-up keeps the same values, 11,000-bps recent-vs-baseline volume
+ratio and 2,000-bps volume/OI threshold. It changes only the fixed diagnostic
+label: `VOLUME_LIFT_LOW`, `VOLUME_TO_OI_LOW`, or
+`BOTH_VOLUME_FILTERS_LOW`. Exact unit provenance must be cross-checked
+against the exchange before any normalization or strategy threshold change.
+No success/certification flags change.
