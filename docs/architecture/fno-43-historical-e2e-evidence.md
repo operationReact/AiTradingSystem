@@ -250,3 +250,66 @@ that a rights-certified after-cost historical out-of-sample outcome
 has been observed. The historical E2E accepted counter remains 0/43
 until independently validated source/performance/transaction receipts
 qualify, and paper/live broker validation is separate.
+
+## Forward-observed, source-verified V102 ingestion boundary (2026-11-24)
+
+The exact-host source audit #45344281862 established that the owner PAPER
+PostgreSQL V102 `fno_verified_completed_ohlcv_oi_session` has **zero rows**.
+This is the blocking genuine-source prerequisite for STR-176, not a UI or
+research evaluator problem.
+
+`Fno176OriginalObservedIngestor` is a **dormant, explicitly unwired**
+source-intake adapter boundary, not a scheduled historical downloader. It
+accepts three original, bounded raw packet byte arrays (OHLCV, final OI,
+official contract master) from a future independently reviewed authenticated
+provider acquisition adapter. Its mandatory
+`IndependentlyVerifiedSource` interface must inspect original provider
+bytes, exact contract identity, session date, lot/underlying, OI unit
+normalization and calendar/rights receipt IDs. No default permissive
+implementation exists and no controller, scheduler, SSM token getter or
+broker order path invokes this ingestion class.
+
+The import checks *both* current `RAW_RETENTION` and `MODEL_INFERENCE`
+rights separately for OHLCV, OI and official NSE calendar before invoking
+the independent verifier. The actual PostgreSQL `INSERT ... SELECT`
+rechecks separately keyed immutable inference rights, existing verified
+NSE calendar receipt, grant validity and revocations at database wall time,
+and retained data window. It refuses sessions from today or future and
+refuses conflicting provider/contract/session records. Raw provider
+packets never leave memory; SHA-256 digests of those bytes are recorded,
+not arbitrary input digests. A successful insert means **source packet
+custody accepted**, not a completed strategy backtest.
+
+**Original publication-time protection:** Upstox's historical candle
+timestamp documents the start of the candle interval. That timestamp is
+not proof of the exact first time the completed candle or OI was
+published. The intake therefore accepts **no arbitrary client-supplied
+`ohlcv_first_available_at` or `oi_first_available_at`**. Its database
+`clock_timestamp()` is conservatively recorded into V102 as the
+first *observed by MintTick* time for both feeds. This does **not**
+purport to be the vendor's actual first publication. It prevents a
+future point-in-time replay from using a later-fetched candle at an
+earlier hypothetical decision. Independently attested earlier source
+publication evidence requires a separate reviewed ingestion path and
+cannot be manufactured from an old daily session label.
+
+CI:
+- `Fno176OriginalObservedIngestorTest` checks deny-by-default rights,
+  unchanged packet bytes, validated values/identity, rejections,
+  SHA-256 digests, DB-accepted-time evidence and no PAPER/LIVE.
+- `Fno176OriginalObservedIngestorIT` checks real runner-local PostgreSQL
+  append-only insert/rights-joined readback using **synthetic** provider,
+  calendar and rights fixtures. These are not external permissions.
+- `minttick-str176-forward-observed-source-intake.yml` explicitly rejects
+  operational price shortcuts, broker operations, retroactive first-known
+  timestamps and hidden auto-enable paths.
+
+**Not yet done:** a genuinely authenticated and independently authorized
+source adapter for real completed NSE_FO candles, independently verified
+original contract master and final OI; real captured records on the PAPER
+host; seven consecutive rights-qualified sessions; actual STR-176 historical
+decision replay; transaction-cost/walk-forward OOS; independent acceptance.
+The historical strategy certification counter remains **0/43** until
+those sources, outcomes and checks have actually passed. This PR does
+not deploy or enable provider collection and MUST NOT be described as
+populating the real V102 table.
