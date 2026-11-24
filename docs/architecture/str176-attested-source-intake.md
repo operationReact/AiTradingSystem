@@ -32,3 +32,31 @@ scheduler, HTTP route, new cloud resource or deployment is included.
 The independent reviewer and private runtime composition must be installed
 before real inputs can be accepted. CI uses synthetic cryptographic fixtures,
 never a real licensing or strategy certificate.
+
+
+## Private runtime entry point
+
+The opt-in `Fno176PrivateIntakeRunner` runs once at backend startup. Configure
+`minttick.fno-research.private-intake-enabled=true`,
+`minttick.fno-research.private-intake-directory` (absolute canonical private
+directory, read-only mounted into the backend), and
+`minttick.fno-research.private-intake-reviewer-public-key` (base64 DER X.509
+Ed25519 public key pinned by the independent operator). It is disabled by
+default; no new cloud resources, public routes or default trust keys.
+
+The directory contains at most 32 subdirectories named entry-0001 through
+entry-9999. Each contains receipt.json (the signed Receipt record, max 16 KiB),
+ohlcv.bin, oi.bin (max 1 MiB each), listing.bin (max 20 MiB). Directory
+and file modes must grant no group or other access; symlinks are rejected.
+Keep the directory immutable for the duration of the import. Each entry
+is verified and stored individually to bound memory. Repeated source identity
+is rejected by the existing immutable database uniqueness constraint; no
+overwrite or automatic deletion. Only aggregate counts/state are logged.
+A restart with an already imported batch will report rejected duplicates,
+not new successful imports.
+
+Before enabling, provision genuine verified rights/calendar records and the
+independent reviewer's public key and signed source packets privately.
+Neither a user assertion nor a test key is a production receipt. After a
+real import, execute the existing read-only V102 source eligibility audit.
+The result can establish source rows, not independent strategy certification.
