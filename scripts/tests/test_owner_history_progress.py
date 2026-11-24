@@ -81,6 +81,81 @@ class ProgressSnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(progress.ProgressUnavailable, 'PUBLICATION_HANDOVER_UNAVAILABLE'):
                 progress.wait_for_previous_publisher()
 
+    def test_timer_handover_drains_before_publish_and_restores(self):
+        results = [
+            subprocess.CompletedProcess([], 0, 'active\n', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'inactive\n', ''),
+            subprocess.CompletedProcess([], 0, 'activating\n', ''),
+            subprocess.CompletedProcess([], 0, 'inactive\n', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'active\n', ''),
+        ]
+        with patch.object(progress.subprocess, 'run', side_effect=results) as run, \
+                patch.object(progress.time, 'sleep'):
+            with progress.quiesce_previous_publisher():
+                self.assertEqual(5, run.call_count)
+            self.assertEqual(7, run.call_count)
+            commands = [c.args[0] for c in run.call_args_list]
+            self.assertEqual(['systemctl', 'stop', 'minttick-owner-history.timer'], commands[1])
+            self.assertEqual(['systemctl', 'start', 'minttick-owner-history.timer'], commands[5])
+            self.assertFalse(any(c[1] in ('stop', 'start') and c[-1].endswith('.service')
+                                 for c in commands))
+
+    def test_timer_handover_restores_after_publish_failure(self):
+        results = [
+            subprocess.CompletedProcess([], 0, 'active\n', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'inactive\n', ''),
+            subprocess.CompletedProcess([], 0, 'inactive\n', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'active\n', ''),
+        ]
+        with patch.object(progress.subprocess, 'run', side_effect=results) as run:
+            with self.assertRaisesRegex(ValueError, 'fixture publication failed'):
+                with progress.quiesce_previous_publisher():
+                    raise ValueError('fixture publication failed')
+            self.assertEqual(['systemctl', 'start', 'minttick-owner-history.timer'],
+                             run.call_args_list[-2].args[0])
+
+    def test_timer_handover_inactive_stays_inactive(self):
+        result = subprocess.CompletedProcess([], 0, 'inactive\n', '')
+        with patch.object(progress.subprocess, 'run', return_value=result) as run:
+            with progress.quiesce_previous_publisher():
+                pass
+            self.assertEqual(3, run.call_count)
+            self.assertTrue(all(c.args[0][1] == 'show' for c in run.call_args_list))
+
+    def test_timer_handover_restores_when_stop_or_drain_fails(self):
+        ok = subprocess.CompletedProcess([], 0, '', '')
+        active = subprocess.CompletedProcess([], 0, 'active\n', '')
+        inactive = subprocess.CompletedProcess([], 0, 'inactive\n', '')
+        failed = subprocess.CompletedProcess([], 1, '', 'private detail')
+        for results, code in (
+            ([active, failed, ok, active], 'PUBLICATION_TIMER_QUIESCE_FAILED'),
+            ([active, ok, inactive, failed, ok, active], 'PUBLICATION_HANDOVER_UNAVAILABLE'),
+        ):
+            with self.subTest(code=code), \
+                    patch.object(progress.subprocess, 'run', side_effect=results) as run:
+                with self.assertRaisesRegex(progress.ProgressUnavailable, code):
+                    with progress.quiesce_previous_publisher():
+                        self.fail('Publication entered despite failed handover')
+                self.assertEqual(['systemctl', 'start', 'minttick-owner-history.timer'],
+                                 run.call_args_list[-2].args[0])
+
+    def test_timer_handover_restore_failure_is_explicit(self):
+        results = [
+            subprocess.CompletedProcess([], 0, 'active\n', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'inactive\n', ''),
+            subprocess.CompletedProcess([], 0, 'inactive\n', ''),
+            subprocess.CompletedProcess([], 1, '', 'private detail'),
+        ]
+        with patch.object(progress.subprocess, 'run', side_effect=results):
+            with self.assertRaisesRegex(progress.ProgressUnavailable, 'PUBLICATION_TIMER_RESTORE_FAILED'):
+                with progress.quiesce_previous_publisher():
+                    pass
+
     def test_publication_lock_excludes_another_process_then_releases(self):
         with tempfile.TemporaryDirectory() as tmp:
             script = '''import importlib.util,sys
