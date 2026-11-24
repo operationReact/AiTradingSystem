@@ -70,6 +70,7 @@ import 'features/trading_rooms/presentation/minttick_home_command_centre.dart';
 import 'features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'features/market_intelligence/data/market_news_repository.dart';
 import 'features/market_intelligence/data/news_admin_health_repository.dart';
+import 'features/market_intelligence/data/historical_news_coverage_repository.dart';
 import 'features/market_intelligence/presentation/news_admin_health_page.dart';
 import 'features/market_intelligence/data/market_event_repository.dart';
 import 'features/market_intelligence/data/market_event_detail_repository.dart';
@@ -364,6 +365,7 @@ class _TradingAppState extends State<TradingApp> {
           ? _overviewPage()
           : NewsAdminHealthPage(
               repository: HttpNewsAdminHealthRepository(_api),
+              coverageRepository: HttpHistoricalNewsCoverageRepository(_api),
             ),
         '/notifications': (_) => widget.session.isCustomerAuthenticated ? _customerState('Notifications') : OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
         '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
