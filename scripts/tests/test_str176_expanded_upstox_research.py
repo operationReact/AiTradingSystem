@@ -244,6 +244,79 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"HISTORICAL_CANDLE_WINDOW_OVERSIZED"):
             m.decode_expired_chunk({"candles":[only_canonical[0]]*121},first,last)
 
+    def test_bad_chunk_quarantines_whole_contract_and_keeps_request_budget(self):
+        p=FakeAuthenticatedUpstox()
+        damaged=months()[2].strftime("%d-%m-%Y")
+        damaged_calls=0
+        def fetch(route):
+            nonlocal damaged_calls
+            result=p.get(route)
+            if "/historical-candle/" in route and damaged in route:
+                damaged_calls+=1
+                if damaged_calls==2:
+                    result["candles"][0][0]=result["candles"][0][0].replace(
+                        "T00:00:00", "T09:15:00")
+            return result
+        diagnostics={}
+        source,meta,_,_=m.retrieve_futures(
+            p.exps,"NSE_INDEX|Nifty 50",fetch,diagnostics=diagnostics)
+        self.assertEqual([],source[meta[months()[2]][0]])
+        self.assertTrue(all(source[key] for expiry,(key,_) in meta.items()
+                            if expiry!=months()[2]))
+        self.assertEqual(48,p.calls)  # discovery list is the 49th real request
+        self.assertEqual(1,diagnostics["quarantinedFuturesCohorts"])
+        self.assertEqual(1,diagnostics["rejectedHistoryChunks"])
+        self.assertEqual({"HISTORICAL_NONCANONICAL_DAILY_TIME":1},
+                         diagnostics["sourceFaultsByReason"])
+        self.assertEqual(11,m.evaluate(source,meta,30)["eligibleFuturesCohorts"])
+
+    def test_all_faulty_cohorts_never_produce_evaluations_or_fake_success(self):
+        p=FakeAuthenticatedUpstox()
+        def fetch(route):
+            result=p.get(route)
+            if "/historical-candle/" in route and result["candles"]:
+                result["candles"].append(result["candles"][0])
+            return result
+        report=m.safe_receipt(m.research(fetch,date(2026,11,24)))
+        self.assertEqual(49,p.calls)
+        self.assertEqual(12,report["quarantinedFuturesCohorts"])
+        self.assertEqual(36,report["rejectedHistoryChunks"])
+        self.assertEqual(0,report["sourceFuturesBars"])
+        self.assertEqual(0,report["decisionWindows"])
+        self.assertEqual("SOURCE_FUTURES_COHORTS_INCOMPLETE",report["state"])
+        self.assertFalse(report["independentHistoricalE2ECertified"])
+        for field,value in (("rejectedHistoryChunks",35),
+                            ("quarantinedFuturesCohorts",0),
+                            ("state","RESEARCH_EXTENDED_EOD_NOT_CERTIFIED"),
+                            ("sourceFaultsByReason",{"raw-private-key":36})):
+            with self.subTest(field=field),self.assertRaises(ValueError):
+                m.safe_receipt({**report,field:value})
+
+    def test_operational_failures_and_missing_envelopes_still_abort(self):
+        for error in (RuntimeError("FNO_DISCOVERY_AUTH_REJECTED"),
+                      RuntimeError("FNO_DISCOVERY_RATE_LIMITED"),
+                      ValueError("raw-private-error")):
+            p=FakeAuthenticatedUpstox()
+            def fetch(route):
+                if "/historical-candle/" in route:raise error
+                return p.get(route)
+            with self.subTest(error=error),self.assertRaises(type(error)):
+                m.research(fetch,date(2026,11,24))
+        p=FakeAuthenticatedUpstox()
+        def missing(route):
+            return None if "/historical-candle/" in route else p.get(route)
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_DATA_OBJECT_MISSING"):
+            m.research(missing,date(2026,11,24))
+
+    def test_two_distinct_matching_futures_are_ambiguous_not_sorted_selection(self):
+        p=FakeAuthenticatedUpstox()
+        expiry=months()[0]
+        rows=p.get("/future/contract?expiry_date="+expiry.isoformat())
+        other={**rows[0],"instrument_key":
+               "NSE_FO|OTHER|"+expiry.strftime("%d-%m-%Y")}
+        with self.assertRaisesRegex(ValueError,"MISSING_OR_AMBIGUOUS"):
+            m.chosen_future(rows+[other],expiry,"NSE_INDEX|Nifty 50")
+
     def test_missing_one_expiry_never_reports_fully_qualified(self):
         p=FakeAuthenticatedUpstox(empty=months()[5])
         r=m.safe_receipt(m.research(p.get,date(2026,11,24)))

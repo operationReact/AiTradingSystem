@@ -89,7 +89,7 @@ def chosen_future(rows, expiry, underlying):
             raise ValueError("UPSTOX_ORIGINAL_FUTURES_INVALID")
         candidates.append((key,lot))
     candidates.sort()
-    if not candidates or len(set(candidates))!=len(candidates):
+    if len(candidates)!=1:
         raise ValueError("UPSTOX_ORIGINAL_FUTURES_MISSING_OR_AMBIGUOUS")
     return candidates[0]
 
@@ -136,7 +136,18 @@ def decode_expired_chunk(payload, first, last):
         result.append((dt.date(),o,h,l,c,vol,oi,SOURCE))
     return result
 
-def retrieve_futures(expiries, underlying, fetch, *, max_requests=49):
+# Only source-value faults may quarantine a cohort. Authentication, transport,
+# budgets and metadata identity errors still abort the complete run.
+QUARANTINE_CODES=frozenset((
+    "HISTORICAL_NONCANONICAL_DAILY_TIME", "HISTORICAL_DUPLICATE_SESSION_DAY",
+    "HISTORICAL_BAR_OUTSIDE_REQUEST", "INVALID_SOURCE_CANDLE_LENGTH",
+    "INVALID_SOURCE_SESSION", "INVALID_SOURCE_QUANTITY",
+    "ORIGINAL_SOURCE_PRICE_INVALID", "ORIGINAL_SOURCE_OHLC_INVALID",
+    "DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS",
+))
+
+def retrieve_futures(expiries, underlying, fetch, *, max_requests=49,
+                     diagnostics=None):
     """fetch: trusted Upstox Discovery.get, gives parsed provider original data.
 
     The GET request construction is bounded by 90 calendar days (3 x 30)
@@ -148,6 +159,8 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49):
         raise ValueError("SOURCE_UNDERLYING_SCOPE_INVALID")
     universe={}
     by_expiry={}
+    faults=Counter()
+    quarantine_count=0
     metadata_requests=0
     history_requests=0
     for expiry in expiries:
@@ -157,6 +170,7 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49):
         metadata_requests+=1
         rows=[]
         seen=set()
+        quarantined=False
         first=expiry-timedelta(days=SOURCE_DAYS-1)
         for k in range(3):
             start=first+timedelta(days=k*PER_GET_DAYS)
@@ -166,21 +180,35 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49):
                      +"/day/"+end.isoformat()+"/"+start.isoformat())
             payload=fetch(request)
             history_requests+=1
-            decoded=decode_expired_chunk(payload,start,end)
-            for r in decoded:
-                if r[0] in seen:
-                    raise ValueError("DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS")
-                seen.add(r[0])
-                rows.append(r)
+            try:
+                decoded=decode_expired_chunk(payload,start,end)
+                for r in decoded:
+                    if r[0] in seen:
+                        raise ValueError("DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS")
+                    seen.add(r[0])
+                    rows.append(r)
+            except ValueError as exc:
+                if len(exc.args)!=1 or exc.args[0] not in QUARANTINE_CODES:
+                    raise
+                faults[exc.args[0]]+=1
+                quarantined=True
         rows.sort(key=lambda item:item[0])
         if len(rows)>SOURCE_DAYS or sum(1 for r in rows if r[-1]!=SOURCE):
             raise ValueError("UNVERIFIED_SOURCE_SCOPE")
-        universe[key]=rows
+        # An invalid chunk taints the ENTIRE contract's 90-day cohort.
+        # Never retain its other chunks, select midnight rows or deduplicate.
+        if quarantined:
+            quarantine_count+=1
+        universe[key]=[] if quarantined else rows
         by_expiry[expiry]=(key,lot)
     if (metadata_requests!=12 or history_requests!=36
             or 1+metadata_requests+history_requests!=max_requests
             or len(universe)!=MAX_FUTURES):
         raise ValueError("UPSTOX_SOURCE_REQUEST_COUNT_CHANGED")
+    if diagnostics is not None:
+        diagnostics.update(quarantinedFuturesCohorts=quarantine_count,
+                           rejectedHistoryChunks=sum(faults.values()),
+                           sourceFaultsByReason=dict(sorted(faults.items())))
     return universe,by_expiry,metadata_requests,history_requests
 
 def bps(num,denom):
@@ -316,8 +344,9 @@ def research(fetch, reference_date):
     expiry_info=fetch("/expiries?instrument_key="
                        +urllib.parse.quote("NSE_INDEX|Nifty 50",safe=""))
     expiry_dates=expiries_from_provider(expiry_info,reference_date)
+    diagnostics={}
     source,metadata,meta_gets,hist_gets=retrieve_futures(
-        expiry_dates,"NSE_INDEX|Nifty 50",fetch)
+        expiry_dates,"NSE_INDEX|Nifty 50",fetch,diagnostics=diagnostics)
     primary=evaluate(source,metadata,FIXED_FRICTION_BPS)
     cheaper=evaluate(source,metadata,20)
     stress=evaluate(source,metadata,50)
@@ -327,7 +356,7 @@ def research(fetch, reference_date):
             (cheaper,stress)) or primary["sourceFuturesBars"]>MAX_BARS):
         raise ValueError("RESEARCH_SIGNAL_COHORT_DRIFT")
     return {
-        **primary, "providerGets":1+meta_gets+hist_gets,
+        **primary, **diagnostics, "providerGets":1+meta_gets+hist_gets,
         "metadataGets":1+meta_gets,"historyGets":hist_gets,
         "sourceDayRange":SOURCE_DAYS,"frictionBps":FIXED_FRICTION_BPS,
         "oosNetAt20BpsPaise":cheaper["outOfSampleNetPaise"],
@@ -351,6 +380,16 @@ def safe_receipt(r):
             or r.get("certifiedStrategies")!=0
             or r.get("orders") is not False or r.get("writes") is not False):
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    faults=r.get("sourceFaultsByReason")
+    quarantined=r.get("quarantinedFuturesCohorts")
+    rejected=r.get("rejectedHistoryChunks")
+    if (type(faults) is not dict or set(faults)-QUARANTINE_CODES
+            or any(type(v) is not int or not 1<=v<=36 for v in faults.values())
+            or type(quarantined) is not int or not 0<=quarantined<=12
+            or type(rejected) is not int or not 0<=rejected<=36
+            or sum(faults.values())!=rejected
+            or not quarantined<=rejected<=quarantined*3):
+        raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     for k in ("sourceFuturesBars","eligibleFuturesCohorts",
               "decisionWindows","purgedPreOosWindows","evaluatedWindows","blockedWindows",
               "candidateWindows","overlappingCandidatesSkipped",
@@ -362,7 +401,9 @@ def safe_receipt(r):
             or r["decisionWindows"]+r["purgedPreOosWindows"]>r["sourceFuturesBars"]
             or r["trainingTrades"]+r["outOfSampleTrades"]!=r["modeledTrades"]
             or r["modeledTrades"]>r["candidateWindows"]
-            or r["eligibleFuturesCohorts"]>MAX_FUTURES):
+            or r["eligibleFuturesCohorts"]+quarantined>MAX_FUTURES
+            or (r["state"]=="RESEARCH_EXTENDED_EOD_NOT_CERTIFIED"
+                and r["eligibleFuturesCohorts"]!=MAX_FUTURES)) :
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     for k in ("trainingNetPaise","outOfSampleNetPaise",
               "outOfSampleMaxDrawdownPaise","oosNetAt20BpsPaise",

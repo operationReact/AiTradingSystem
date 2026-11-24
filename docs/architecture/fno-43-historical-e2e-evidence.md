@@ -719,3 +719,28 @@ session and emits distinct allowlisted aggregate failure codes.
 reinterpreted as a complete daily candle. Original remaining source
 requirements, no-broker-orders, fixed strategy thresholds and 0/43
 independent historical E2E are unchanged.
+
+
+## Source cohort quarantine after actual noncanonical-time failure
+
+Actual host run [45374254197](https://github.com/operationReact/AiTradingSystem/actions/runs/45374254197)
+failed with `HISTORICAL_NONCANONICAL_DAILY_TIME`. This establishes one
+rejected timestamp, not that all 12 contracts are unusable or that midnight
+is independently proven correct. The bounded 49-GET research run now records
+allowlisted source-value failures per chunk and quarantines the ENTIRE
+90-day contract cohort when any chunk fails. Other contracts can be evaluated
+without selecting or silently deduplicating rows from the defective contract.
+The 36 history requests remain fixed; authentication, transport, rate-limit,
+missing-envelope and ambiguous instrument identity faults still abort.
+
+The count-only receipt reconciles rejected chunks, quarantine counts and
+fixed source-fault codes. A quarantined cohort has no bars, windows, signals
+or simulated trades in any cost scenario. Any missing/quarantined cohort
+forces `SOURCE_FUTURES_COHORTS_INCOMPLETE`; even a wholly clean run remains
+research-only. Two distinct matching futures metadata records are now
+rejected rather than selecting the lexicographically first instrument.
+Original source/cache records are unmodified. This is backend research only,
+with no Flutter change, V102 promotion, PAPER orders or LIVE activation.
+Actual clean-cohort coverage and OOS results require the subsequent host run;
+network-free regression fixtures do not establish certification. Independent
+historical certification remains 0/43.
