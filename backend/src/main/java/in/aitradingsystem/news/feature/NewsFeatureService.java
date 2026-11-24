@@ -69,7 +69,7 @@ public class NewsFeatureService {
         NewsContext context = contextFromNews(instrumentId, tradingSymbol, asOf);
         FnoUnderlyingCatalogueAdapter adapter = fnoAdapter.getIfAvailable();
         if (adapter == null) return context;
-        return context.withFno(adapter.resolve(baseSymbol(tradingSymbol)));
+        return context.withFno(adapter.resolveAsOf(baseSymbol(tradingSymbol), asOf));
     }
 
     private NewsContext contextFromNews(long instrumentId, String tradingSymbol, Instant asOf) {
