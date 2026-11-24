@@ -2,6 +2,8 @@ package in.aitradingsystem.news.feature;
 
 import in.aitradingsystem.provider.upstox.UpstoxFnoInstrumentUniverse;
 import in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -42,12 +44,25 @@ public class FnoUnderlyingCatalogueAdapter {
     }
 
     public FnoUnderlyingPolicy.Resolution resolve(String baseSymbol) {
+        return resolveAsOf(baseSymbol, Instant.now());
+    }
+
+    /** Historical research cannot use a catalogue first fetched after the decision. */
+    public FnoUnderlyingPolicy.Resolution resolveAsOf(String baseSymbol, Instant asOf) {
+        if (asOf == null || asOf.isAfter(Instant.now())) {
+            throw new IllegalArgumentException("A non-future F&O research cutoff is required");
+        }
         Optional<FnoFuturesContractRegistry.UniverseSnapshot> loaded = snapshots.loadedSnapshot();
         if (loaded.isEmpty()) {
             return new FnoUnderlyingPolicy.Resolution(FnoUnderlyingPolicy.Status.UNKNOWN_CATALOG, null,
                 "upstox-fno-universe state=" + stateSupplier.get());
         }
         FnoFuturesContractRegistry.UniverseSnapshot s = loaded.get();
+        if (s.fetchedAt().isAfter(asOf) || asOf.isAfter(s.fetchedAt().plus(Duration.ofHours(36)))) {
+            return new FnoUnderlyingPolicy.Resolution(FnoUnderlyingPolicy.Status.UNKNOWN_CATALOG, null,
+                "upstox-fno-universe state=NO_CAUSAL_CATALOGUE asOf=" + asOf
+                    + " fetchedAt=" + s.fetchedAt());
+        }
         Set<String> futuresUnderlyings = s.catalog().contracts().stream()
             .filter(c -> "FUT".equals(c.type()))
             .map(UpstoxFnoInstrumentUniverse.Contract::underlyingSymbol)
