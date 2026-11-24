@@ -95,7 +95,7 @@ class NewsArticleBridgeIT extends AbstractPostgresIT {
     @Test
     void approvedRssDescriptionReachesAnalyzerAsBoundedPlainText() {
         String url = "https://www.moneycontrol.com/news/excerpt-" + UUID.randomUUID() + ".html";
-        Instant publication = Instant.now().minusSeconds(400);
+        Instant publication = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS).minusSeconds(400);
         String rssDescription = "<p>Quarterly <b>results</b> &amp; management update</p> " + "x".repeat(2100);
         rssRow("moneycontrol", url, "Official results headline", publication, rssDescription);
 
