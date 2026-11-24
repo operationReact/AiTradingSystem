@@ -40,17 +40,27 @@ verify_instance_identity()
 _private_archive(ROOT)
 load_state(STATE)
 PY
-  install -o root -g root -m 0600 "$stage/owner_history_scheduler.py" "$root/owner_history_scheduler.py"
-  install -o root -g root -m 0600 "$stage/owner_history_progress.py" "$root/owner_history_progress.py"
   test ! -L "$root/monitor"
   install -d -o root -g root -m 0755 "$root/monitor"
-  python3 - "$root" <<'PY'
+  python3 - "$stage" "$root" <<'PY'
+import signal
+import subprocess
 import sys
-sys.path.insert(0,sys.argv[1])
+from pathlib import Path
+stage, root = map(Path, sys.argv[1:])
+sys.path.insert(0, str(stage))
 from owner_history_scheduler import STATE, load_state
-from owner_history_progress import publish, wait_for_previous_publisher
-wait_for_previous_publisher()
-publish(status="IDLE", scheduler_state=load_state(STATE))
+from owner_history_progress import publish, quiesce_previous_publisher
+
+def interrupted(signum, frame):
+    raise SystemExit(128 + signum)
+
+signal.signal(signal.SIGTERM, interrupted)
+with quiesce_previous_publisher():
+    for name in ("owner_history_scheduler.py", "owner_history_progress.py"):
+        subprocess.run(["install", "-o", "root", "-g", "root", "-m", "0600",
+                        str(stage / name), str(root / name)], check=True)
+    publish(status="IDLE", scheduler_state=load_state(STATE))
 PY
   test -f "$root/monitor/progress.json" && test ! -L "$root/monitor/progress.json"
   test "$(stat -c '%u:%a' "$root/monitor/progress.json")" = "0:644"

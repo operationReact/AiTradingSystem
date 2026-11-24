@@ -489,11 +489,10 @@ def publication_lock(directory: Path, *, timeout: float = 120):
             os.close(fd)
 
 
-def wait_for_previous_publisher(*, timeout: float = 720) -> None:
-    """Let an already-running legacy oneshot finish before adopting writer locks.
+def wait_for_previous_publisher(*, timeout: float = 780) -> None:
+    """Drain the existing oneshot after quiescing its timer.
 
-    No timer/service is stopped and no provider work is started. A new service
-    after this handover imports the installed module and uses publication_lock.
+    Never stop the service or interrupt provider work.
     """
     deadline = time.monotonic() + timeout
     while True:
@@ -511,6 +510,51 @@ def wait_for_previous_publisher(*, timeout: float = 720) -> None:
         if time.monotonic() >= deadline:
             raise ProgressUnavailable('PUBLICATION_HANDOVER_BUSY')
         time.sleep(2)
+
+
+_HISTORY_TIMER = 'minttick-owner-history.timer'
+
+
+def _history_timer_command(*args: str, failure: str) -> str:
+    try:
+        result = subprocess.run(['systemctl', *args], capture_output=True,
+                                text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        raise ProgressUnavailable(failure) from None
+    if result.returncode:
+        raise ProgressUnavailable(failure)
+    return result.stdout.strip()
+
+
+@contextmanager
+def quiesce_previous_publisher():
+    """Pause only future timer activations; restore the prior active state.
+
+    Keep the timer's enabled state unchanged. Never stop the running oneshot.
+    Drain before replacing legacy modules, and restore the timer on failures.
+    An initially inactive (including not-yet-installed) timer stays inactive.
+    """
+    stop_error = 'PUBLICATION_TIMER_QUIESCE_FAILED'
+    restore_error = 'PUBLICATION_TIMER_RESTORE_FAILED'
+    state = _history_timer_command('show', '--value', '-p', 'ActiveState',
+                                   _HISTORY_TIMER, failure=stop_error)
+    if state not in {'active', 'inactive'}:
+        raise ProgressUnavailable(stop_error)
+    restore = state == 'active'
+    try:
+        if restore:
+            _history_timer_command('stop', _HISTORY_TIMER, failure=stop_error)
+        if _history_timer_command('show', '--value', '-p', 'ActiveState',
+                                  _HISTORY_TIMER, failure=stop_error) != 'inactive':
+            raise ProgressUnavailable(stop_error)
+        wait_for_previous_publisher()
+        yield
+    finally:
+        if restore:
+            _history_timer_command('start', _HISTORY_TIMER, failure=restore_error)
+            if _history_timer_command('show', '--value', '-p', 'ActiveState',
+                                      _HISTORY_TIMER, failure=restore_error) != 'active':
+                raise ProgressUnavailable(restore_error)
 
 
 def publish(root: Path = ROOT, output: Path = OUTPUT, *,
