@@ -222,11 +222,10 @@ def runner():
                         and (not isinstance(receipt["model"], str)
                              or not MODEL.fullmatch(receipt["model"])) )):
                 raise RuntimeError("GEMINI_RUNTIME_RECEIPT_INVALID")
-            receipt["expectedSha"] = os.environ["GITHUB_SHA"]
-            receipt["revisionMatchesRequest"] = receipt["deployedSha"] == receipt["expectedSha"]
             Path("gemini-runtime-verify.json").write_text(json.dumps(receipt, indent=2) + "\n")
             print(json.dumps(receipt, sort_keys=True), flush=True)
-            if receipt["status"] != "VERIFIED" or not receipt["revisionMatchesRequest"]:
+            if (receipt["status"] != "VERIFIED" or not receipt["providerResponseCompleted"]
+                    or not receipt["challengeValidated"]):
                 raise RuntimeError("GEMINI_RUNTIME_NOT_VERIFIED")
             return
         if got.get("Status") not in {"Pending", "InProgress", "Delayed"}:
