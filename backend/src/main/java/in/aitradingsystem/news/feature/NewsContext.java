@@ -63,7 +63,7 @@ public record NewsContext(
     public static final List<String> LIMITATIONS = List.of(
         "Advisory LLM classification of article text. Direction is evidence direction, not a trade recommendation.",
         "analysisAvailableAt is the analysis creation time; it is the earliest moment the classification was knowable.",
-        "Source licence and redistribution rights for each source are not recorded by this context (BLOCKED).",
+        "Publisher source rights are checked at lookup for current approval and at the research cutoff; the returned annotation is not a reusable content licence or issuer certification.",
         "Research context only. It does not change candidacy, score, risk, sizing or order placement.");
 
     /** Copy with the deterministic F&amp;O underlying resolution attached. Does not change any news fact. */
