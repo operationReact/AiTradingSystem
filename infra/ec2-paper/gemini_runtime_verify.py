@@ -37,6 +37,52 @@ def expected_request():
             "secret_export": False, "orders": False, "database_writes": False}
 
 
+def valid_receipt(receipt):
+    allowed = {"status", "deployedSha", "model", "providerCallAttempted",
+               "providerResponseCompleted", "challengeValidated",
+               "requestIdPresent", "latencyMs", "httpStatus"}
+    states = {"FAILED", "INVALID_HOST", "BACKEND_UNAVAILABLE",
+              "UNPROVEN_BACKEND_REVISION", "GEMINI_NOT_SELECTED",
+              "GEMINI_BINDING_MISSING", "PROVIDER_CALL_FAILED", "VERIFIED"}
+    if not isinstance(receipt, dict) or set(receipt) != allowed:
+        return False
+    if not isinstance(receipt["status"], str) or receipt["status"] not in states:
+        return False
+    if receipt["deployedSha"] is not None and (
+            not isinstance(receipt["deployedSha"], str)
+            or not SHA.fullmatch(receipt["deployedSha"])):
+        return False
+    if receipt["model"] is not None and (
+            not isinstance(receipt["model"], str)
+            or not MODEL.fullmatch(receipt["model"])):
+        return False
+    for name in ("providerCallAttempted", "providerResponseCompleted",
+                 "challengeValidated", "requestIdPresent"):
+        if type(receipt[name]) is not bool:
+            return False
+    latency = receipt["latencyMs"]
+    if latency is not None and (type(latency) is not int or not 0 <= latency <= 60000):
+        return False
+    status = receipt["httpStatus"]
+    if status is not None and (type(status) is not int or not 100 <= status <= 599):
+        return False
+    if receipt["providerCallAttempted"] and (
+            receipt["deployedSha"] is None or receipt["model"] is None):
+        return False
+    completed = receipt["providerResponseCompleted"]
+    if completed and not (receipt["providerCallAttempted"]
+                          and receipt["challengeValidated"]
+                          and receipt["requestIdPresent"]):
+        return False
+    if receipt["status"] == "VERIFIED" and not (
+            completed and receipt["challengeValidated"]
+            and receipt["requestIdPresent"] and latency is not None):
+        return False
+    if completed and receipt["status"] != "VERIFIED":
+        return False
+    return True
+
+
 def valid_output(value):
     if not isinstance(value, dict) or set(value) != FIELDS:
         return False
@@ -212,15 +258,7 @@ def runner():
             if len(out) != 1 or not out[0].startswith(MARKER):
                 raise RuntimeError("GEMINI_RUNTIME_RECEIPT_INVALID")
             receipt = json.loads(out[0][len(MARKER):])
-            allowed = {"status", "deployedSha", "model", "providerCallAttempted", "providerResponseCompleted",
-                       "challengeValidated", "requestIdPresent", "latencyMs", "httpStatus"}
-            if (set(receipt) != allowed
-                    or (receipt["deployedSha"] is not None
-                        and (not isinstance(receipt["deployedSha"], str)
-                             or not SHA.fullmatch(receipt["deployedSha"])))
-                    or (receipt["model"] is not None
-                        and (not isinstance(receipt["model"], str)
-                             or not MODEL.fullmatch(receipt["model"])) )):
+            if not valid_receipt(receipt):
                 raise RuntimeError("GEMINI_RUNTIME_RECEIPT_INVALID")
             Path("gemini-runtime-verify.json").write_text(json.dumps(receipt, indent=2) + "\n")
             print(json.dumps(receipt, sort_keys=True), flush=True)

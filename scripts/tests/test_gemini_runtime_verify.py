@@ -45,6 +45,31 @@ class GeminiRuntimeVerifyTest(unittest.TestCase):
         self.assertEqual(0, error_body.tell())
         self.assertNotIn("secret", json.dumps(response))
 
+    def test_verified_receipt_requires_typed_consistent_runtime_evidence(self):
+        receipt = {
+            "status": "VERIFIED", "deployedSha": "a" * 40,
+            "model": "gemini-2.5-flash", "providerCallAttempted": True,
+            "providerResponseCompleted": True, "challengeValidated": True,
+            "requestIdPresent": True, "latencyMs": 1200, "httpStatus": None}
+        self.assertTrue(check.valid_receipt(receipt))
+        self.assertFalse(check.valid_receipt(dict(receipt, status=[])))
+        for field, invalid in (
+                ("providerResponseCompleted", "true"),
+                ("challengeValidated", 1),
+                ("requestIdPresent", False),
+                ("latencyMs", -1),
+                ("deployedSha", None),
+                ("model", None)):
+            candidate = dict(receipt)
+            candidate[field] = invalid
+            self.assertFalse(check.valid_receipt(candidate), field)
+        failed = dict(receipt, status="PROVIDER_CALL_FAILED",
+                      providerResponseCompleted=False, challengeValidated=False,
+                      requestIdPresent=False, latencyMs=50, httpStatus=429)
+        self.assertTrue(check.valid_receipt(failed))
+        failed["providerResponseCompleted"] = "false"
+        self.assertFalse(check.valid_receipt(failed))
+
     def test_no_provider_call_when_provider_not_selected(self):
         config = {"Image": "aitradingsystem-paper-backend-arm64:" + "a" * 40,
                   "Env": ["APP_BUILD_REVISION=" + "a" * 40,
