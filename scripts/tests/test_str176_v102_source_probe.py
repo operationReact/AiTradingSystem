@@ -29,8 +29,8 @@ class OriginalV102HostSourceTest(unittest.TestCase):
         seen=[]
         def runner(args,**kwargs):
             seen.append((args,kwargs))
-            return subprocess.CompletedProcess(args,0,"100:21:2\n","")
-        self.assertEqual(probe.query_counts(run=runner,root=self.root),(100,21,2))
+            return subprocess.CompletedProcess(args,0,"100:21:2:1:40\n","")
+        self.assertEqual(probe.query_counts(run=runner,root=self.root),(100,21,2,1,40))
         args,settings=seen[0]
         self.assertEqual(args[:3],["docker","compose","--env-file"])
         self.assertEqual(args[args.index("exec")+1:args.index("psql")],["-T","postgres"])
@@ -54,7 +54,15 @@ class OriginalV102HostSourceTest(unittest.TestCase):
                           "h.verified_at <= NOW()",
                           "oi.verified_at <= NOW()",
                           "s.retain_until >= CURRENT_DATE",
-                          "HAVING COUNT(DISTINCT session_date) >= 7"):
+                          "HAVING COUNT(DISTINCT session_date) >= 7",
+                          "required_rights(source_domain,permitted_use)",
+                          "('nse_fo_completed_ohlcv','RAW_RETENTION')",
+                          "('nse_fo_final_oi','MODEL_INFERENCE')",
+                          "('nse_fo_trading_calendar','MODEL_INFERENCE')",
+                          "revoked.receipt_status = 'REVOKED'",
+                          "fully_authorized_provider",
+                          "verified_at <= NOW()",
+                          "cal.source_domain='nse_fo_trading_calendar'"):
             self.assertIn(mandatory,sql)
         for forbidden in ("UPDATE ","INSERT INTO","DELETE FROM","DROP TABLE",
                           "placeOrder","submitOrder"):
@@ -64,15 +72,15 @@ class OriginalV102HostSourceTest(unittest.TestCase):
         calls=[]
         def runner(*args,**kwargs):
             calls.append(args)
-            return subprocess.CompletedProcess(args,0,"0:0:0\n","")
+            return subprocess.CompletedProcess(args,0,"0:0:0:0:0\n","")
         (self.root/".env").chmod(0o644)
         with self.assertRaisesRegex(ValueError,"EXACT_PRIVATE_RUNTIME_MISSING"):
             probe.query_counts(run=runner,root=self.root)
         self.assertFalse(calls)
 
     def test_error_nonaggregate_and_contradictory_counts_fail_closed(self):
-        for code,data in ((1,"0:0:0\n"),(0,"private\n"),(0,"4:8:1\n"),
-                          (0,"100:5:1\n"),(0,"100:21:2\nother\n")):
+        for code,data in ((1,"0:0:0:0:0\n"),(0,"private\n"),(0,"4:8:1:0:0\n"),
+                          (0,"100:5:1:0:0\n"),(0,"100:21:2:1:40\nother\n")):
             with self.subTest(code=code,data=data):
                 def runner(args,**kwargs):
                     return subprocess.CompletedProcess(args,code,data,"secret stderr")
@@ -80,10 +88,13 @@ class OriginalV102HostSourceTest(unittest.TestCase):
                     probe.query_counts(run=runner,root=self.root)
 
     def test_receipt_has_only_counts_and_never_certifies(self):
-        ok=probe.expected_receipt("ELIGIBILITY_MEASURED_NOT_CERTIFIED",(100,21,2))
+        ok=probe.expected_receipt("ELIGIBILITY_MEASURED_NOT_CERTIFIED",(100,21,2,1,40))
         self.assertEqual(ok["independentHistoricalCertified"],0)
         self.assertFalse(ok["brokerOrders"])
         self.assertFalse(ok["writes"])
+        self.assertEqual(ok["fullyAuthorizedProviders"],1)
+        self.assertEqual(ok["verifiedCalendarRows"],40)
+        self.assertEqual(ok["independentHistoricalCertified"],0)
         self.assertNotIn("contractKey",ok)
         line=probe.MARKER+json.dumps(ok)
         self.assertEqual(probe.parse_host_receipt(line),ok)
@@ -99,7 +110,9 @@ class OriginalV102HostSourceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             probe.parse_host_receipt(line+"a"*2500)
         with self.assertRaises(ValueError):
-            probe.expected_receipt("ELIGIBILITY_MEASURED_NOT_CERTIFIED",(1,2,3))
+            probe.expected_receipt("ELIGIBILITY_MEASURED_NOT_CERTIFIED",(1,2,3,0,0))
+        with self.assertRaises(ValueError):
+            probe.expected_receipt("ELIGIBILITY_MEASURED_NOT_CERTIFIED",(100,21,2,3,40))
 
     def test_exact_host_request_never_includes_broker_or_order_permission(self):
         self.assertEqual(probe.EXACT["account"],"098859530205")
