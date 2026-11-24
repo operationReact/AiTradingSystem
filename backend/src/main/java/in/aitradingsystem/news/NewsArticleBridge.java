@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import in.aitradingsystem.news.policy.NewsSourcePolicy.Use;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +35,7 @@ public class NewsArticleBridge {
     static final Duration FETCH_LOOKBACK = Duration.ofDays(2);
     static final Duration FUTURE_TOLERANCE = Duration.ofMinutes(5);
     static final int MAX_ROWS_PER_RUN = 500;
+    static final int MAX_EXCERPT_CHARS = 2000; // NewsService.ArticleInput contract.
 
     public enum Outcome { INGESTED, DUPLICATE, SKIPPED_UNAPPROVED_SOURCE, SKIPPED_INVALID_URL,
         SKIPPED_STALE, SKIPPED_FUTURE_DATED, SKIPPED_MISSING_FIELDS, SKIPPED_RIGHTS_NOT_PERMITTED, FAILED }
@@ -87,7 +89,7 @@ public class NewsArticleBridge {
         java.util.Map<Outcome, Integer> counts = new java.util.EnumMap<>(Outcome.class);
         if (approvedSources.isEmpty()) return counts;
         List<Row> rows = jdbc.sql("""
-                SELECT n.source, n.source_url, n.title, n.published_at
+                SELECT n.source, n.source_url, n.title, n.published_at, n.normalized_content
                   FROM news_item n
                  WHERE n.fetched_at >= :since
                    AND n.source IN (:sources)
@@ -99,18 +101,19 @@ public class NewsArticleBridge {
             .param("limit", MAX_ROWS_PER_RUN)
             .query((rs, n) -> new Row(rs.getString("source"), rs.getString("source_url"),
                 rs.getString("title"), rs.getTimestamp("published_at") == null ? null
-                    : rs.getTimestamp("published_at").toInstant()))
+                    : rs.getTimestamp("published_at").toInstant(), rs.getString("normalized_content")))
             .list();
 
         Instant startedAt = now;
         for (String source : approvedSources) {
             // Rights gate (MI-PR02): default-deny unless the stored policy permits ingest for this source now.
-            var rights = policy.decide(source, in.aitradingsystem.news.policy.NewsSourcePolicy.Use.INGEST, now);
-            if (!rights.permitted()) {
+            var rights = policy.decide(source, Use.INGEST, now);
+            var retentionRights = policy.decide(source, Use.RETAIN, now);
+            if (!rights.permitted() || !retentionRights.permitted()) {
                 long denied = rows.stream().filter(r -> source.equals(r.source())).count();
                 if (denied > 0) counts.merge(Outcome.SKIPPED_RIGHTS_NOT_PERMITTED, (int) denied, Integer::sum);
                 sourceHealth.record(source, startedAt, clock.instant(), "FAILED", (int) denied, 0, 0,
-                    "RIGHTS_NOT_PERMITTED", rights.name());
+                    "RIGHTS_NOT_PERMITTED", !rights.permitted() ? rights.name() : retentionRights.name());
                 continue;
             }
             List<ArticleInput> eligible = new ArrayList<>();
@@ -123,10 +126,10 @@ public class NewsArticleBridge {
                     counts.merge(gate, 1, Integer::sum);
                     continue;
                 }
-                // Provenance kept: source id, canonical source URL, publication time. Excerpt is not
-                // copied from the RSS body here; the analyzer reads title and the stored excerpt only.
+                // Preserve only the authorized, bounded RSS description. No article URL is fetched
+                // here. NewsAnalysisScheduler separately requires NLP_TRANSFER before provider calls.
                 eligible.add(new ArticleInput(r.source(), null, r.title().trim(), r.sourceUrl().trim(),
-                    null, r.publishedAt()));
+                    excerpt(r.normalizedContent()), r.publishedAt()));
             }
             int inserted = 0;
             int rowFailures = 0;
@@ -136,6 +139,14 @@ public class NewsArticleBridge {
                 // NewsService.ingest deduplicates on the normalized URL hash.
                 for (ArticleInput article : eligible) {
                     try {
+                        // A source can be revoked while the batch is being processed.
+                        Instant at = clock.instant();
+                        if (!policy.permitted(source, Use.INGEST, at)
+                            || !policy.permitted(source, Use.RETAIN, at)) {
+                            rowFailures++;
+                            counts.merge(Outcome.SKIPPED_RIGHTS_NOT_PERMITTED, 1, Integer::sum);
+                            continue;
+                        }
                         var result = news.ingest(new IngestRequest(List.of(article)));
                         inserted += result.inserted();
                         counts.merge(Outcome.INGESTED, result.inserted(), Integer::sum);
@@ -175,5 +186,11 @@ public class NewsArticleBridge {
         }
     }
 
-    record Row(String source, String sourceUrl, String title, Instant publishedAt) {}
+    /** Description provided by the licensed feed: no full-text scraping or unbounded model inputs. */
+    static String excerpt(String value) {
+        String normalized = NewsText.normalize(value, MAX_EXCERPT_CHARS);
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    record Row(String source, String sourceUrl, String title, Instant publishedAt, String normalizedContent) {}
 }
