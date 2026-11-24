@@ -134,6 +134,24 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         self.assertEqual(sum(len(rows)-8 for rows in universe.values()),
                          len(observed)+expected_purged)
 
+    def test_drawdown_uses_chronological_realized_exit_sessions(self):
+        # Deliberately insert out of order as overlapping expiry cohorts do.
+        nets={date(2026,10,5):-100,
+              date(2026,10,1):150,
+              date(2026,10,2):-80,
+              date(2026,10,6):40}
+        self.assertEqual(180,m.realized_drawdown_by_session(nets))
+        self.assertEqual(0,m.realized_drawdown_by_session({}))
+        self.assertEqual(50,m.realized_drawdown_by_session(
+            {date(2026,10,1):-50,date(2026,10,2):100}))
+        # Multiple exits on the same date contribute their net to the
+        # end-of-session realized curve, not an invented intraday ordering.
+        from collections import Counter
+        same_day=Counter()
+        same_day[date(2026,10,1)]+=100
+        same_day[date(2026,10,1)]-=100
+        self.assertEqual(0,m.realized_drawdown_by_session(same_day))
+
     def test_pinned_reference_signal_parity_and_no_lookahead(self):
         expiry=date(2026,12,24)
         days=[]
