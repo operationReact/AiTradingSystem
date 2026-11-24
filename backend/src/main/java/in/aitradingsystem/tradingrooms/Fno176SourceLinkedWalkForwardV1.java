@@ -178,7 +178,9 @@ public class Fno176SourceLinkedWalkForwardV1 {
         var afterCost=FnoHistoricalAfterCostWalkForwardV1.evaluate(
             STRATEGY,clock.instant(),split,true,completed);
         return new Report(CONTRACT,STRATEGY,
-            "SOURCE_LINKED_AFTER_COST_RESEARCH_ONLY_NOT_E2E",
+            "BLOCKED_NOT_HISTORICAL_E2E".equals(afterCost.state())
+                ? "SOURCE_LINKED_AFTER_COST_INPUT_BLOCKED_NOT_E2E"
+                : "SOURCE_LINKED_AFTER_COST_RESEARCH_ONLY_NOT_E2E",
             afterCost.reasonCode(),evidence.size(),training,outOfSample,
             candidates,completed.size(),List.copyOf(evidence),afterCost,
             false,false,false);
