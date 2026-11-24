@@ -25,6 +25,40 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class GoldenListingIdentityRepository {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+
+    /**
+     * Stricter news-research variant: broker token and the exact trading
+     * symbol must both agree with the separately attested, source-dated alias.
+     * Never infer issuer identity from a ticker similarity or today's master.
+     * An ambiguous token throws, even when one alias happens to match symbol.
+     */
+    public Optional<UUID> resolveExactSymbolAsOf(
+            String provider, String exchange, String providerToken,
+            String tradingSymbol, Instant decisionAt) {
+        if (tradingSymbol == null || tradingSymbol.isBlank()) {
+            throw new IllegalArgumentException("tradingSymbol is required");
+        }
+        Optional<UUID> candidate = resolveAsOf(provider, exchange, providerToken, decisionAt);
+        if (candidate.isEmpty()) return Optional.empty();
+        var cutoff = OffsetDateTime.ofInstant(decisionAt, ZoneOffset.UTC);
+        List<UUID> attested = jdbc.query("""
+                SELECT DISTINCT a.listing_id
+                  FROM golden_provider_symbol_alias a
+                 WHERE a.listing_id = ?
+                   AND a.provider = ?
+                   AND a.exchange = ?
+                   AND a.provider_token = ?
+                   AND upper(a.trading_symbol) = upper(?)
+                   AND a.valid_from <= ?
+                   AND (a.valid_to IS NULL OR a.valid_to > ?)
+                   AND a.first_available_at <= ?
+                 LIMIT 1
+                """, (rs, row) -> rs.getObject("listing_id", UUID.class),
+                candidate.get(), provider, exchange, providerToken,
+                tradingSymbol, cutoff, cutoff, cutoff);
+        return attested.isEmpty() ? Optional.empty() : candidate;
+    }
+
     private final JdbcTemplate jdbc;
 
     public GoldenListingIdentityRepository(JdbcTemplate jdbc) {
