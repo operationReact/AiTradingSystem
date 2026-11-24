@@ -44,6 +44,18 @@ class GoldenListingIdentityIT extends AbstractPostgresIT {
                 .contains(oldListing);
         assertThat(resolver.resolveAsOf("ANGEL_ONE", "NSE", token, AFTER_REUSE))
                 .contains(newListing);
+
+        // The new News Intelligence bridge must reject an old name for a
+        // recycled token, even if the token itself resolves to a new listing.
+        assertThat(resolver.resolveExactSymbolAsOf(
+                "ANGEL_ONE", "NSE", token, "FORMER-EQ", BEFORE_REUSE))
+                .contains(oldListing);
+        assertThat(resolver.resolveExactSymbolAsOf(
+                "ANGEL_ONE", "NSE", token, "NEW-EQ", AFTER_REUSE))
+                .contains(newListing);
+        assertThat(resolver.resolveExactSymbolAsOf(
+                "ANGEL_ONE", "NSE", token, "FORMER-EQ", AFTER_REUSE))
+                .isEmpty();
         assertThat(resolver.resolveAsOf("ANGEL_ONE", "BSE", token, AFTER_REUSE))
                 .isEmpty();
         assertThat(resolver.resolveAsOf("ANGEL_ONE", "NSE", token,
