@@ -14,7 +14,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
     // Integration tests share one Spring context and MockMvc client address. Keep the production
     // sensitive-mutation limit unchanged while preventing unrelated test classes from exhausting
     // one shared in-memory rate bucket. Dedicated SecurityHardeningFilterTest covers rate limiting.
-    "app.security.rate-limit.sensitive-requests-per-window=10000"
+    "app.security.rate-limit.sensitive-requests-per-window=10000",
+    // The 3k+ integration-test suite creates multiple Spring contexts against
+    // one runner-local PostgreSQL service. Default Hikari 10/10 idle pools
+    // exhaust PostgreSQL's connection slots before later contexts can start.
+    // Limit each fixture pool and retire unused connections promptly.
+    "spring.datasource.hikari.maximum-pool-size=3",
+    "spring.datasource.hikari.minimum-idle=0",
+    "spring.datasource.hikari.idle-timeout=10000"
 })
 public abstract class AbstractPostgresIT {
     public static final String API_KEY = "test-operator-key-0123456789";
