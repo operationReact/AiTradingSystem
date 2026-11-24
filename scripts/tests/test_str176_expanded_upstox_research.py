@@ -106,6 +106,34 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         self.assertEqual(len(set(provider.seen)),49)
         self.assertFalse(any("orders" in p for p in provider.seen))
 
+    def test_oos_decisions_cannot_overlap_training_contract_calendar(self):
+        from unittest.mock import patch
+        p=FakeAuthenticatedUpstox()
+        universe, metadata, _, _=m.retrieve_futures(
+            p.exps,"NSE_INDEX|Nifty 50",p.get)
+        training_end=sorted(metadata)[7]
+        oos_expiries=set(sorted(metadata)[8:])
+        expected_purged=sum(
+            1 for expiry in oos_expiries
+            for i in range(6,len(universe[metadata[expiry][0]])-2)
+            if universe[metadata[expiry][0]][i+1][0]<=training_end)
+        self.assertGreater(expected_purged,0)
+        observed=[]
+        def capture(window,expiry,as_of):
+            observed.append((expiry,as_of))
+            return "LONG"
+        with patch.object(m,"signal",side_effect=capture):
+            report=m.evaluate(universe,metadata,30)
+        self.assertEqual(expected_purged,report["purgedPreOosWindows"])
+        self.assertEqual(len(observed),report["decisionWindows"])
+        train_days=[d for expiry,d in observed if expiry not in oos_expiries]
+        oos_days=[d for expiry,d in observed if expiry in oos_expiries]
+        self.assertTrue(train_days and oos_days)
+        self.assertLess(max(train_days),min(oos_days))
+        self.assertTrue(all(d>training_end for d in oos_days))
+        self.assertEqual(sum(len(rows)-8 for rows in universe.values()),
+                         len(observed)+expected_purged)
+
     def test_pinned_reference_signal_parity_and_no_lookahead(self):
         expiry=date(2026,12,24)
         days=[]
