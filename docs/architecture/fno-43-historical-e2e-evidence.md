@@ -652,3 +652,24 @@ fills, or independently accepted cost-aware OOS market replay.
 **Historical independent E2E remains 0/43** until all acceptance criteria
 are independently met. No user-side licensing request, new AWS resource,
 PAPER order or LIVE execution is included.
+
+## Exact 90-day host pilot failed closed — sanitized reason follow-up
+
+The first protected source expansion [run #45370583109](
+https://github.com/operationReact/AiTradingSystem/actions/runs/45370583109)
+validated the exact owner EC2/SSM path but the nested host command returned
+non-success. Its original runner emitted only
+`BLOCKED_NO_SOURCE_RECEIPT`, which does not identify whether the upstream
+API rejected a historic range, the 12-month expired discovery was
+unavailable, or the strict midnight exchange-session parser rejected the
+provider response. **No expanded 90-day historical outcome or trading
+result has been observed or accepted from that run.**
+
+To diagnose safely, the source runner now exposes **one allowlisted symbolic
+block code only**, obtained from `StandardErrorContent` of that exact
+SSM invocation. All raw provider exceptions, account identifiers, contract
+keys, URLs, credentials and candle payloads are suppressed. A malformed,
+duplicate, excessively large, private or unrecognized error yields
+`UNCLASSIFIED_SOURCE_FAILURE`. The workflow still fails nonzero on a
+blocked host, never returns a synthetic success, never writes data or
+orders and never promotes STR-176 E2E certification.
