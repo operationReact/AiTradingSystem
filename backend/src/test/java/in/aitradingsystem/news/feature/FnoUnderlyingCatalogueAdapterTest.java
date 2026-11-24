@@ -1,6 +1,7 @@
 package in.aitradingsystem.news.feature;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import in.aitradingsystem.provider.upstox.UpstoxFnoInstrumentUniverse;
 import in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry;
@@ -39,7 +40,7 @@ class FnoUnderlyingCatalogueAdapterTest {
 
     @Test
     void absentCatalogueIsUnknownNeverNotListed() {
-        FnoUnderlyingPolicy.Resolution r = adapter(Optional.empty(), "DISCOVERY_NOT_VERIFIED").resolve("RELIANCE");
+        FnoUnderlyingPolicy.Resolution r = adapter(Optional.empty(), "DISCOVERY_NOT_VERIFIED").resolveAsOf("RELIANCE", FETCHED.plusSeconds(60));
         assertThat(r.status()).isEqualTo(FnoUnderlyingPolicy.Status.UNKNOWN_CATALOG);
         assertThat(r.underlying()).isNull();
         assertThat(r.catalogueSource()).contains("DISCOVERY_NOT_VERIFIED");
@@ -48,7 +49,7 @@ class FnoUnderlyingCatalogueAdapterTest {
     @Test
     void futuresUnderlyingIsListedWithCatalogueProvenance() {
         var a = adapter(Optional.of(snapshot(contract("RELIANCE", "FUT"), contract("RELIANCE", "CE"))), "LOADED");
-        FnoUnderlyingPolicy.Resolution r = a.resolve("RELIANCE");
+        FnoUnderlyingPolicy.Resolution r = a.resolveAsOf("RELIANCE", FETCHED.plusSeconds(60));
         assertThat(r.status()).isEqualTo(FnoUnderlyingPolicy.Status.LISTED_FNO);
         assertThat(r.underlying()).isEqualTo("RELIANCE");
         assertThat(r.catalogueSource()).contains("sha256=" + SHA).contains("fetchedAt=" + FETCHED);
@@ -57,34 +58,60 @@ class FnoUnderlyingCatalogueAdapterTest {
     @Test
     void optionsOnlyUnderlyingIsNotListedBecauseNoFuturesContractExists() {
         var a = adapter(Optional.of(snapshot(contract("ONLYOPT", "CE"), contract("ONLYOPT", "PE"))), "LOADED");
-        assertThat(a.resolve("ONLYOPT").status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf("ONLYOPT", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
     }
 
     @Test
     void indexUnderlyingResolvesFromItsOwnFuturesContract() {
         var a = adapter(Optional.of(snapshot(contract("NIFTY", "FUT"), contract("BANKNIFTY", "FUT"))), "LOADED");
-        assertThat(a.resolve("NIFTY").underlying()).isEqualTo("NIFTY");
-        assertThat(a.resolve("FINNIFTY").status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf("NIFTY", FETCHED.plusSeconds(60)).underlying()).isEqualTo("NIFTY");
+        assertThat(a.resolveAsOf("FINNIFTY", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
     }
 
     @Test
     void symbolNormalizationAndNearMissCollisionsAreHandled() {
         var a = adapter(Optional.of(snapshot(contract("RELIANCE", "FUT"))), "LOADED");
-        assertThat(a.resolve(" reliance ").status()).isEqualTo(FnoUnderlyingPolicy.Status.LISTED_FNO);
-        assertThat(a.resolve("RELIANCEX").status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
-        assertThat(a.resolve("RELIANC").status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf(" reliance ", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.LISTED_FNO);
+        assertThat(a.resolveAsOf("RELIANCEX", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf("RELIANC", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
     }
 
     @Test
     void otherUnderlyingsFuturesNeverLeakIntoAResolution() {
         var a = adapter(Optional.of(snapshot(contract("TCS", "FUT"))), "LOADED");
-        assertThat(a.resolve("INFY").status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf("INFY", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
     }
 
     @Test
     void blankBaseSymbolIsNotListedEvenWithACatalogue() {
         var a = adapter(Optional.of(snapshot(contract("TCS", "FUT"))), "LOADED");
-        assertThat(a.resolve("  ").status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
-        assertThat(a.resolve(null).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf("  ", FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
+        assertThat(a.resolveAsOf(null, FETCHED.plusSeconds(60)).status()).isEqualTo(FnoUnderlyingPolicy.Status.NOT_LISTED);
     }
+
+    @Test
+    void snapshotFetchedAfterDecisionCannotProveListedOrNotListed() {
+        var a = adapter(Optional.of(snapshot(contract("RELIANCE", "FUT"))), "LOADED");
+        for (String symbol : List.of("RELIANCE", "UNKNOWN")) {
+            var result = a.resolveAsOf(symbol, FETCHED.minusSeconds(1));
+            assertThat(result.status()).isEqualTo(FnoUnderlyingPolicy.Status.UNKNOWN_CATALOG);
+            assertThat(result.underlying()).isNull();
+            assertThat(result.catalogueSource()).contains("NO_CAUSAL_CATALOGUE");
+        }
+        assertThat(a.resolveAsOf("RELIANCE", FETCHED).status())
+            .isEqualTo(FnoUnderlyingPolicy.Status.LISTED_FNO);
+    }
+
+    @Test
+    void snapshotTooOldAtDecisionCannotProveMembership() {
+        var original = snapshot(contract("RELIANCE", "FUT"));
+        var stale = new FnoFuturesContractRegistry.UniverseSnapshot(
+            FETCHED.minusSeconds(37 * 3600), SHA, original.catalog());
+        var a = adapter(Optional.of(stale), "LOADED");
+        assertThat(a.resolveAsOf("RELIANCE", FETCHED).status())
+            .isEqualTo(FnoUnderlyingPolicy.Status.UNKNOWN_CATALOG);
+        assertThatThrownBy(() -> a.resolveAsOf("RELIANCE", Instant.now().plusSeconds(600)))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
 }
