@@ -270,6 +270,56 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
                          diagnostics["sourceFaultsByReason"])
         self.assertEqual(11,m.evaluate(source,meta,30)["eligibleFuturesCohorts"])
 
+    def test_timestamp_shape_audit_is_bounded_and_never_accepts_bad_rows(self):
+        first=date(2026,10,1)
+        last=date(2026,10,30)
+        def row(day,t):
+            return [day+"T"+t+IST,100,101,99,100,5,10]
+        for rows,time_shape,day_shape in (
+            ([row("2026-10-01","09:15:00")],
+             "SESSION_OPEN_ONLY","UNIQUE_SESSION_LABELS"),
+            ([row("2026-10-01","15:30:00")],
+             "SESSION_CLOSE_ONLY","UNIQUE_SESSION_LABELS"),
+            ([row("2026-10-01","12:00:00")],
+             "OTHER_NONMIDNIGHT_ONLY","UNIQUE_SESSION_LABELS"),
+            ([row("2026-10-01","09:15:00"),row("2026-10-01","00:00:00")],
+             "MIXED_MIDNIGHT_AND_NONMIDNIGHT","DUPLICATE_SESSION_LABELS"),
+            ([row("2026-10-01","09:15:00"),row("2026-10-02","15:30:00")],
+             "MIXED_NONMIDNIGHT","UNIQUE_SESSION_LABELS"),
+            ([row("2026-10-01","09:15:00"),["secret-invalid",100,101,99,100,5,10]],
+             "UNCLASSIFIED_TIMESTAMP_SHAPE","UNCLASSIFIED_SESSION_LABELS"),
+        ):
+            with self.subTest(shape=time_shape):
+                payload={"candles":rows}
+                self.assertEqual((time_shape,day_shape),
+                                 m.rejected_time_shape(payload,first,last))
+                with self.assertRaisesRegex(ValueError,"NONCANONICAL_DAILY_TIME"):
+                    m.decode_expired_chunk(payload,first,last)
+
+    def test_timestamp_shape_receipt_reconciles_and_rejects_private_fields(self):
+        p=FakeAuthenticatedUpstox()
+        damaged=months()[2].strftime("%d-%m-%Y")
+        def fetch(route):
+            result=p.get(route)
+            if "/historical-candle/" in route and damaged in route:
+                for row in result["candles"]:
+                    row[0]=row[0].replace("T00:00:00","T09:15:00")
+            return result
+        report=m.safe_receipt(m.research(fetch,date(2026,11,24)))
+        self.assertEqual({"SESSION_OPEN_ONLY":3},report["rejectedTimeShapes"])
+        self.assertEqual({"UNIQUE_SESSION_LABELS":3},report["rejectedDayShapes"])
+        self.assertEqual(11,report["eligibleFuturesCohorts"])
+        self.assertEqual(49,p.calls)
+        for field,value in (
+            ("rejectedTimeShapes",{"SESSION_OPEN_ONLY":2}),
+            ("rejectedTimeShapes",{"private-time":3}),
+            ("rejectedDayShapes",{"UNIQUE_SESSION_LABELS":True}),
+            ("rawProviderPayload","private"),
+        ):
+            with self.subTest(field=field),self.assertRaisesRegex(
+                    ValueError,"UNVERIFIED_EXTENDED_RESEARCH_RECEIPT"):
+                m.safe_receipt({**report,field:value})
+
     def test_all_faulty_cohorts_never_produce_evaluations_or_fake_success(self):
         p=FakeAuthenticatedUpstox()
         def fetch(route):
