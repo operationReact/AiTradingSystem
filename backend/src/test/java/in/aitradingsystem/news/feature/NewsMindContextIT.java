@@ -110,6 +110,54 @@ class NewsMindContextIT extends AbstractPostgresIT {
     }
 
     @Test
+    void revokedOrNewlyApprovedPublisherCannotLeakIntoHistoricalMindEvidence() {
+        String sym = symbol();
+        String a = article(sym, PUBLISHED);
+        analysis(a, ANALYZED, "ANALYZED", "[\"" + sym + "\"]", "POSITIVE",
+            "0.600", "0.800", "0.700", "INTRADAY", false);
+        assertThat(context(sym, ANALYZED.plusSeconds(120)).status())
+            .isEqualTo(NewsContext.STATUS_INCLUDED_EVIDENCE);
+
+        // A current revocation removes the source from new research reads.
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET license_state='REVOKED', updated_at=now()
+                 WHERE source_id='TEST-SOURCE'
+                """).update();
+        NewsContext revoked = context(sym, ANALYZED.plusSeconds(120));
+        assertThat(revoked.status()).isEqualTo(NewsContext.STATUS_NO_COVERAGE);
+        assertThat(revoked.evidence()).isEmpty();
+
+        // Even an APPROVED row with a retroactive effective date cannot be
+        // treated as a historical approval if the review was entered later.
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET license_state='APPROVED', updated_at=now()
+                 WHERE source_id='TEST-SOURCE'
+                """).update();
+        assertThat(context(sym, ANALYZED.plusSeconds(120)).status())
+            .isEqualTo(NewsContext.STATUS_NO_COVERAGE);
+    }
+
+    @Test
+    void publisherDateAloneCannotBackdateAnArticleFetchedAfterTheResearchSignal() {
+        String sym = symbol();
+        String url = "https://news.example.test/future-ingest/" + UUID.randomUUID();
+        // Do NOT rewrite ingested_at for this fixture: the published date
+        // is old, but this article was first stored *after* the historical scan.
+        news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
+            "TEST-SOURCE", null, "Headline " + sym, url, "Late known source", PUBLISHED))));
+        String id = jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+            .param("url", url).query(String.class).single();
+        analysis(id, ANALYZED, "ANALYZED", "[\"" + sym + "\"]", "POSITIVE",
+            "0.600", "0.800", "0.700", "INTRADAY", false);
+
+        NewsContext historical = context(sym, ANALYZED.plusSeconds(120));
+        assertThat(historical.status()).isEqualTo(NewsContext.STATUS_NO_COVERAGE);
+        assertThat(historical.evidence()).isEmpty();
+    }
+
+    @Test
     void verifiedAnalysisIsIncludedOnlyAfterItBecameKnowable() {
         String sym = symbol();
         String a = article(sym, PUBLISHED);
