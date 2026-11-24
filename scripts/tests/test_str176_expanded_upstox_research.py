@@ -145,6 +145,23 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"INVALID_SOURCE_SESSION"):
             m.decode_expired_chunk(wrong,start,end)
 
+    def test_missing_or_oversized_authenticated_response_is_diagnosed_without_raw_data(self):
+        first=date(2026,10,1)
+        last=date(2026,10,30)
+        for payload,reason in [
+            (None,"HISTORICAL_DATA_OBJECT_MISSING"),
+            ([],"HISTORICAL_DATA_OBJECT_MISSING"),
+            ({},"HISTORICAL_CANDLE_ARRAY_MISSING"),
+            ({"candles":None},"HISTORICAL_CANDLE_ARRAY_MISSING"),
+            ({"candles":[["masked"]]*31},"HISTORICAL_CANDLE_WINDOW_OVERSIZED")
+        ]:
+            with self.assertRaisesRegex(ValueError,"^"+reason+"$"):
+                m.decode_expired_chunk(payload,first,last)
+            self.assertEqual(reason,m.safe_block_code(ValueError(reason)))
+        for arbitrary in ("raw token=Bearer abc","NSE_FO|private_key"):
+            self.assertEqual("UNCLASSIFIED_SOURCE_FAILURE",
+                m.safe_block_code(ValueError(arbitrary)))
+
     def test_missing_one_expiry_never_reports_fully_qualified(self):
         p=FakeAuthenticatedUpstox(empty=months()[5])
         r=m.safe_receipt(m.research(p.get,date(2026,11,24)))
