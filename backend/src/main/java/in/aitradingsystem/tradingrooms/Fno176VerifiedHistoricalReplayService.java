@@ -154,6 +154,20 @@ public final class Fno176VerifiedHistoricalReplayService {
             prior = day;
         }
 
+        // Seven consecutive bars are insufficient if a more recent completed
+        // exchange session is absent. Reject stale-but-in-range windows instead
+        // of scoring an earlier breakout as if it were the latest decision.
+        for (var gap = prior.plusDays(1); !gap.isAfter(last); gap = gap.plusDays(1)) {
+            final boolean sessionExpected;
+            try {
+                sessionExpected = calendar.isTradingDay(gap);
+            } catch (RuntimeException unavailable) {
+                return denied("STR176_VERIFIED_CALENDAR_UNAVAILABLE", 0);
+            }
+            if (sessionExpected)
+                return denied("STR176_VERIFIED_CALENDAR_SESSION_GAP", rows.size());
+        }
+
         List<FnoFuturesHistoricalReplayBridgeV1.HistoricalBar> history = new ArrayList<>();
         for (var proof : lastSeven) {
             var b = proof.bar();
