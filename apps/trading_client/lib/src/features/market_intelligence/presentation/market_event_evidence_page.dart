@@ -31,7 +31,9 @@ class _MarketEventEvidencePageState extends State<MarketEventEvidencePage> {
   }
 
   void _reload() {
-    setState(() => _detail = widget.repository.detail(widget.eventId));
+    // Future creation must happen outside setState; the callback is synchronous.
+    final next = widget.repository.detail(widget.eventId);
+    setState(() { _detail = next; });
   }
 
   @override
