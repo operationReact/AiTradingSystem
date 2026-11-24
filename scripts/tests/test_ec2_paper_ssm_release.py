@@ -192,6 +192,13 @@ class PaperSsmRelease(unittest.TestCase):
             with self.subTest(keyword=keyword):self.assertIn(keyword,host)
         self.assertNotIn("docker volume rm",host)
         self.assertNotIn("aws ec2 start-instances",host)
+        preflight=(EC2/"ssm_preflight.sh").read_text()
+        self.assertIn("STR176_INTAKE enabled=",preflight)
+        self.assertIn("reviewerKeyPresent=",preflight)
+        self.assertIn("backendConfigWired=",preflight)
+        self.assertIn("readonlyMount=",preflight)
+        self.assertIn("MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_REVIEWER_PUBLIC_KEY",preflight)
+        self.assertNotIn("echo \"$key\"",preflight)
         for name in ("ssm_apply_release.sh","ssm_preflight.sh"):
             result=subprocess.run(["bash","-n",str(EC2/name)],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
