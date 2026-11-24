@@ -63,6 +63,12 @@ void main() {
     expect(find.byKey(const ValueKey('news-health-events')), findsOneWidget);
     expect(find.text('NOT VERIFIED'), findsOneWidget);
     expect(find.text('GEMINI_API_KEY'), findsNothing);
+    // The dense status page is intentionally scrollable on a mobile viewport.
+    await tester.scrollUntilVisible(
+      find.text('FICTIONAL PUBLISHER'), 180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('FICTIONAL PUBLISHER'), findsOneWidget);
     expect(find.textContaining('REVIEW_PENDING'), findsOneWidget);
     expect(repo.calls, 1);
