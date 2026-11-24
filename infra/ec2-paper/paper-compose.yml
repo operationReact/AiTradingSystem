@@ -130,9 +130,16 @@ services:
       AI_RESEARCH_WORKER_CLIENT_ENABLED: "false"
       AI_RESEARCH_WORKER_READINESS_ENABLED: "false"
       OFFICIAL_SOURCE_SCHEDULER_ENABLED: "false"
-      NEWS_INGESTION_ENABLED: "false"
-      # Reuse existing host-local Gemini settings without selecting a provider
-      # or starting news analysis automatically. Secrets stay on this host.
+      # News and AI paths remain off unless protected host-local runtime.env
+      # explicitly opts in. Source policy separately gates ingest, retention,
+      # display and Gemini transfer. Provider credentials stay backend-only.
+      NEWS_INGESTION_ENABLED: ${NEWS_INGESTION_ENABLED:-false}
+      NEWS_EVENT_LEDGER_ENABLED: ${NEWS_EVENT_LEDGER_ENABLED:-false}
+      NEWS_SUMMARIZATION_ENABLED: ${NEWS_SUMMARIZATION_ENABLED:-false}
+      NEWS_ANALYZER_BRIDGE_ENABLED: ${NEWS_ANALYZER_BRIDGE_ENABLED:-false}
+      NEWS_ANALYSIS_SCHEDULER_ENABLED: ${NEWS_ANALYSIS_SCHEDULER_ENABLED:-false}
+      NEWS_MIND_CONTEXT_ENABLED: ${NEWS_MIND_CONTEXT_ENABLED:-false}
+      NEWS_ANALYZER_APPROVED_SOURCES: ${NEWS_ANALYZER_APPROVED_SOURCES:-}
       NEWS_ANALYSIS_PROVIDER: ${NEWS_ANALYSIS_PROVIDER:-NONE}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

@@ -33,7 +33,12 @@ class PaperAppRuntimeContract(unittest.TestCase):
             '"127.0.0.1:8088:8080"',
             '"10.87.0.10:8081:8080"',
             "https://www.minttick.com",
-            'NEWS_INGESTION_ENABLED: "false"',
+            'NEWS_INGESTION_ENABLED: ${NEWS_INGESTION_ENABLED:-false}',
+            'NEWS_EVENT_LEDGER_ENABLED: ${NEWS_EVENT_LEDGER_ENABLED:-false}',
+            'NEWS_SUMMARIZATION_ENABLED: ${NEWS_SUMMARIZATION_ENABLED:-false}',
+            'NEWS_ANALYZER_BRIDGE_ENABLED: ${NEWS_ANALYZER_BRIDGE_ENABLED:-false}',
+            'NEWS_ANALYSIS_SCHEDULER_ENABLED: ${NEWS_ANALYSIS_SCHEDULER_ENABLED:-false}',
+            'NEWS_MIND_CONTEXT_ENABLED: ${NEWS_MIND_CONTEXT_ENABLED:-false}',
             'OFFICIAL_SOURCE_SCHEDULER_ENABLED: "false"',
             'AI_RESEARCH_WORKER_CLIENT_ENABLED: "false"',
             'APP_DEV_SESSION_BOOTSTRAP_ENABLED: "false"',
@@ -120,7 +125,14 @@ class PaperAppRuntimeContract(unittest.TestCase):
         env.update(POSTGRES_PASSWORD="fixture-unused", APP_API_KEY="fixture-unused", RELEASE_SHA="0" * 40)
         for configured in (False, True):
             if configured:
-                env.update(NEWS_ANALYSIS_PROVIDER="GEMINI", GEMINI_MODEL="fixture-model",
+                env.update(NEWS_INGESTION_ENABLED="true",
+                           NEWS_EVENT_LEDGER_ENABLED="true",
+                           NEWS_SUMMARIZATION_ENABLED="true",
+                           NEWS_ANALYZER_BRIDGE_ENABLED="true",
+                           NEWS_ANALYSIS_SCHEDULER_ENABLED="true",
+                           NEWS_MIND_CONTEXT_ENABLED="true",
+                           NEWS_ANALYZER_APPROVED_SOURCES="moneycontrol",
+                           NEWS_ANALYSIS_PROVIDER="GEMINI", GEMINI_MODEL="fixture-model",
                            GEMINI_API_KEY="fixture-gemini-key")
             p = subprocess.run(["docker", "compose", "--env-file", "/dev/null", "-f", str(COMPOSE),
                                 "config", "--format", "json"], env=env, capture_output=True, text=True)
@@ -130,9 +142,15 @@ class PaperAppRuntimeContract(unittest.TestCase):
             self.assertEqual("GEMINI" if configured else "NONE", backend["NEWS_ANALYSIS_PROVIDER"])
             self.assertEqual("fixture-gemini-key" if configured else "", backend["GEMINI_API_KEY"])
             self.assertEqual("fixture-model" if configured else "gemini-2.5-flash", backend["GEMINI_MODEL"])
-            self.assertEqual("false", backend["NEWS_INGESTION_ENABLED"])
+            expected_flag = "true" if configured else "false"
+            for flag in (
+                "NEWS_INGESTION_ENABLED", "NEWS_EVENT_LEDGER_ENABLED",
+                "NEWS_SUMMARIZATION_ENABLED", "NEWS_ANALYZER_BRIDGE_ENABLED",
+                "NEWS_ANALYSIS_SCHEDULER_ENABLED", "NEWS_MIND_CONTEXT_ENABLED",
+            ):
+                self.assertEqual(expected_flag, backend[flag], flag)
+            self.assertEqual("moneycontrol" if configured else "", backend["NEWS_ANALYZER_APPROVED_SOURCES"])
             self.assertEqual("PAPER", backend["TRADING_MODE"])
-            self.assertNotIn("NEWS_ANALYSIS_SCHEDULER_ENABLED", backend)
             for name, service in services.items():
                 if name != "backend":
                     self.assertNotIn("GEMINI_API_KEY", service.get("environment", {}))
