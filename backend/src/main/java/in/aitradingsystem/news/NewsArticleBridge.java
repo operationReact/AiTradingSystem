@@ -101,7 +101,7 @@ public class NewsArticleBridge {
             .param("limit", MAX_ROWS_PER_RUN)
             .query((rs, n) -> new Row(rs.getString("source"), rs.getString("source_url"),
                 rs.getString("title"), rs.getTimestamp("published_at") == null ? null
-                    : rs.getTimestamp("published_at").toInstant(), rs.getString("normalized_content"))
+                    : rs.getTimestamp("published_at").toInstant(), rs.getString("normalized_content")))
             .list();
 
         Instant startedAt = now;
