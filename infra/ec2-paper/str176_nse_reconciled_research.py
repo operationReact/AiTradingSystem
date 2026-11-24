@@ -213,10 +213,19 @@ def safe_receipt(r):
                    for k in ("parsedUpstoxSourceSha256","exchangeArchiveSetSha256"))):
         raise ValueError("NSE_RECONCILE_RECEIPT_INVALID")
     # Reuse all existing numerical, partition, OOS and cost validation contracts.
-    compatible={**r,"state":"RESEARCH_EXTENDED_EOD_NOT_CERTIFIED",
-                "metadataGets":13,"historyGets":36,"sourceDayRange":90,
-                "sourceCaptureType":"AUTHENTICATED_RECEIVED_NOW_NOT_HISTORICAL_FIRST_KNOWN",
-                "quarantinedFuturesCohorts":0,"rejectedHistoryChunks":0,"sourceFaultsByReason":{}}
+    # The core receipt now rejects unknown keys; the exchange-specific
+    # receipt has its own strict allowlist above. Project only common fields.
+    exchange_only={"exchangeGets","originalEligibleCohorts",
+                   "originalUpstoxQuarantinedCohorts","exchangeReconciledCohorts",
+                   "exchangeSourceBars","midnightOhlcDisagreements",
+                   "parsedUpstoxSourceSha256","exchangeArchiveSetSha256",
+                   "calendarCompletenessVerified"}
+    compatible={k:v for k,v in r.items() if k not in exchange_only}
+    compatible.update(state="RESEARCH_EXTENDED_EOD_NOT_CERTIFIED",
+                metadataGets=13,historyGets=36,sourceDayRange=90,
+                sourceCaptureType="AUTHENTICATED_RECEIVED_NOW_NOT_HISTORICAL_FIRST_KNOWN",
+                quarantinedFuturesCohorts=0,rejectedHistoryChunks=0,sourceFaultsByReason={},
+                rejectedTimeShapes={},rejectedDayShapes={})
     core.safe_receipt(compatible)
     return r
 
