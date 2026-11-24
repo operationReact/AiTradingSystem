@@ -1,6 +1,8 @@
 package in.aitradingsystem.news;
 
 import in.aitradingsystem.news.policy.NewsSourcePolicy.Use;
+import in.aitradingsystem.config.NewsProperties;
+import in.aitradingsystem.news.analysis.NewsAnalysisProvider;
 import in.aitradingsystem.news.policy.NewsSourcePolicyService;
 import java.time.Duration;
 import java.time.Instant;
@@ -26,14 +28,19 @@ public class NewsIntelligenceAdminHealthController {
     private final NewsSourcePolicyService policy;
     private final JdbcTemplate jdbc;
     private final Environment environment;
+    private final NewsProperties newsProperties;
+    private final List<NewsAnalysisProvider> providers;
 
     public NewsIntelligenceAdminHealthController(
         NewsSourceHealthRepository sourceHealth, NewsSourcePolicyService policy,
-        JdbcTemplate jdbc, Environment environment) {
+        JdbcTemplate jdbc, Environment environment, NewsProperties newsProperties,
+        List<NewsAnalysisProvider> providers) {
         this.sourceHealth = sourceHealth;
         this.policy = policy;
         this.jdbc = jdbc;
         this.environment = environment;
+        this.newsProperties = newsProperties;
+        this.providers = List.copyOf(providers);
     }
 
     @GetMapping("/health")
@@ -63,11 +70,29 @@ public class NewsIntelligenceAdminHealthController {
                 run == null ? null : run.errorCode());
         }).toList();
 
-        String provider = environment.getProperty("app.news.provider", "NONE").trim().toUpperCase();
-        String model = environment.getProperty("app.news.gemini-model", "");
-        boolean credentialBound =
-            environment.getProperty("app.news.gemini-api-key", "") != null
-            && !environment.getProperty("app.news.gemini-api-key", "").isBlank();
+        // Use the same bound properties and provider implementations as NewsAnalysisService.
+        String provider = newsProperties.provider();
+        String model = newsProperties.geminiModel();
+        var gemini = providers.stream().filter(p -> "GEMINI".equals(p.name())).findFirst();
+        boolean credentialBound = gemini.map(NewsAnalysisProvider::configured).orElse(false);
+        var selected = providers.stream().filter(p -> provider.equals(p.name())).findFirst();
+        boolean selectedReady = selected.map(NewsAnalysisProvider::configured).orElse(false);
+
+        // A persisted, schema-validated analysis receipt is evidence of recorded processing,
+        // not independent proof that the remote service was contacted in this deployment.
+        Long geminiReceipts = jdbc.queryForObject("""
+            SELECT count(*) FROM news_analyses
+             WHERE provider = 'GEMINI' AND model = ? AND status = 'ANALYZED'
+               AND provider_request_id IS NOT NULL AND btrim(provider_request_id) <> ''
+               AND response_fingerprint ~ '^[a-f0-9]{64}$'
+               AND request_fingerprint ~ '^[a-f0-9]{64}$'
+               AND prompt_hash ~ '^[a-f0-9]{64}$'
+               AND source_available_at <= created_at AND created_at <= CURRENT_TIMESTAMP
+            """, Long.class, model);
+        String readiness = !"GEMINI".equals(provider) ? "GEMINI_NOT_SELECTED"
+            : !selectedReady ? "GEMINI_NOT_CONFIGURED"
+            : geminiReceipts != null && geminiReceipts > 0
+                ? "RECORDED_ANALYSIS_RECEIPTS_PRESENT" : "CONFIGURED_NO_RECORDED_RECEIPT";
 
         return new Health(
             now,
@@ -76,7 +101,8 @@ public class NewsIntelligenceAdminHealthController {
             bool("app.news.analyzer-bridge.enabled"),
             bool("app.news.analysis-scheduler.enabled"),
             bool("app.news.mind-context.enabled"),
-            new Model(provider, model, credentialBound, false),
+            new Model(provider, model, credentialBound, false, selectedReady,
+                geminiReceipts == null ? 0L : geminiReceipts, readiness),
             count("news_ingest_receipt"),
             count("news_canonical_event"),
             count("news_event_version"),
@@ -94,7 +120,9 @@ public class NewsIntelligenceAdminHealthController {
     }
 
     public record Model(String selectedProvider, String configuredGeminiModel,
-                        boolean geminiKeyConfigured, boolean realProviderCallVerified) {}
+                        boolean geminiKeyConfigured, boolean realProviderCallVerified,
+                        boolean selectedProviderConfigured, long recordedGeminiAnalysisReceipts,
+                        String geminiReadiness) {}
 
     public record Source(String sourceId, String publisher, String rightsState,
                          boolean canIngest, boolean canRetain, boolean canDisplay,
