@@ -93,6 +93,24 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         self.assertEqual(result["decisionWindows"],
                          sum(result["diagnosticReasons"].values()))
         self.assertTrue(set(result["diagnosticReasons"])<=replay.REASONS)
+        by_source=result["diagnosticReasonsBySource"]
+        self.assertEqual({"NSE_PUBLIC_EOD","UPSTOX_PRIVATE"},set(by_source))
+        self.assertEqual(result["decisionWindows"],
+            sum(sum(group.values()) for group in by_source.values()))
+        for reason,count in result["diagnosticReasons"].items():
+            self.assertEqual(count,sum(group.get(reason,0)
+                                      for group in by_source.values()))
+        bad=dict(result)
+        bad["diagnosticReasonsBySource"]={
+            "NSE_PUBLIC_EOD":by_source["NSE_PUBLIC_EOD"],
+            "UPSTOX_PRIVATE":{"EXPIRY_OUT_OF_SCOPE":999}}
+        with self.assertRaisesRegex(ValueError,"STR176_PRIVATE_RECEIPT_INVALID"):
+            replay.safe_receipt(bad)
+        bad=dict(result)
+        bad["diagnosticReasonsBySource"]={"UPSTOX_PRIVATE":
+                                           by_source["UPSTOX_PRIVATE"]}
+        with self.assertRaisesRegex(ValueError,"STR176_PRIVATE_RECEIPT_INVALID"):
+            replay.safe_receipt(bad)
         self.assertEqual("RESEARCH_SIMULATED_AFTER_COST_NOT_CERTIFIED",result["state"])
         self.assertFalse(result["historicalStrategyE2ECertified"])
         self.assertFalse(result["providerFirstPublishedAtVerified"])
@@ -163,6 +181,14 @@ class OwnerRetrospectiveTests(unittest.TestCase):
             sum(v for k,v in out["counts"].items() if k.startswith("reason:")))
         self.assertIsInstance(out["oosNetPaise"],int)
         self.assertGreaterEqual(out["oosMaxDrawdownPaise"],0)
+        # A provider/source change within the same seven-bar contract window
+        # is not a legitimate way to improve the research pass percentage.
+        bad={key:list(rows) for key,rows in groups.items()}
+        key=next(iter(bad))
+        old=bad[key][0]
+        bad[key][0]=(*old[:-1],"UPSTOX_PRIVATE")
+        with self.assertRaisesRegex(ValueError,"MIXED_OR_UNVERIFIED_ORIGINAL_SOURCE"):
+            replay.evaluate(bad,metadata)
 
     def test_fake_identity_and_false_certification_receipt_are_blocked(self):
         self.assertEqual("BLOCKED",replay.momentum([],date(2026,12,24),

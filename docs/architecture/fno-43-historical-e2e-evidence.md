@@ -575,3 +575,33 @@ label: `VOLUME_LIFT_LOW`, `VOLUME_TO_OI_LOW`, or
 `BOTH_VOLUME_FILTERS_LOW`. Exact unit provenance must be cross-checked
 against the exchange before any normalization or strategy threshold change.
 No success/certification flags change.
+
+## Independent source-class localization of STR-176 historical participation failures
+
+The exact owner PAPER source-custody run
+[#45366112030](https://github.com/operationReact/AiTradingSystem/actions/runs/45366112030)
+measured 75 retrospective futures decision windows on 171 real canonical
+NIFTY FUT bars across 12 actual contracts. Breakdown:
+44 `EXPIRY_OUT_OF_SCOPE`,
+17 `VOLUME_LIFT_LOW`,
+2 `VOLUME_TO_OI_LOW`,
+7 `BOTH_VOLUME_FILTERS_LOW`,
+5 `BREAKOUT_NOT_CONFIRMED`, 0 qualified long/short signals.
+
+The next read-only source diagnosis keeps every trading-signal threshold
+and cost unchanged. `diagnosticReasonsBySource` partitions those same
+**75** window outcomes by *existing* original-custody category:
+`UPSTOX_PRIVATE` vs `NSE_PUBLIC_EOD`. Every window is counted once.
+The aggregate provider-class reason counts must reconcile exactly to
+`diagnosticReasons` and the total decision count before the private host
+can emit a bounded receipt; mixed source classes inside a seven-session
+contract fail closed. No futures keys, OHLC prices, OI values, source
+timestamps, user credentials, or market payloads leave the host.
+
+This establishes whether the 17 low volume-growth and 7 dual low-volume
+results are concentrated in one upstream data class and warrant
+a raw-source contract-volume/lot-size normalization audit. It does **not**
+assert the NSE and Upstox volume/OI units are already equal, change
+eligibility, bypass the 44 correctly rejected near-expiry windows, or
+turn retrospective simulated opens into actual source-proven fills.
+Independent historical certification stays at **0/43**.

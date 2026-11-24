@@ -238,9 +238,15 @@ def evaluate(groups, metadata, *, cost_bps=COST_BPS):
         for index in range(6,len(rows)-2):
             first=rows[index]
             decision_day=rows[index+1][0]
-            decision,why=momentum(rows[index-6:index+1],expiry,decision_day,details=True)
+            observed=rows[index-6:index+1]
+            source_class=observed[-1][7]
+            if (source_class not in EXPECTED
+                    or any(item[7]!=source_class for item in observed)):
+                raise ValueError("MIXED_OR_UNVERIFIED_ORIGINAL_SOURCE")
+            decision,why=momentum(observed,expiry,decision_day,details=True)
             if why not in REASONS:raise ValueError("UNKNOWN_EVALUATOR_REASON")
             counters["reason:"+why]+=1
+            counters["sourceReason:"+source_class+":"+why]+=1
             counters["decisionWindows"]+=1
             if decision=="BLOCKED":
                 counters["dataBlockedWindows"]+=1
@@ -295,6 +301,14 @@ def run_research(root=ROOT,now=None,fetch=None):
         "sourceFuturesContracts":counts.get("futuresCohorts",0),
         "diagnosticReasons":{k[7:]:v for k,v in counts.items()
                              if k.startswith("reason:")},
+        # Source-class only: the canonical cache contains original-provenance
+        # labels but futures keys, dates, prices and OI must never leave host.
+        "diagnosticReasonsBySource":{
+            source:{reason:counts["sourceReason:"+source+":"+reason]
+                    for reason in sorted(REASONS)
+                    if counts.get("sourceReason:"+source+":"+reason,0)>0}
+            for source in sorted(EXPECTED)
+        },
         "decisionWindows":counts.get("decisionWindows",0),
         "evaluatorWindows":counts.get("researchEvaluatorRuns",0),
         "candidateWindows":counts.get("candidateWindows",0),
@@ -331,6 +345,17 @@ def safe_receipt(r):
             or any(type(value) is not int or not 0<=value<=MAX_ROWS
                    for value in reasons.values())
             or sum(reasons.values())!=r.get("decisionWindows")):
+        raise ValueError("STR176_PRIVATE_RECEIPT_INVALID")
+    by_source=r.get("diagnosticReasonsBySource")
+    if (not isinstance(by_source,dict)
+            or set(by_source)!=set(EXPECTED)
+            or any(not isinstance(v,dict) or set(v)-REASONS
+                   or any(type(n) is not int or not 0<n<=MAX_ROWS
+                          for n in v.values())
+                   for v in by_source.values())
+            or sum(sum(v.values()) for v in by_source.values())!=r.get("decisionWindows")
+            or any(sum(v.get(reason,0) for v in by_source.values())!=count
+                   for reason,count in reasons.items())):
         raise ValueError("STR176_PRIVATE_RECEIPT_INVALID")
     for k in ("sourceFuturesRows","sourceFuturesContracts","decisionWindows",
               "evaluatorWindows","candidateWindows","simulatedRoundTrips",
