@@ -104,4 +104,34 @@ class NewsArticleBridgeIT extends AbstractPostgresIT {
         bridge(List.of()).runOnce();
         assertThat(articleCount(url)).isZero();
     }
+
+    /**
+     * A row that passes the RSS-side gate but cannot be stored (a URL longer than the analyzer store's
+     * 2000-character column) must make the source PARTIAL, never SUCCESS. The good row still publishes.
+     */
+    @Test
+    void rowFailureMakesSourceHealthPartialNotSuccess() {
+        String suffix = UUID.randomUUID().toString();
+        String goodUrl = "https://www.moneycontrol.com/news/partial-good-" + suffix + ".html";
+        String oversizedUrl = "https://www.moneycontrol.com/news/partial-long-" + suffix + "-"
+            + "a".repeat(2100) + ".html";
+        rssRow("moneycontrol", goodUrl, "Good headline", Instant.now().minusSeconds(600));
+        rssRow("moneycontrol", oversizedUrl, "Oversized URL headline", Instant.now().minusSeconds(600));
+
+        try {
+            bridge(List.of("moneycontrol")).runOnce();
+
+            assertThat(articleCount(goodUrl)).isEqualTo(1);
+            assertThat(articleCount(oversizedUrl)).isZero();
+            var latest = health.latest().stream()
+                .filter(h -> "moneycontrol".equals(h.source())).findFirst();
+            assertThat(latest).isPresent();
+            assertThat(latest.get().status()).isEqualTo("PARTIAL");
+            assertThat(latest.get().errorCode()).isEqualTo("ROW_INGEST_FAILED");
+            assertThat(latest.get().errorDetail()).contains("eligible rows failed");
+        } finally {
+            // The oversized fixture row would otherwise make other tests' runs PARTIAL. Remove it.
+            jdbc.sql("DELETE FROM news_item WHERE source_url = :url").param("url", oversizedUrl).update();
+        }
+    }
 }
