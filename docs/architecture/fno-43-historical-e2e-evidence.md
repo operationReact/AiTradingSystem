@@ -523,3 +523,36 @@ Progress checkpoints to report after actual host run are:
 `simulatedRoundTrips`, `trainingTrades`, `outOfSampleTrades`,
 `oosNetPaise`, `oosMaxDrawdownPaise`, and the fixed fail reason.
 A passing offline fixture is NOT evidence those actual host counters exist.
+
+## 2026-11-24 REAL host STR-176 first retrospective result and reason audit
+
+The protected real owner host job [GitHub run #45363819619](
+https://github.com/operationReact/AiTradingSystem/actions/runs/45363819619)
+successfully read **3,929** real source-attributed canonical research rows,
+authenticated **12** Upstox futures contract metadata responses, selected
+**12** futures contracts with **171** daily futures rows, and attempted **75**
+seven-session decision windows. **31** passed the structural evaluator input
+gate, **44** were rejected at input eligibility, **0** met the unchanged
+STR-176 momentum thresholds, and **0** next-open one-lot trades existed
+to feed the train/OOS after-cost simulator (0 TRAIN, 0 OOS).
+All source data remained private, no host writes/orders, and accepted
+independent historical strategies remain **0/43**.
+
+This is now an actual owner-private retrospective input test rather than
+only unit-test coverage; **41.3% (31/75) is an input-eligible historical
+window fraction, NOT a strategy certification percentage.**
+
+Reason-aware version: `momentum(window,...,details=True)` returns its
+identical original research decision *plus* one fixed non-sensitive diagnostic
+reason. It categorizes missing sessions/OI/volume, source-session gaps,
+future-expiry eligibility, stale source, price-range/gap outliers, absent
+baseline, low participation, missing breakout, long/short breakout.
+Every attempted window contributes **exactly one** diagnostic reason;
+aggregate counts cannot leave the host unless they sum to the total input
+window count. No thresholds, first-known assumptions, cached market values,
+trade executions or rights records were changed. The next exact reviewed
+read-only owner-host request will expose the **actual** reason histogram,
+without instrument identifiers, prices or private broker values.
+
+Do **not** optimize the 100-bps breakout/11,000-bps volume lift or 20-bps
+minimum cost-adjusted edge solely to manufacture trading signals.
