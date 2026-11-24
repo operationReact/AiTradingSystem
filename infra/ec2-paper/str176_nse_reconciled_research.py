@@ -213,10 +213,19 @@ def safe_receipt(r):
                    for k in ("parsedUpstoxSourceSha256","exchangeArchiveSetSha256"))):
         raise ValueError("NSE_RECONCILE_RECEIPT_INVALID")
     # Reuse all existing numerical, partition, OOS and cost validation contracts.
-    compatible={**r,"state":"RESEARCH_EXTENDED_EOD_NOT_CERTIFIED",
-                "metadataGets":13,"historyGets":36,"sourceDayRange":90,
-                "sourceCaptureType":"AUTHENTICATED_RECEIVED_NOW_NOT_HISTORICAL_FIRST_KNOWN",
-                "quarantinedFuturesCohorts":0,"rejectedHistoryChunks":0,"sourceFaultsByReason":{}}
+    # The core receipt now rejects unknown keys; the exchange-specific
+    # receipt has its own strict allowlist above. Project only common fields.
+    exchange_only={"exchangeGets","originalEligibleCohorts",
+                   "originalUpstoxQuarantinedCohorts","exchangeReconciledCohorts",
+                   "exchangeSourceBars","midnightOhlcDisagreements",
+                   "parsedUpstoxSourceSha256","exchangeArchiveSetSha256",
+                   "calendarCompletenessVerified"}
+    compatible={k:v for k,v in r.items() if k not in exchange_only}
+    compatible.update(state="RESEARCH_EXTENDED_EOD_NOT_CERTIFIED",
+                metadataGets=13,historyGets=36,sourceDayRange=90,
+                sourceCaptureType="AUTHENTICATED_RECEIVED_NOW_NOT_HISTORICAL_FIRST_KNOWN",
+                quarantinedFuturesCohorts=0,rejectedHistoryChunks=0,sourceFaultsByReason={},
+                rejectedTimeShapes={},rejectedDayShapes={})
     core.safe_receipt(compatible)
     return r
 
@@ -236,12 +245,20 @@ def host():
 
 
 def bundle():
+    # Strip only lexical comments for transport, preserving strings, executable
+    # tokens, module identity and the existing fixed SSM payload size guard.
+    import io
+    import tokenize
+    def transport(source):
+        return tokenize.untokenize(t for t in
+            tokenize.generate_tokens(io.StringIO(source).readline)
+            if t.type!=tokenize.COMMENT)
     root=Path(__file__).resolve().parent
     prefix="import sys,types\n"
     for name in MODULES:
-        source=(root/(name+".py")).read_text()
+        source=transport((root/(name+".py")).read_text())
         prefix+=f"m=types.ModuleType({name!r});sys.modules[{name!r}]=m;exec({source!r},m.__dict__)\n"
-    return (prefix+Path(__file__).read_text()).replace(
+    return (prefix+transport(Path(__file__).read_text())).replace(
         "from __future__ import annotations\n","").encode()
 
 

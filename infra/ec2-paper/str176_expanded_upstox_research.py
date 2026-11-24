@@ -155,6 +155,45 @@ QUARANTINE_CODES=frozenset((
     "DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS",
 ))
 
+# Shape-only audit of rejected chunks: no raw times, dates, keys or values
+# leave the owner host. Classification never makes an invalid candle eligible.
+TIME_SHAPES=frozenset((
+    "SESSION_OPEN_ONLY", "SESSION_CLOSE_ONLY", "OTHER_NONMIDNIGHT_ONLY",
+    "MIXED_MIDNIGHT_AND_NONMIDNIGHT", "MIXED_NONMIDNIGHT",
+    "UNCLASSIFIED_TIMESTAMP_SHAPE",
+))
+DAY_SHAPES=frozenset((
+    "UNIQUE_SESSION_LABELS", "DUPLICATE_SESSION_LABELS",
+    "UNCLASSIFIED_SESSION_LABELS",
+))
+
+def rejected_time_shape(payload, first, last):
+    times=set()
+    days=set()
+    duplicate=False
+    for row in payload["candles"]:
+        if not isinstance(row,list) or len(row)!=7 or not isinstance(row[0],str):
+            return "UNCLASSIFIED_TIMESTAMP_SHAPE","UNCLASSIFIED_SESSION_LABELS"
+        try:
+            dt=datetime.fromisoformat(row[0])
+        except ValueError:
+            return "UNCLASSIFIED_TIMESTAMP_SHAPE","UNCLASSIFIED_SESSION_LABELS"
+        if dt.utcoffset()!=timedelta(hours=5,minutes=30) or not first<=dt.date()<=last:
+            return "UNCLASSIFIED_TIMESTAMP_SHAPE","UNCLASSIFIED_SESSION_LABELS"
+        t=(dt.hour,dt.minute,dt.second,dt.microsecond)
+        times.add({(0,0,0,0):"MIDNIGHT",(9,15,0,0):"OPEN",
+                   (15,30,0,0):"CLOSE"}.get(t,"OTHER"))
+        duplicate |= dt.date() in days
+        days.add(dt.date())
+    if "MIDNIGHT" in times and len(times)>1:
+        shape="MIXED_MIDNIGHT_AND_NONMIDNIGHT"
+    elif times=={"OPEN"}:shape="SESSION_OPEN_ONLY"
+    elif times=={"CLOSE"}:shape="SESSION_CLOSE_ONLY"
+    elif times=={"OTHER"}:shape="OTHER_NONMIDNIGHT_ONLY"
+    elif "MIDNIGHT" not in times and len(times)>1:shape="MIXED_NONMIDNIGHT"
+    else:shape="UNCLASSIFIED_TIMESTAMP_SHAPE"
+    return shape,("DUPLICATE_SESSION_LABELS" if duplicate else "UNIQUE_SESSION_LABELS")
+
 def retrieve_futures(expiries, underlying, fetch, *, max_requests=49,
                      diagnostics=None):
     """fetch: trusted Upstox Discovery.get, gives parsed provider original data.
@@ -169,6 +208,8 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49,
     universe={}
     by_expiry={}
     faults=Counter()
+    time_shapes=Counter()
+    day_shapes=Counter()
     quarantine_count=0
     metadata_requests=0
     history_requests=0
@@ -200,6 +241,10 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49,
                 if len(exc.args)!=1 or exc.args[0] not in QUARANTINE_CODES:
                     raise
                 faults[exc.args[0]]+=1
+                if exc.args[0]=="HISTORICAL_NONCANONICAL_DAILY_TIME":
+                    time_shape,day_shape=rejected_time_shape(payload,start,end)
+                    time_shapes[time_shape]+=1
+                    day_shapes[day_shape]+=1
                 quarantined=True
         rows.sort(key=lambda item:item[0])
         if len(rows)>SOURCE_DAYS or sum(1 for r in rows if r[-1]!=SOURCE):
@@ -217,7 +262,9 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49,
     if diagnostics is not None:
         diagnostics.update(quarantinedFuturesCohorts=quarantine_count,
                            rejectedHistoryChunks=sum(faults.values()),
-                           sourceFaultsByReason=dict(sorted(faults.items())))
+                           sourceFaultsByReason=dict(sorted(faults.items())),
+                           rejectedTimeShapes=dict(sorted(time_shapes.items())),
+                           rejectedDayShapes=dict(sorted(day_shapes.items())))
     return universe,by_expiry,metadata_requests,history_requests
 
 def bps(num,denom):
@@ -395,6 +442,21 @@ def safe_receipt(r):
             or r.get("certifiedStrategies")!=0
             or r.get("orders") is not False or r.get("writes") is not False):
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    # Never forward unknown fields, even when every expected counter is valid.
+    expected_fields=set("""
+        state sourceFuturesBars eligibleFuturesCohorts decisionWindows
+        windowOutcomesBySplit purgedPreOosWindows evaluatedWindows blockedWindows
+        candidateWindows overlappingCandidatesSkipped modeledTrades trainingTrades
+        outOfSampleTrades outOfSampleLosses trainingNetPaise outOfSampleNetPaise
+        outOfSampleMaxDrawdownPaise quarantinedFuturesCohorts rejectedHistoryChunks
+        sourceFaultsByReason rejectedTimeShapes rejectedDayShapes providerGets
+        metadataGets historyGets sourceDayRange frictionBps oosNetAt20BpsPaise
+        oosNetAt50BpsPaise authenticSourceOriginalFirstPublishedAtVerified
+        sourceCaptureType independentHistoricalE2ECertified certifiedStrategies
+        orders writes
+    """.split())
+    if set(r)!=expected_fields:
+        raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     faults=r.get("sourceFaultsByReason")
     quarantined=r.get("quarantinedFuturesCohorts")
     rejected=r.get("rejectedHistoryChunks")
@@ -405,6 +467,13 @@ def safe_receipt(r):
             or sum(faults.values())!=rejected
             or not quarantined<=rejected<=quarantined*3):
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    for field,allowed in (("rejectedTimeShapes",TIME_SHAPES),
+                          ("rejectedDayShapes",DAY_SHAPES)):
+        shapes=r[field]
+        if (type(shapes) is not dict or set(shapes)-allowed
+                or any(type(v) is not int or not 1<=v<=36 for v in shapes.values())
+                or sum(shapes.values())!=faults.get("HISTORICAL_NONCANONICAL_DAILY_TIME",0)):
+            raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     for k in ("sourceFuturesBars","eligibleFuturesCohorts",
               "decisionWindows","purgedPreOosWindows","evaluatedWindows","blockedWindows",
               "candidateWindows","overlappingCandidatesSkipped",
