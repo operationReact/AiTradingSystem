@@ -12,6 +12,7 @@ import 'mind_fno_auto_paper_panel.dart';
 import 'mind_fno_research_panel.dart';
 import '../data/mind_evidence_repository.dart';
 import '../data/mind_decision_history_repository.dart';
+import '../data/mind_verified_news_repository.dart';
 import '../data/mind_decision_outcomes_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
@@ -119,6 +120,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.evidenceRepository,
     this.strategyReplayRepository,
     this.decisionHistoryRepository,
+    this.verifiedNewsRepository,
     this.decisionOutcomesRepository,
     this.walkForwardRepository,
     this.prospectiveRepository,
@@ -151,6 +153,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   final MindEvidenceRepository? evidenceRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
   final MindDecisionHistoryRepository? decisionHistoryRepository;
+  final MindVerifiedNewsRepository? verifiedNewsRepository;
   final MindDecisionOutcomesRepository? decisionOutcomesRepository;
   final MindMaWalkForwardRepository? walkForwardRepository;
   final MindProspectiveCohortRepository? prospectiveRepository;

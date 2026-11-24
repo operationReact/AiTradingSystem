@@ -33,6 +33,7 @@ import 'features/mintick_mind/data/mind_fno_live_proposal_repository.dart';
 import 'features/mintick_mind/data/mind_fno_auto_paper_repository.dart';
 import 'features/mintick_mind/data/mind_evidence_repository.dart';
 import 'features/mintick_mind/data/mind_decision_history_repository.dart';
+import 'features/mintick_mind/data/mind_verified_news_repository.dart';
 import 'features/mintick_mind/data/mind_decision_outcomes_repository.dart';
 import 'features/mintick_mind/data/mind_strategy_replay_repository.dart';
 import 'features/mintick_mind/data/mind_ma_walkforward_repository.dart';
@@ -230,6 +231,7 @@ class _TradingAppState extends State<TradingApp> {
                 evidenceRepository: HttpMindEvidenceRepository(_api),
                 strategyReplayRepository: HttpMindStrategyReplayRepository(_api),
                 decisionHistoryRepository: HttpMindDecisionHistoryRepository(_api),
+                verifiedNewsRepository: HttpMindVerifiedNewsRepository(_api),
                 decisionOutcomesRepository: HttpMindDecisionOutcomesRepository(_api),
                 walkForwardRepository: HttpMindMaWalkForwardRepository(_api),
                 prospectiveRepository: HttpMindProspectiveCohortRepository(_api),

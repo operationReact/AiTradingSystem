@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/mintick_mind/data/mind_decision_history_repository.dart';
+import 'package:trading_client/src/features/mintick_mind/data/mind_verified_news_repository.dart';
 import 'package:trading_client/src/features/mintick_mind/presentation/mind_workspace_page.dart';
 
 Map<String, dynamic> record({
@@ -48,12 +49,29 @@ class _HistoryRepo implements MindDecisionHistoryRepository {
   }
 }
 
-Future<void> openDecisionLab(WidgetTester tester, MindDecisionHistoryRepository repo) async {
+class _VerifiedNewsRepo implements MindVerifiedNewsRepository {
+  int calls = 0;
+  int? requestedId;
+  DateTime? requestedCutoff;
+
+  @override
+  Future<MindVerifiedNewsEvidence> verifiedAt({required int instrumentId, required DateTime asOf}) async {
+    calls++;
+    requestedId = instrumentId;
+    requestedCutoff = asOf;
+    throw StateError('Evidence unavailable');
+  }
+}
+
+Future<void> openDecisionLab(WidgetTester tester, MindDecisionHistoryRepository repo,
+    {MindVerifiedNewsRepository? verifiedNews}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(1440, 2400);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(MaterialApp(home: MintickMindWorkspacePage(decisionHistoryRepository: repo)));
+  await tester.pumpWidget(MaterialApp(home: MintickMindWorkspacePage(
+    decisionHistoryRepository: repo, verifiedNewsRepository: verifiedNews,
+  )));
   await tester.pumpAndSettle();
   final nav = find.byKey(const ValueKey('mind-route-decision-lab'));
   await tester.ensureVisible(nav);
@@ -117,6 +135,25 @@ void main() {
     await openDecisionLab(tester, _HistoryRepo(history([]), fail: true));
     expect(find.byKey(const ValueKey('mind-decision-history-error')), findsOneWidget);
     expect(find.textContaining('Decision history unavailable'), findsOneWidget);
+  });
+
+  testWidgets('verified issuer evidence is fetched only on demand using recorded ID and cutoff', (tester) async {
+    final verified = _VerifiedNewsRepo();
+    await openDecisionLab(tester, _HistoryRepo(history([
+      record(fingerprint: 'aaaaaaaaaaaaaaaa', cutoff: '2026-11-13T09:30:30Z')..['instrumentId'] = 4242,
+      record(fingerprint: 'bbbbbbbbbbbbbbbb'),
+    ])), verifiedNews: verified);
+    final button = find.byKey(const ValueKey('mind-verified-news-aaaaaaaaaaaaaaaa'));
+    expect(button, findsOneWidget);
+    expect(find.byKey(const ValueKey('mind-verified-news-bbbbbbbbbbbbbbbb')), findsNothing);
+    expect(verified.calls, 0);
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(verified.calls, 1);
+    expect(verified.requestedId, 4242);
+    expect(verified.requestedCutoff, DateTime.parse('2026-11-13T09:30:30Z'));
+    expect(find.byKey(const ValueKey('verified-news-unavailable')), findsOneWidget);
   });
 
   group('news impact (#1809)', () {

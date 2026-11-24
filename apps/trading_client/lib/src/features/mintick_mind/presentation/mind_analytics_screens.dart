@@ -561,7 +561,8 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       ],
       if(widget.decisionHistoryRepository!=null) ...[
         MindDecisionHistoryPanel(key:const ValueKey('mind-decision-history-panel'),
-          repository:widget.decisionHistoryRepository!),
+          repository:widget.decisionHistoryRepository!,
+           verifiedNewsRepository:widget.verifiedNewsRepository),
         const SizedBox(height:12),
       ],
       if(replay!=null) ...[
