@@ -157,7 +157,7 @@ class OwnerRetrospectiveTests(unittest.TestCase):
         for mandatory in ("?mode=ro","PRAGMA query_only=ON",
                           "sourceFuturesContracts","providerFirstPublishedAtVerified",
                           "COST_BPS=30","historicalStrategyE2ECertified",
-                          "original", "SOURCE_VERSION"):
+                          "OWNER_END", "SOURCE_VERSION"):
             self.assertIn(mandatory,script)
         for forbidden in ("placeOrder","submitOrder",
                           "INSERT INTO","UPDATE fno_", "put-parameter"):
