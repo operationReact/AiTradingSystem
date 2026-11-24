@@ -154,6 +154,27 @@ class Fno176VerifiedHistoricalReplayServiceTest {
             service(true,true,true).inspect(KEY,AS_OF).reasonCode());
     }
 
+    @Test void missingMostRecentCompletedSessionCannotReplayStaleBreakout(){
+        var rows=new ArrayList<FnoVerifiedCompletedOhlcvOiStore.ReplayProofBar>();
+        rows.add(bar(LocalDate.of(2026,11,10),0));
+        for (int i=0;i<6;i++) rows.add(bar(DATES[i],i+1));
+        eligible(rows);
+        var missing=LocalDate.of(2026,11,19);
+        var blocked=service(true,true,true).inspect(KEY,AS_OF);
+        assertEquals("STR176_VERIFIED_CALENDAR_SESSION_GAP",blocked.reasonCode());
+        assertNull(blocked.replay());
+        assertFalse(blocked.brokerOrdersPlaced());
+        when(calendar.isTradingDay(missing)).thenReturn(false);
+        var holiday=service(true,true,true).inspect(KEY,AS_OF);
+        assertEquals("SOURCE_JOINED_EVALUATOR_RAN",holiday.state());
+        assertFalse(holiday.independentlyVerifiedHistoricalE2E());
+        when(calendar.isTradingDay(missing)).thenThrow(
+            new IllegalStateException("calendar unavailable"));
+        var unavailable=service(true,true,true).inspect(KEY,AS_OF);
+        assertEquals("STR176_VERIFIED_CALENDAR_UNAVAILABLE",unavailable.reasonCode());
+        assertNull(unavailable.replay());
+    }
+
     @Test void calendarOutageInSourceOrMissingSessionCheckIsFailClosed(){
         eligible(sourceBars());
         when(calendar.isTradingDay(DATES[0]))
