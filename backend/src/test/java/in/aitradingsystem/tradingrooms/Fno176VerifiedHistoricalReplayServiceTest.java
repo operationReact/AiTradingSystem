@@ -154,6 +154,32 @@ class Fno176VerifiedHistoricalReplayServiceTest {
             service(true,true,true).inspect(KEY,AS_OF).reasonCode());
     }
 
+    @Test void calendarOutageInSourceOrMissingSessionCheckIsFailClosed(){
+        eligible(sourceBars());
+        when(calendar.isTradingDay(DATES[0]))
+            .thenThrow(new IllegalStateException("private calendar source unavailable"));
+        var sourceOutage=service(true,true,true).inspect(KEY,AS_OF);
+        assertEquals("STR176_VERIFIED_CALENDAR_UNAVAILABLE",sourceOutage.reasonCode());
+        assertEquals("BLOCKED_NOT_HISTORICAL_E2E",sourceOutage.state());
+        assertNull(sourceOutage.replay());
+        assertFalse(sourceOutage.independentlyVerifiedHistoricalE2E());
+        assertFalse(sourceOutage.paperTradingReady());
+        assertFalse(sourceOutage.liveTradingReady());
+        assertFalse(sourceOutage.brokerOrdersPlaced());
+
+        reset(calendar);
+        eligible(sourceBars());
+        // The first actual gap is Saturday 14 Nov, between Friday and Monday.
+        // A calendar outage here must not be interpreted as "non-trading".
+        when(calendar.isTradingDay(LocalDate.of(2026,11,14)))
+            .thenThrow(new IllegalStateException("calendar unavailable on gap"));
+        var gapOutage=service(true,true,true).inspect(KEY,AS_OF);
+        assertEquals("STR176_VERIFIED_CALENDAR_UNAVAILABLE",gapOutage.reasonCode());
+        assertEquals("BLOCKED_NOT_HISTORICAL_E2E",gapOutage.state());
+        assertNull(gapOutage.replay());
+        assertFalse(gapOutage.brokerOrdersPlaced());
+    }
+
     @Test void rejectedScopeAndUnavailableSqlCannotLeakBrokerErrors(){
         assertEquals("STR176_DECISION_SCOPE_INVALID",
             service(true,true,true).inspect("NSE_EQ|NOT_FNO",AS_OF).reasonCode());
