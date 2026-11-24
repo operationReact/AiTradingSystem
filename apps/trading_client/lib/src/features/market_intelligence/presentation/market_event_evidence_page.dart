@@ -24,15 +24,22 @@ class MarketEventEvidencePage extends StatefulWidget {
 class _MarketEventEvidencePageState extends State<MarketEventEvidencePage> {
   late Future<MarketEventDetail> _detail;
 
+  // Schedule the actual request after FutureBuilder has subscribed. A cached
+  // 403/404 result or a synchronous fake-repository exception must not escape
+  // the tap handler before the new error future is observed.
+  Future<MarketEventDetail> _loadEvidence() async {
+    await Future<void>.delayed(Duration.zero);
+    return widget.repository.detail(widget.eventId);
+  }
+
   @override
   void initState() {
     super.initState();
-    _detail = widget.repository.detail(widget.eventId);
+    _detail = _loadEvidence();
   }
 
   void _reload() {
-    // Future creation must happen outside setState; the callback is synchronous.
-    final next = widget.repository.detail(widget.eventId);
+    final next = _loadEvidence();
     setState(() { _detail = next; });
   }
 
