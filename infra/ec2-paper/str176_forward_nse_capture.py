@@ -36,7 +36,7 @@ REQUEST=Path("infra/ec2-paper/requests/str176-forward-nse-capture.json")
 MARKER="MINTTICK_STR176_FORWARD_NSE:"
 KIND="minttick-str176-owner-forward-nse-original-v1"
 EXACT={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTANCE,
-       "session_date":"2026-11-24","max_archive_gets":1,
+       "session_date":"2026-11-23","max_archive_gets":1,
        "owner_confirmed_private_research_retention":True,
        "no_market_export":True,"no_orders":True,"no_rights_change":True}
 SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
@@ -99,9 +99,12 @@ def require_scope(day,now):
     if not cutoff<=now.astimezone(IST)<=cutoff+timedelta(hours=36):
         raise Blocked("SOURCE_OBSERVATION_WINDOW_EXPIRED")
 
+def archive_url(day):
+    return ("https://nsearchives.nseindia.in/content/fo/BhavCopy_NSE_FO_0_0_0_"
+            +day.strftime("%Y%m%d")+"_F_0000.csv.zip")
+
 def acquire(day, opener=None):
-    url=("https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_"
-         +day.strftime("%Y%m%d")+"_F_0000.csv.zip")
+    url=archive_url(day)
     req=urllib.request.Request(url,method="GET",headers={
         "Accept":"application/zip","User-Agent":"MintTick-Personal-Research/1.0"})
     try:
