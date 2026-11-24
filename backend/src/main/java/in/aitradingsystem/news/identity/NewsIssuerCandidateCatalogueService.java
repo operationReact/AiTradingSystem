@@ -67,7 +67,8 @@ public class NewsIssuerCandidateCatalogueService {
         if (item == null || item.instrumentId() < 1
             || item.tradingSymbol() == null || item.tradingSymbol().isBlank()
             || item.symbolToken() == null || item.symbolToken().isBlank()
-            || item.expiry() != null || item.strike() != null
+            || item.expiry() != null
+            || (item.strike() != null && item.strike().signum() != 0)
             || !("EQ".equalsIgnoreCase(item.instrumentType()))) return false;
         return ("NSE".equals(item.exchange()) && "NSE_CM".equals(item.exchangeSegment())
                 && item.tradingSymbol().endsWith("-EQ"))
