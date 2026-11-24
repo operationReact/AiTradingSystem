@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.scanner.ResearchScanRepository;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
@@ -13,6 +14,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +37,26 @@ class NewsMindContextIT extends AbstractPostgresIT {
     @Autowired ResearchScanRepository scans;
     @Autowired MockMvc mvc;
 
+    @BeforeEach
+    void sourceRightsFixturePredatesHistoricalResearch() {
+        // Fictional rights timestamps prove a synthetic historical scenario; they
+        // are NOT evidence of approval for any actual news publisher.
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "TEST-SOURCE");
+        jdbc.sql("""
+                UPDATE news_source_policy
+                   SET effective_from = :known, updated_at = :known
+                 WHERE source_id = 'TEST-SOURCE'
+                """)
+            .param("known", OffsetDateTime.ofInstant(
+                Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC))
+            .update();
+    }
+
+    @AfterEach
+    void restoreDefaultDeny() {
+        NewsSourcePolicyTestSupport.resetToPending(jdbc, "TEST-SOURCE");
+    }
+
     /** Unique base symbol per test so shared database rows cannot interfere. */
     private static String symbol() {
         return "T" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
@@ -43,8 +66,18 @@ class NewsMindContextIT extends AbstractPostgresIT {
         String url = "https://news.example.test/markets/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
             "TEST-SOURCE", null, "Headline for " + sym, url, "Excerpt " + sym, publishedAt))));
-        return jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+        String id = jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
             .param("url", url).query(String.class).single();
+        // Backdate the *fictional test ingestion*, not the production pipeline.
+        // Without this, real ingestion would have occurred days after the as-of
+        // scan and must be excluded by the new point-in-time gate.
+        jdbc.sql("""
+                UPDATE news_articles SET ingested_at = :observed
+                 WHERE id = CAST(:id AS uuid)
+                """)
+            .param("observed", OffsetDateTime.ofInstant(publishedAt, ZoneOffset.UTC))
+            .param("id", id).update();
+        return id;
     }
 
     private void analysis(String articleId, Instant createdAt, String status, String symbols,
