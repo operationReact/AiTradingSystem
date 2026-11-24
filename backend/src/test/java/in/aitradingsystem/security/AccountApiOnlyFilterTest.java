@@ -172,6 +172,11 @@ class AccountApiOnlyFilterTest {
             assertPasses("GET", "/api/customer/mind/v1/" + research);
             assertBlocked("POST", "/api/customer/mind/v1/" + research);
         }
+        assertPasses("GET", "/api/customer/mind/v1/verified-news-evidence");
+        assertPasses("OPTIONS", "/api/customer/mind/v1/verified-news-evidence");
+        assertBlocked("POST", "/api/customer/mind/v1/verified-news-evidence");
+        assertBlocked("DELETE", "/api/customer/mind/v1/verified-news-evidence");
+        assertBlocked("GET", "/api/customer/mind/v1/verified-news-evidence/raw");
         assertBlocked("GET", "/api/customer/mind/v1/prospective-entry-causality");
         assertBlocked("DELETE", "/api/customer/mind/v1/paper-journal");
         String cycles = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/paper-cycles";
