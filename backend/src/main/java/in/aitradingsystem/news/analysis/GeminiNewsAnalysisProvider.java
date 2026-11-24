@@ -3,6 +3,7 @@ package in.aitradingsystem.news.analysis;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.config.NewsProperties;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -10,6 +11,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
     private static final String BASE_URL = "https://generativelanguage.googleapis.com";
+
+    /** Process-local observation only. No response content, IDs, prompts or credentials. */
+    public record RuntimeObservation(Instant finishedAt, String outcome) {}
+    private volatile RuntimeObservation latestObservation;
+
+    public RuntimeObservation latestObservation() {
+        return latestObservation;
+    }
+
+    private synchronized void observe(String outcome) {
+        latestObservation = new RuntimeObservation(Instant.now(), outcome);
+    }
 
     public GeminiNewsAnalysisProvider(NewsProperties props, ObjectMapper mapper) {
         super(BASE_URL, props, mapper);
@@ -35,22 +48,30 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
         if (!configured()) {
             throw new AiProviderException(AiErrorCode.UNCONFIGURED, "GEMINI_API_KEY is not set");
         }
-        JsonNode root = post(
-            "/v1/interactions",
-            Map.of("x-goog-api-key", props.geminiApiKey()),
-            requestBody(systemPrompt, userPrompt));
-        if (!"completed".equals(root.path("status").asText())) {
-            throw new AiProviderException(
-                AiErrorCode.INVALID_RESPONSE,
-                "GEMINI interaction did not complete");
+        try {
+            JsonNode root = post(
+                "/v1/interactions",
+                Map.of("x-goog-api-key", props.geminiApiKey()),
+                requestBody(systemPrompt, userPrompt));
+            if (root == null || !"completed".equals(root.path("status").asText())) {
+                throw new AiProviderException(
+                    AiErrorCode.INVALID_RESPONSE,
+                    "GEMINI interaction did not complete");
+            }
+            JsonNode usage = root.path("usage");
+            Completion completion = new Completion(
+                extractOutputText(root),
+                nullableText(root.path("id")),
+                nullableNonNegativeInt(usage.path("total_input_tokens")),
+                nullableNonNegativeInt(usage.path("total_output_tokens")),
+                nullableNonNegativeInt(usage.path("total_tokens")));
+            observe(completion.providerRequestId() == null
+                ? "COMPLETED_WITHOUT_REQUEST_ID" : "COMPLETED_WITH_REQUEST_ID");
+            return completion;
+        } catch (AiProviderException e) {
+            observe(e.code().name());
+            throw e;
         }
-        JsonNode usage = root.path("usage");
-        return new Completion(
-            extractOutputText(root),
-            nullableText(root.path("id")),
-            nullableNonNegativeInt(usage.path("total_input_tokens")),
-            nullableNonNegativeInt(usage.path("total_output_tokens")),
-            nullableNonNegativeInt(usage.path("total_tokens")));
     }
 
     Map<String, Object> requestBody(String systemPrompt, String userPrompt) {
