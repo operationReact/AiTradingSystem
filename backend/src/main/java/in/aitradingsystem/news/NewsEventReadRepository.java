@@ -52,7 +52,7 @@ public class NewsEventReadRepository {
             throw new IllegalArgumentException("Invalid bounded news event query");
         }
         String sourceFilter = sourceId == null || sourceId.isBlank()
-            ? "" : " AND src.source_id = ?";
+            ? "" : " AND src.source_id = ? ";
         List<Object> args = new ArrayList<>();
         if (!sourceFilter.isEmpty()) args.add(sourceId.trim());
         Long count = jdbc.queryForObject("SELECT count(*) " + FROM + sourceFilter,
