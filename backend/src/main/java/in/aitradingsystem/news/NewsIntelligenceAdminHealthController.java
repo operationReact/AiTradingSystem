@@ -37,7 +37,6 @@ public class NewsIntelligenceAdminHealthController {
     }
 
     @GetMapping("/health")
-    @PreAuthorize("hasRole('ADMIN')")
     public Health health() {
         Instant now = Instant.now();
         Map<String, NewsSourceHealthRepository.SourceHealth> latest =
