@@ -68,20 +68,48 @@ class NewsAdminModelStatus {
     required this.configuredGeminiModel,
     required this.geminiKeyConfigured,
     required this.realProviderCallVerified,
+    this.selectedProviderConfigured,
+    this.recordedGeminiAnalysisReceipts,
+    this.geminiReadiness,
   });
 
   final String selectedProvider;
   final String configuredGeminiModel;
   final bool geminiKeyConfigured;
   final bool realProviderCallVerified;
+  final bool? selectedProviderConfigured;
+  final int? recordedGeminiAnalysisReceipts;
+  final String? geminiReadiness;
 
   factory NewsAdminModelStatus.fromJson(Object? raw) {
     final json = _map(raw);
+    final selected = _string(json, 'selectedProvider');
+    final configured = json['selectedProviderConfigured'];
+    final receipts = json['recordedGeminiAnalysisReceipts'];
+    final readiness = json['geminiReadiness'];
+    final hasDiagnostics = ['selectedProviderConfigured', 'recordedGeminiAnalysisReceipts',
+      'geminiReadiness'].any(json.containsKey);
+    if (hasDiagnostics) {
+      if (configured is! bool || receipts is! int || receipts < 0 || readiness is! String) {
+        throw const FormatException('Incomplete Gemini diagnostics');
+      }
+      final expected = selected != 'GEMINI' ? 'GEMINI_NOT_SELECTED'
+          : !configured ? 'GEMINI_NOT_CONFIGURED'
+          : receipts > 0 ? 'RECORDED_ANALYSIS_RECEIPTS_PRESENT'
+          : 'CONFIGURED_NO_RECORDED_RECEIPT';
+      if (readiness != expected ||
+          (selected == 'GEMINI' && configured != _boolean(json, 'geminiKeyConfigured'))) {
+        throw const FormatException('Inconsistent Gemini diagnostics');
+      }
+    }
     return NewsAdminModelStatus(
-      selectedProvider: _string(json, 'selectedProvider'),
+      selectedProvider: selected,
       configuredGeminiModel: _string(json, 'configuredGeminiModel'),
       geminiKeyConfigured: _boolean(json, 'geminiKeyConfigured'),
       realProviderCallVerified: _boolean(json, 'realProviderCallVerified'),
+      selectedProviderConfigured: configured as bool?,
+      recordedGeminiAnalysisReceipts: receipts as int?,
+      geminiReadiness: readiness as String?,
     );
   }
 }

@@ -4,13 +4,16 @@ import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
 import '../data/news_admin_health_repository.dart';
+import '../data/historical_news_coverage_repository.dart';
+import 'historical_news_coverage_screen.dart';
 
 /// Diagnostic screen only. This does not expose an enable/approve/execute action.
 /// The backend separately requires an ADMIN role on every data request.
 class NewsAdminHealthPage extends StatefulWidget {
-  const NewsAdminHealthPage({required this.repository, super.key});
+  const NewsAdminHealthPage({required this.repository, this.coverageRepository, super.key});
 
   final NewsAdminHealthRepository repository;
+  final HistoricalNewsCoverageRepository? coverageRepository;
 
   @override
   State<NewsAdminHealthPage> createState() => _NewsAdminHealthPageState();
@@ -119,6 +122,14 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
                         ),
                       const SizedBox(height: 12),
                       _metrics(_snapshot!),
+                      if (widget.coverageRepository != null && _failure == null)
+                        OutlinedButton(
+                          key: const ValueKey('news-health-historical-coverage'),
+                          onPressed: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(
+                            builder: (_) => HistoricalNewsCoverageScreen(
+                              repository: widget.coverageRepository!, initialCutoff: _snapshot!.observedAt))),
+                          child: const Text('Historical news coverage'),
+                        ),
                       const SizedBox(height: 12),
                       Text('Pipeline', style: theme.textTheme.titleSmall),
                       const SizedBox(height: 4),
@@ -141,6 +152,14 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
                               _line('Credential configured', _yesNo(_snapshot!.model.geminiKeyConfigured)),
                               _line('Real provider call verified',
                                 _snapshot!.model.realProviderCallVerified ? 'VERIFIED' : 'NOT VERIFIED'),
+                              _line('Selected provider configured',
+                                _snapshot!.model.selectedProviderConfigured == null ? 'UNAVAILABLE'
+                                  : _yesNo(_snapshot!.model.selectedProviderConfigured!)),
+                              _line('Recorded Gemini analyses',
+                                _snapshot!.model.recordedGeminiAnalysisReceipts?.toString() ?? 'UNAVAILABLE'),
+                              _line('Gemini readiness', _geminiReadiness(_snapshot!.model.geminiReadiness)),
+                              const Text('Recorded analyses do not prove current provider connectivity.'),
+
                             ],
                           ),
                         ),
@@ -243,6 +262,14 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
       ],
     ),
   );
+
+  static String _geminiReadiness(String? status) => switch (status) {
+    'GEMINI_NOT_SELECTED' => 'Not selected',
+    'GEMINI_NOT_CONFIGURED' => 'Not configured',
+    'CONFIGURED_NO_RECORDED_RECEIPT' => 'Configured; no recorded receipts',
+    'RECORDED_ANALYSIS_RECEIPTS_PRESENT' => 'Recorded receipts present',
+    _ => 'UNAVAILABLE',
+  };
 
   static String _yesNo(bool enabled) => enabled ? 'YES' : 'NO';
 
