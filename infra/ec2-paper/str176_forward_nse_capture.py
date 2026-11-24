@@ -36,7 +36,7 @@ REQUEST=Path("infra/ec2-paper/requests/str176-forward-nse-capture.json")
 MARKER="MINTTICK_STR176_FORWARD_NSE:"
 KIND="minttick-str176-owner-forward-nse-original-v1"
 EXACT={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTANCE,
-       "session_date":"2026-11-23","max_archive_gets":1,
+       "session_date":"2026-11-25","max_archive_gets":1,
        "owner_confirmed_private_research_retention":True,
        "no_market_export":True,"no_orders":True,"no_rights_change":True}
 SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
