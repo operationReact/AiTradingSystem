@@ -90,6 +90,16 @@ public class NewsFeatureService {
                              an.created_at AS analysis_created_at, an.category
                         FROM news_articles a
                         JOIN news_analyses an ON an.article_id = a.id
+                        -- A valid analysis or ticker mention never overrides source rights.
+                        -- Research evidence can appear in CUSTOMER decision history, so
+                        -- retaining, model-processing AND displaying must all be permitted.
+                        JOIN news_source_policy rights ON rights.source_id = a.source
+                         AND rights.license_state = 'APPROVED'
+                         AND 'RETAIN' = ANY(rights.permitted_uses)
+                         AND 'NLP_TRANSFER' = ANY(rights.permitted_uses)
+                         AND 'DISPLAY' = ANY(rights.permitted_uses)
+                         AND rights.effective_from <= CURRENT_TIMESTAMP
+                         AND (rights.effective_to IS NULL OR CURRENT_TIMESTAMP < rights.effective_to)
                        WHERE a.published_at <= :asOf
                          AND a.published_at > :lookbackStart
                          AND an.created_at <= :asOf
