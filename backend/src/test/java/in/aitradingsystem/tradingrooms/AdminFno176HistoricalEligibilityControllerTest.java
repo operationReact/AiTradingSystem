@@ -71,6 +71,9 @@ class AdminFno176HistoricalEligibilityControllerTest {
     }
 
     @Test void routeIsAdminOperatorOnlyReadOnlyGet() throws Exception {
+        assertFalse(java.lang.reflect.Modifier.isFinal(
+            AdminFno176HistoricalEligibilityController.class.getModifiers()),
+            "PreAuthorize requires a Spring-proxyable controller class");
         var method=AdminFno176HistoricalEligibilityController.class
             .getMethod("inspect");
         assertEquals("/str176-original-source",
