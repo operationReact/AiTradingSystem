@@ -9,10 +9,22 @@ class _FixtureEvents implements MarketEventRepository {
   final bool fail;
   final bool empty;
   int calls = 0;
+  String? lastCategory;
+  String? lastQuery;
+  int lastWindowDays = 0;
 
   @override
-  Future<MarketEventPage> events({required int page, int size = 20}) async {
+  Future<MarketEventPage> events({
+    required int page,
+    int size = 20,
+    String? category,
+    String? query,
+    int windowDays = 0,
+  }) async {
     calls++;
+    lastCategory = category;
+    lastQuery = query;
+    lastWindowDays = windowDays;
     if (fail) throw StateError('Fictional API unavailable');
     return MarketEventPage(
       page: page,
@@ -78,6 +90,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Verified event data is not available'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('category and date chips send filters to repository', (tester) async {
+    final repo = _FixtureEvents();
+    await tester.pumpWidget(MaterialApp(
+      home: MarketEventTimelinePage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('market-event-category-REGULATORY')));
+    await tester.pumpAndSettle();
+    expect(repo.lastCategory, 'REGULATORY');
+    expect(repo.calls, 2);
+
+    await tester.tap(find.byKey(const ValueKey('market-event-window-7')));
+    await tester.pumpAndSettle();
+    expect(repo.lastWindowDays, 7);
+    expect(repo.calls, 3);
+
+    await tester.tap(find.byKey(const ValueKey('market-event-category-ALL')));
+    await tester.pumpAndSettle();
+    expect(repo.lastCategory, isNull);
+    expect(repo.lastWindowDays, 7);
+  });
+
+  testWidgets('search is submitted, not fired on every keystroke', (tester) async {
+    final repo = _FixtureEvents();
+    await tester.pumpWidget(MaterialApp(
+      home: MarketEventTimelinePage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+
+    final input = find.byKey(const ValueKey('market-event-search-input'));
+    await tester.enterText(input, 'corporate');
+    await tester.pump();
+    expect(repo.calls, 1);
+
+    await tester.tap(find.byKey(const ValueKey('market-event-search-apply')));
+    await tester.pumpAndSettle();
+    expect(repo.calls, 2);
+    expect(repo.lastQuery, 'corporate');
   });
 
   testWidgets('refresh only reads repository and keeps existing timeline', (tester) async {
