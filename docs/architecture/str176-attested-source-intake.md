@@ -55,6 +55,29 @@ overwrite or automatic deletion. Only aggregate counts/state are logged.
 A restart with an already imported batch will report rejected duplicates,
 not new successful imports.
 
+The root may also contain one `foundation.json` (max 64 KiB). This is a
+separate Ed25519 signed reviewer receipt that can append the exact six
+provider/use rights records needed for OHLCV, final OI and the NSE calendar,
+plus one calendar record for each session in the batch. It binds provider ID,
+provider code and legal name, reviewer ID, review time, terms digests, validity
+windows, source references, calendar status/revision, session close, original
+publication/first-availability timestamps and evidence digests. The configured
+reviewer public key must be pinned outside the bundle. Rights are restricted
+to `RAW_RETENTION` and `MODEL_INFERENCE` for those three domains; display,
+redistribution and training permissions cannot be added through this path.
+Conflicting IDs, source identities, invalid validity windows, unsigned or
+tampered packets, session mismatches and non-private files fail closed.
+
+The signature uses the version tag `minttick.fno176.foundation.v1`, UTF-8
+fields length-prefixed by four-byte big-endian lengths, with rights sorted by
+`sourceDomain/permittedUse` and calendar records sorted by session date. The
+two list counts are encoded as four-byte big-endian integers before their
+entries. `Fno176AttestedFoundationIntake.signingBytes` is the canonical
+reference implementation. Reviewers must verify the actual license/calendar
+source material before signing; a user authorization, test key or generated
+fixture is not sufficient. The foundation import never certifies a strategy
+and never grants an order permission.
+
 Before enabling, provision genuine verified rights/calendar records and the
 independent reviewer's public key and signed source packets privately.
 Neither a user assertion nor a test key is a production receipt. After a

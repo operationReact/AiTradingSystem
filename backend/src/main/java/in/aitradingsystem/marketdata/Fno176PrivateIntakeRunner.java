@@ -12,6 +12,9 @@ import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Clock;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -26,10 +29,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Explicitly enabled private startup import. Does not expose HTTP routes,
- * fetch broker data, create rights, or alter trading configuration.
+ * fetch broker data or alter trading configuration. Foundation rights and
+ * calendar rows can be appended only from a separately signed reviewer packet.
  * The operator supplies an independently pinned public key and a read-only
  * private source directory. Source packets and receipt details never escape
- * into logs. Each actual insert is performed by the existing V102 boundary.
+ * into logs. Market rows still pass through the existing V102 boundary.
  */
 @Component
 @ConditionalOnProperty(name="minttick.fno-research.private-intake-enabled",havingValue="true")
@@ -37,6 +41,7 @@ public final class Fno176PrivateIntakeRunner implements ApplicationRunner {
     private static final Logger LOG=LoggerFactory.getLogger(Fno176PrivateIntakeRunner.class);
     private static final int MAX_ENTRIES=32;
     private static final int MIB=1024*1024;
+    private static final int MAX_FOUNDATION_BYTES=64*1024;
     private static final Set<PosixFilePermission> PRIVATE=Set.of(
         PosixFilePermission.OWNER_READ,PosixFilePermission.OWNER_WRITE,
         PosixFilePermission.OWNER_EXECUTE);
@@ -76,22 +81,55 @@ public final class Fno176PrivateIntakeRunner implements ApplicationRunner {
             checkPrivateDirectory(root);
             PublicKey reviewer=KeyFactory.getInstance("Ed25519").generatePublic(
                 new X509EncodedKeySpec(Base64.getDecoder().decode(encodedPublicKey)));
-            List<Path> entries;
+            List<Path> children;
             try(var paths=Files.list(root)) {
-                entries=paths.limit(MAX_ENTRIES+1L).sorted().toList();
+                children=new ArrayList<>(paths.limit(MAX_ENTRIES+2L).sorted().toList());
             }
-            if(entries.isEmpty()) return new Report("NO_SOURCE_BUNDLES",0,0,0);
-            if(entries.size()>MAX_ENTRIES)
+            if(children.size()>MAX_ENTRIES+1)
+                return new Report("SOURCE_BATCH_UNBOUNDED",0,0,0);
+            Path foundationPath=root.resolve("foundation.json");
+            boolean hasFoundation=children.remove(foundationPath);
+            if(children.isEmpty() && !hasFoundation)
+                return new Report("NO_SOURCE_BUNDLES",0,0,0);
+            if(children.size()>MAX_ENTRIES)
                 return new Report("SOURCE_BATCH_UNBOUNDED",0,0,0);
             // Validate the complete directory structure before any writes.
-            for(var entry:entries) {
+            for(var entry:children) {
                 if(!entry.getFileName().toString().matches("entry-[0-9]{4}"))
                     return new Report("SOURCE_BATCH_INVALID",0,0,0);
                 checkPrivateDirectory(entry);
             }
+            Fno176AttestedFoundationIntake.Receipt foundation=null;
+            if(hasFoundation) {
+                byte[] bytes=read(root,"foundation.json",MAX_FOUNDATION_BYTES);
+                foundation=Fno176AttestedFoundationIntake.read(bytes);
+                var sessions=new HashSet<LocalDate>();
+                for(var entry:children) {
+                    var receipt=JSON.readValue(read(entry,"receipt.json",16384),
+                        Fno176AttestedSourceVerifier.Receipt.class);
+                    var day=receipt.day();
+                    if(day==null || !day.providerCode().equals(foundation.providerCode())
+                            || !foundation.rights().stream().anyMatch(g -> g.receiptId().equals(day.ohlcvInferenceRightsId())
+                                && g.sourceDomain().equals("nse_fo_completed_ohlcv")
+                                && g.permittedUse().equals("MODEL_INFERENCE"))
+                            || !foundation.rights().stream().anyMatch(g -> g.receiptId().equals(day.oiInferenceRightsId())
+                                && g.sourceDomain().equals("nse_fo_final_oi")
+                                && g.permittedUse().equals("MODEL_INFERENCE"))
+                            || !foundation.calendar().stream().anyMatch(c -> c.evidenceId().equals(day.calendarEvidenceId())
+                                && c.sessionDate().equals(day.sessionDate()) && c.sessionStatus().equals("TRADING")))
+                        return new Report("FOUNDATION_PACKET_MISMATCH",children.size(),0,children.size());
+                    sessions.add(day.sessionDate());
+                }
+                sessions.addAll(foundation.calendar().stream().map(
+                    Fno176AttestedFoundationIntake.CalendarRecord::sessionDate).toList());
+                new Fno176AttestedFoundationIntake(jdbc,reviewer,Clock.systemUTC())
+                    .append(foundation,sessions);
+            }
+            if(children.isEmpty())
+                return new Report("FOUNDATION_STORED_NOT_E2E",0,0,0);
             int stored=0;
             var intake=new Fno176AttestedBatchIntake(jdbc,rights,reviewer,Clock.systemUTC());
-            for(var entry:entries) {
+            for(var entry:children) {
                 // Process one entry at a time to bound memory even for masters.
                 try {
                     var receipt=JSON.readValue(read(entry,"receipt.json",16384),
@@ -107,9 +145,9 @@ public final class Fno176PrivateIntakeRunner implements ApplicationRunner {
                     // Sanitized aggregate only. No source details or stack traces.
                 }
             }
-            return new Report(stored==entries.size()?"OBSERVATIONS_STORED_NOT_E2E":
+            return new Report(stored==children.size()?"OBSERVATIONS_STORED_NOT_E2E":
                 stored==0?"ALL_OBSERVATIONS_REJECTED":"PARTIAL_OBSERVATIONS_STORED_NOT_E2E",
-                entries.size(),stored,entries.size()-stored);
+                children.size(),stored,children.size()-stored);
         } catch(IOException | java.security.GeneralSecurityException | RuntimeException rejected) {
             return new Report("PRIVATE_INTAKE_UNAVAILABLE",0,0,0);
         }

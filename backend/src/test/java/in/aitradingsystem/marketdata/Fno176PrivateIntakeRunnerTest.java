@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +74,27 @@ class Fno176PrivateIntakeRunnerTest {
         return dir;
     }
 
+    private Fno176AttestedFoundationIntake.Receipt foundation(KeyPair pair) throws Exception {
+        var now=Instant.now();
+        var session=LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1);
+        var rights=new java.util.ArrayList<Fno176AttestedFoundationIntake.RightsGrant>();
+        for(var domain:List.of("nse_fo_completed_ohlcv","nse_fo_final_oi","nse_fo_trading_calendar"))
+            for(var use:List.of("RAW_RETENTION","MODEL_INFERENCE"))
+                rights.add(new Fno176AttestedFoundationIntake.RightsGrant(UUID.randomUUID(),domain,use,
+                    "a".repeat(64),now.minusSeconds(3600),now.plusSeconds(86400),"fixture://reviewed-terms"));
+        var calendar=new Fno176AttestedFoundationIntake.CalendarRecord(UUID.randomUUID(),session,1,
+            "TRADING",now.minusSeconds(86400),now.minusSeconds(172800),now.minusSeconds(86400),
+            "b".repeat(64),"fixture://reviewed-calendar");
+        var unsigned=new Fno176AttestedFoundationIntake.Receipt(UUID.randomUUID(),"UPSTOX_ANALYTICS",
+            "Synthetic Upstox Fixture","fixture-reviewer",now,List.copyOf(rights),List.of(calendar),new byte[0]);
+        var signer=Signature.getInstance("Ed25519");
+        signer.initSign(pair.getPrivate());
+        signer.update(Fno176AttestedFoundationIntake.signingBytes(unsigned));
+        return new Fno176AttestedFoundationIntake.Receipt(unsigned.providerId(),unsigned.providerCode(),
+            unsigned.legalName(),unsigned.reviewerId(),unsigned.reviewedAt(),unsigned.rights(),
+            unsigned.calendar(),signer.sign());
+    }
+
     @Test void readsPrivateSignedBundleAndUsesExistingRightsAndDatabaseGate() throws Exception {
         var pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         var runner=runner(pair);
@@ -112,6 +134,38 @@ class Fno176PrivateIntakeRunnerTest {
         assertEquals("PRIVATE_INTAKE_UNAVAILABLE",runner.importOnce().state());
         assertEquals("CONFIGURATION_MISSING",
             new Fno176PrivateIntakeRunner(db,rights,"","").importOnce().state());
+        verifyNoInteractions(db,rights);
+    }
+
+    @Test void storesOnlySeparatelySignedRightsAndCalendarFoundation() throws Exception {
+        var pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var runner=runner(pair);
+        var signed=foundation(pair);
+        put(root.resolve("foundation.json"),new ObjectMapper().findAndRegisterModules()
+            .writeValueAsBytes(signed));
+        when(db.update(anyString(),any(MapSqlParameterSource.class))).thenReturn(1);
+        when(db.queryForObject(contains("golden_data_provider"),any(MapSqlParameterSource.class),eq(Integer.class))).thenReturn(1);
+        when(db.queryForObject(contains("golden_source_rights_receipt"),any(MapSqlParameterSource.class),eq(Integer.class))).thenReturn(1);
+        when(db.queryForObject(contains("golden_historical_exchange_session_evidence"),any(MapSqlParameterSource.class),eq(Integer.class))).thenReturn(1);
+        var result=runner.importOnce();
+        assertEquals("FOUNDATION_STORED_NOT_E2E",result.state());
+        assertEquals(0,result.stored());
+        verify(db,times(8)).update(anyString(),any(MapSqlParameterSource.class));
+    }
+
+    @Test void rejectsTamperedFoundationBeforeDatabaseWrites() throws Exception {
+        var pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var runner=runner(pair);
+        var signed=foundation(pair);
+        var tamperedRights=new java.util.ArrayList<>(signed.rights());
+        var first=tamperedRights.getFirst();
+        tamperedRights.set(0,new Fno176AttestedFoundationIntake.RightsGrant(first.receiptId(),
+            first.sourceDomain(),first.permittedUse(),"c".repeat(64),first.validFrom(),first.validTo(),first.sourceReference()));
+        var tampered=new Fno176AttestedFoundationIntake.Receipt(signed.providerId(),signed.providerCode(),
+            signed.legalName(),signed.reviewerId(),signed.reviewedAt(),tamperedRights,signed.calendar(),signed.signature());
+        put(root.resolve("foundation.json"),new ObjectMapper().findAndRegisterModules()
+            .writeValueAsBytes(tampered));
+        assertEquals("PRIVATE_INTAKE_UNAVAILABLE",runner.importOnce().state());
         verifyNoInteractions(db,rights);
     }
 }
