@@ -270,24 +270,35 @@ def retrieve_futures(expiries, underlying, fetch, *, max_requests=49,
 def bps(num,denom):
     return (num/denom*Decimal(10000)) if denom>0 else Decimal(0)
 
-def signal(window,expiry,as_of):
+REASON_OUTCOME={
+    "HISTORY_LENGTH":"BLOCKED","INVALID_DATES_OR_QUANTITY":"BLOCKED",
+    "SESSION_GAP":"BLOCKED","EXPIRY_GUARD":"BLOCKED","STALE_WINDOW":"BLOCKED",
+    "RANGE_OUTLIER":"BLOCKED","PRICE_STEP_OUTLIER":"BLOCKED","BASELINE_MISSING":"BLOCKED",
+    "VOLUME_LIFT_LOW":"NO_SIGNAL","VOLUME_OI_LOW":"NO_SIGNAL","BOTH_VOLUME_LOW":"NO_SIGNAL",
+    "BREAKOUT_NOT_CONFIRMED":"NO_SIGNAL","LONG_BREAKOUT":"LONG","SHORT_BREAKOUT":"SHORT",
+}
+
+def signal(window,expiry,as_of,*,details=False):
     """Explicitly pinned independent STR-176 EOD reference signal.
     Uses 7 completed prior sessions; exit/entry price never enters here.
     """
-    if len(window)!=7:return "BLOCKED"
+    def result(reason):
+        outcome=REASON_OUTCOME[reason]
+        return (outcome,reason) if details else outcome
+    if len(window)!=7:return result("HISTORY_LENGTH")
     days=[r[0] for r in window]
     if days!=sorted(set(days)) or any(r[6]<=0 or r[5]<0 for r in window):
-        return "BLOCKED"
+        return result("INVALID_DATES_OR_QUANTITY")
     if not all(1<=(b-a).days<=5 for a,b in zip(days,days[1:])):
-        return "BLOCKED"
+        return result("SESSION_GAP")
     if not 7<=(expiry-as_of).days<=120:
-        return "BLOCKED"
+        return result("EXPIRY_GUARD")
     if not 1<=(as_of-days[-1]).days<=5:
-        return "BLOCKED"
+        return result("STALE_WINDOW")
     for i,r in enumerate(window):
-        if bps(r[2]-r[3],r[4])>800:return "BLOCKED"
+        if bps(r[2]-r[3],r[4])>800:return result("RANGE_OUTLIER")
         if i and abs(bps(r[4]-window[i-1][4],window[i-1][4]))>2500:
-            return "BLOCKED"
+            return result("PRICE_STEP_OUTLIER")
     h=max(r[2] for r in window[:6])
     l=min(r[3] for r in window[:6])
     last=window[-1]
@@ -295,15 +306,17 @@ def signal(window,expiry,as_of):
     down=bps(l-last[4],l)
     baseline=sum(r[5] for r in window[:3])
     recent=sum(r[5] for r in window[4:])
-    if baseline<=0:return "BLOCKED"
+    if baseline<=0:return result("BASELINE_MISSING")
     lift=bps(Decimal(recent),Decimal(baseline))
     participation=bps(Decimal(last[5]),Decimal(last[6]))
     rises=sum(window[i][4]>window[i-1][4] for i in range(4,7))
     falls=sum(window[i][4]<window[i-1][4] for i in range(4,7))
-    if lift<11000 or participation<2000:return "NO_SIGNAL"
-    if up>=100 and rises>=2 and falls==0 and up-20>30:return "LONG"
-    if down>=100 and falls>=2 and rises==0 and down-20>30:return "SHORT"
-    return "NO_SIGNAL"
+    if lift<11000 and participation<2000:return result("BOTH_VOLUME_LOW")
+    if lift<11000:return result("VOLUME_LIFT_LOW")
+    if participation<2000:return result("VOLUME_OI_LOW")
+    if up>=100 and rises>=2 and falls==0 and up-20>30:return result("LONG_BREAKOUT")
+    if down>=100 and falls>=2 and rises==0 and down-20>30:return result("SHORT_BREAKOUT")
+    return result("BREAKOUT_NOT_CONFIRMED")
 
 def realized_drawdown_by_session(net_by_exit):
     """Realized P&L drawdown, not intraday or mark-to-market risk.
@@ -327,6 +340,7 @@ def evaluate(universe,metadata,cost_bps):
     training_end=ordered_expiries[7]
     counts=Counter()
     outcomes={split_name:Counter() for split_name in ("training","outOfSample")}
+    reasons={name:Counter() for name in outcomes}
     train_net=oos_net=0
     oos_net_by_exit=Counter()
     for expiry in sorted(metadata):
@@ -343,8 +357,10 @@ def evaluate(universe,metadata,cost_bps):
             if expiry>=split and decision_day<=training_end:
                 counts["purgedPreOosWindows"]+=1
                 continue
-            outcome=signal(rows[i-6:i+1],expiry,decision_day)
-            outcomes["training" if expiry<split else "outOfSample"][outcome]+=1
+            outcome,reason=signal(rows[i-6:i+1],expiry,decision_day,details=True)
+            name="training" if expiry<split else "outOfSample"
+            outcomes[name][outcome]+=1
+            reasons[name][reason]+=1
             counts["decisionWindows"]+=1
             if outcome=="BLOCKED":
                 counts["blockedWindows"]+=1
@@ -389,6 +405,7 @@ def evaluate(universe,metadata,cost_bps):
             split_name:{outcome:values[outcome] for outcome in
                         ("BLOCKED","NO_SIGNAL","LONG","SHORT")}
             for split_name,values in outcomes.items()},
+        "windowReasonsBySplit":{k:dict(sorted(v.items())) for k,v in reasons.items()},
         "purgedPreOosWindows":counts["purgedPreOosWindows"],
         "evaluatedWindows":counts["evaluatedWindows"],
         "blockedWindows":counts["blockedWindows"],
@@ -414,6 +431,7 @@ def research(fetch, reference_date):
     stress=evaluate(source,metadata,50)
     if (any(v["decisionWindows"]!=primary["decisionWindows"] or
             v["candidateWindows"]!=primary["candidateWindows"] or
+            v["windowReasonsBySplit"]!=primary["windowReasonsBySplit"] or
             v["purgedPreOosWindows"]!=primary["purgedPreOosWindows"] for v in
             (cheaper,stress)) or primary["sourceFuturesBars"]>MAX_BARS):
         raise ValueError("RESEARCH_SIGNAL_COHORT_DRIFT")
@@ -445,7 +463,7 @@ def safe_receipt(r):
     # Never forward unknown fields, even when every expected counter is valid.
     expected_fields=set("""
         state sourceFuturesBars eligibleFuturesCohorts decisionWindows
-        windowOutcomesBySplit purgedPreOosWindows evaluatedWindows blockedWindows
+        windowOutcomesBySplit windowReasonsBySplit purgedPreOosWindows evaluatedWindows blockedWindows
         candidateWindows overlappingCandidatesSkipped modeledTrades trainingTrades
         outOfSampleTrades outOfSampleLosses trainingNetPaise outOfSampleNetPaise
         outOfSampleMaxDrawdownPaise quarantinedFuturesCohorts rejectedHistoryChunks
@@ -495,6 +513,17 @@ def safe_receipt(r):
                    or any(type(n) is not int or not 0<=n<=MAX_BARS for n in v.values())
                    for v in outcomes.values())):
         raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    reasons=r["windowReasonsBySplit"]
+    if type(reasons) is not dict or set(reasons)!=set(outcomes):
+        raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+    for name,hist in reasons.items():
+        if (type(hist) is not dict or set(hist)-REASON_OUTCOME.keys()
+                or any(type(n) is not int or not 1<=n<=MAX_BARS for n in hist.values())):
+            raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
+        grouped=Counter()
+        for reason,n in hist.items():grouped[REASON_OUTCOME[reason]]+=n
+        if any(grouped[k]!=v for k,v in outcomes[name].items()):
+            raise ValueError("UNVERIFIED_EXTENDED_RESEARCH_RECEIPT")
     sums=Counter()
     for values in outcomes.values():sums.update(values)
     if (sum(sums.values())!=r["decisionWindows"]
