@@ -22,14 +22,20 @@ class MarketEventEvidencePage extends StatefulWidget {
 }
 
 class _MarketEventEvidencePageState extends State<MarketEventEvidencePage> {
-  late Future<MarketEventDetail> _detail;
+  late Future<MarketEventDetail?> _detail;
 
   // Schedule the actual request after FutureBuilder has subscribed. A cached
   // 403/404 result or a synchronous fake-repository exception must not escape
   // the tap handler before the new error future is observed.
-  Future<MarketEventDetail> _loadEvidence() async {
-    await Future<void>.delayed(Duration.zero);
-    return widget.repository.detail(widget.eventId);
+  Future<MarketEventDetail?> _loadEvidence() async {
+    // A revoked source and an unavailable API are identical for the UI.
+    // Resolve to null instead of emitting an unobserved Future error during
+    // Flutter's event-loop turn before FutureBuilder attaches on retry.
+    try {
+      return await widget.repository.detail(widget.eventId);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -59,7 +65,7 @@ class _MarketEventEvidencePageState extends State<MarketEventEvidencePage> {
           ),
         ],
       ),
-      body: FutureBuilder<MarketEventDetail>(
+      body: FutureBuilder<MarketEventDetail?>(
         future: _detail,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
