@@ -17,6 +17,8 @@ import sqlite3
 import stat
 import sys
 import time
+import types
+import zipfile
 import urllib.error
 import urllib.request
 from zoneinfo import ZoneInfo
@@ -48,7 +50,43 @@ SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
  nifty_options INTEGER NOT NULL,
  PRIMARY KEY(session_date,sha256))"""
 
+FAILURE_MARKER="MINTTICK_STR176_FORWARD_NSE_FAILURE:"
+SAFE_REASONS=frozenset("""SOURCE_SCOPE_INVALID SOURCE_OBSERVATION_WINDOW_EXPIRED
+SOURCE_HTTP_REJECTED SOURCE_TOO_LARGE SOURCE_FILE_NOT_AVAILABLE SOURCE_TRANSPORT_UNAVAILABLE
+PRIVATE_DIRECTORY_REQUIRED SOURCE_NIFTY_COHORT_MISSING PRIVATE_DB_INVALID_OR_FULL
+ORIGINAL_SOURCE_READBACK_FAILED OBSERVATION_TIME_INVALID EXACT_PRIVATE_HOST_REQUIRED
+SOURCE_RECEIPT_INVALID OWNER_REQUEST_REQUIRED TRANSPORT_BOUND SSM_COMMAND_INVALID
+HOST_CAPTURE_FAILED HOST_CAPTURE_TIMEOUT SSM_STATUS_INVALID MODE_INVALID
+SOURCE_ARCHIVE_VALIDATION_FAILED PRIVATE_STORAGE_UNAVAILABLE
+HOST_CAPTURE_NO_SAFE_RECEIPT HOST_CAPTURE_TIMED_OUT HOST_CAPTURE_CANCELLED
+AWS_PREFLIGHT_REJECTED SOURCE_CAPTURE_UNEXPECTED_FAILURE""".split())
+
 class Blocked(Exception):pass
+
+def safe_reason(exc):
+    if isinstance(exc,Blocked) and str(exc) in SAFE_REASONS:
+        return str(exc)
+    if isinstance(exc,(OSError,sqlite3.Error)):
+        return "PRIVATE_STORAGE_UNAVAILABLE"
+    return "SOURCE_CAPTURE_UNEXPECTED_FAILURE"
+
+def failure_receipt(raw):
+    if not isinstance(raw,str) or len(raw)>2048:
+        return "HOST_CAPTURE_NO_SAFE_RECEIPT"
+    rows=[x[len(FAILURE_MARKER):] for x in raw.splitlines()
+          if x.startswith(FAILURE_MARKER)]
+    return rows[0] if len(rows)==1 and rows[0] in SAFE_REASONS else "HOST_CAPTURE_NO_SAFE_RECEIPT"
+
+def transport():
+    # Ship the exact reviewed parser along with this runner. The previously
+    # deployed host need not contain the corresponding parser module.
+    parser=Path(__file__).with_name("fno_personal_nse_archive_probe.py").read_text()
+    source=Path(__file__).read_text()
+    return ("import sys,types\n"
+            "m=types.ModuleType('fno_personal_nse_archive_probe');"
+            "sys.modules[m.__name__]=m;exec("+repr(parser)+",m.__dict__)\n"
+            "exec("+repr(source)+",globals())\n").encode()
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
@@ -133,7 +171,10 @@ def host():
     from fno_personal_nse_archive_probe import read_udiff
     url,raw,observed,modified=acquire(day)
     require_scope(day,observed)
-    counts=read_udiff(raw,day)
+    try:
+        counts=read_udiff(raw,day)
+    except (ValueError,zipfile.BadZipFile,UnicodeError,KeyError,TypeError,OSError):
+        raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED") from None
     report=persist(DB,day,url,raw,observed,modified,counts)
     print(MARKER+json.dumps(report,separators=(",",":"),sort_keys=True),flush=True)
 
@@ -161,8 +202,9 @@ def runner():
         raise Blocked("OWNER_REQUEST_REQUIRED")
     from verify_ssm_release import verify_aws
     from fno_private_bulk_ops import _aws
-    verify_aws()
-    payload=base64.b64encode(gzip.compress(Path(__file__).read_bytes(),mtime=0)).decode()
+    try:verify_aws()
+    except (ValueError,RuntimeError):raise Blocked("AWS_PREFLIGHT_REJECTED") from None
+    payload=base64.b64encode(gzip.compress(transport(),mtime=0)).decode()
     if len(payload)>20000 or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
         raise Blocked("TRANSPORT_BOUND")
     shell=("set -eu\numask 077\nprintf '%s' '"+payload+
@@ -185,8 +227,9 @@ def runner():
             print(MARKER+json.dumps(validate_report(json.loads(rows[0])),sort_keys=True),flush=True)
             return
         if status in ("Failed","TimedOut","Cancelled"):
-            # No arbitrary host stderr or private data in workflow output.
-            raise Blocked("HOST_CAPTURE_FAILED")
+            if status=="TimedOut":raise Blocked("HOST_CAPTURE_TIMED_OUT")
+            if status=="Cancelled":raise Blocked("HOST_CAPTURE_CANCELLED")
+            raise Blocked(failure_receipt(result.get("StandardOutputContent","")))
         if status not in ("Pending","InProgress","Delayed"):
             raise Blocked("SSM_STATUS_INVALID")
     raise Blocked("HOST_CAPTURE_TIMEOUT")
@@ -196,6 +239,6 @@ if __name__=="__main__":
         if sys.argv[1:]==["host"]:host()
         elif sys.argv[1:]==["runner"]:runner()
         else:raise Blocked("MODE_INVALID")
-    except (Blocked,OSError,ValueError,KeyError,TypeError,sqlite3.Error):
-        print("STR176_FORWARD_NSE:BLOCKED_NO_VERIFIED_CAPTURE",file=sys.stderr)
+    except (Blocked,OSError,ValueError,KeyError,TypeError,sqlite3.Error,ImportError,RuntimeError) as exc:
+        print(FAILURE_MARKER+safe_reason(exc),flush=True)
         raise SystemExit(2)
