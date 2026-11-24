@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/market_event_repository.dart';
+import '../data/market_event_detail_repository.dart';
+import 'market_event_evidence_page.dart';
 
 /// Compact, read-only canonical event timeline. Market news cannot authorize an
 /// order, claim a verified issuer, or infer a call/put signal in this screen.
 class MarketEventTimelinePage extends StatefulWidget {
-  const MarketEventTimelinePage({required this.repository, super.key});
+  const MarketEventTimelinePage({
+    required this.repository, this.detailRepository, super.key,
+  });
 
   final MarketEventRepository repository;
+  final MarketEventDetailRepository? detailRepository;
 
   @override
   State<MarketEventTimelinePage> createState() => _MarketEventTimelinePageState();
@@ -212,7 +217,19 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
                             ),
                             trailing: const Icon(Icons.chevron_right_rounded, size: 19),
-                            onTap: () => _showEvent(item),
+                            onTap: () {
+                              final detailRepository = widget.detailRepository;
+                              if (detailRepository == null) {
+                                _showEvent(item);
+                                return;
+                              }
+                              Navigator.of(context).push(MaterialPageRoute<void>(
+                                builder: (_) => MarketEventEvidencePage(
+                                  eventId: item.eventId,
+                                  repository: detailRepository,
+                                ),
+                              ));
+                            },
                           ),
                           Divider(height: 1, color: colors.outlineVariant),
                         ],
