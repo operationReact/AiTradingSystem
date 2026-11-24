@@ -69,6 +69,19 @@ void main() {
     expect(h.decisions.single.catalogueVersion, 'cat-v1');
   });
 
+  test('preserves exact persisted instrument ID and rejects guessed identities', () {
+    expect(MindDecisionRecord.decode(record()).instrumentId, isNull);
+    expect(MindDecisionRecord.decode(record()..['instrumentId'] = 4242).instrumentId, 4242);
+    expect(
+      () => MindDecisionRecord.decode(record()..['instrumentId'] = 'RELIANCE'),
+      throwsFormatException,
+    );
+    expect(
+      () => MindDecisionRecord.decode(record()..['instrumentId'] = 0),
+      throwsFormatException,
+    );
+  });
+
   test('a record that claims an order is rejected, never shown', () {
     expect(() => MindDecisionHistory.decode(history([record(orderSubmitted: true)])),
       throwsFormatException);
