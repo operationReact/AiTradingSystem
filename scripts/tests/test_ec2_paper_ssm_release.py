@@ -106,15 +106,17 @@ class PaperSsmRelease(unittest.TestCase):
         self.assertEqual(allow["Resource"],
                          "arn:aws:s3:::aitrading-paper-releases-098859530205/releases/*")
 
-    def test_ssm_iam_scope_exact_instance_dev_only_no_broker_or_ec2_lifecycle(self):
+    def test_ssm_iam_scope_exact_instance_main_and_dev_no_broker_or_ec2_lifecycle(self):
         doc=json.loads(CLOUDFORMATION.read_text(encoding="utf-8"))
         role=doc["Resources"]["PaperGithubSsmDeployRole"]["Properties"]
         self.assertEqual(role["RoleName"],gate.ROLE)
         trust=role["AssumeRolePolicyDocument"]["Statement"][0]
         self.assertEqual(trust["Condition"]["StringEquals"],{
             "token.actions.githubusercontent.com:aud":"sts.amazonaws.com",
-            "token.actions.githubusercontent.com:sub":
+            "token.actions.githubusercontent.com:sub":[
                 "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+                "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/main",
+            ],
         })
         p=role["Policies"][0]["PolicyDocument"]["Statement"]
         by_sid={x["Sid"]:x for x in p}
@@ -194,11 +196,15 @@ class PaperSsmRelease(unittest.TestCase):
             result=subprocess.run(["bash","-n",str(EC2/name)],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
 
-    def test_ssm_jobs_only_dev_one_file_approval_and_immutable_digest(self):
-        for name in ("ec2-paper-ssm-readiness.yml","ec2-paper-ssm-app-deploy.yml"):
-            s=(ROOT/".github/workflows"/name).read_text()
+    def test_ssm_jobs_keep_dev_readiness_and_main_one_file_release_approval(self):
+        readiness=(ROOT/".github/workflows/ec2-paper-ssm-readiness.yml").read_text()
+        deploy=(ROOT/".github/workflows/ec2-paper-ssm-app-deploy.yml").read_text()
+        self.assertIn("branches: [dev]",readiness)
+        self.assertIn("github.ref == 'refs/heads/dev'",readiness)
+        self.assertIn("branches: [main]",deploy)
+        self.assertIn("github.ref == 'refs/heads/main'",deploy)
+        for name,s in (("readiness",readiness),("deploy",deploy)):
             for required in (
-                "branches: [dev]",
                 "id-token: write", "contents: read",
                 "git diff-tree --no-commit-id --name-only -r HEAD",
                 "verify_ssm_release.py",
@@ -213,7 +219,6 @@ class PaperSsmRelease(unittest.TestCase):
                               "ssh ","scp ","--push", "docker push"):
                 with self.subTest(workflow=name,forbidden=forbidden):
                     self.assertNotIn(forbidden,s)
-        deploy=(ROOT/".github/workflows/ec2-paper-ssm-app-deploy.yml").read_text()
         for required in ("docker buildx build --platform linux/arm64 --load",
                          "--file backend/Dockerfile.ec2-paper-prebuilt-arm64",
                          "flutter build web --release",

@@ -1,6 +1,6 @@
 # PAPER EC2 deployment via SSM — activation runbook
 
-This implementation stays **inactive** until a separate one-file GitHub request is merged to `dev`. A code PR by itself does not create AWS infrastructure, start EC2, connect a broker or deploy an application.
+This implementation stays **inactive** until a separate one-file GitHub release request is committed to `main`. A code PR by itself does not create AWS infrastructure, start EC2, connect a broker or deploy an application.
 
 ## 1. Review and update the existing AWS bootstrap
 
@@ -8,7 +8,7 @@ Existing account `098859530205`, CloudFormation stack `aitrading-paper-ec2-boots
 
 - CREATE `PaperReleaseArtifactBucket`: `aitrading-paper-releases-098859530205`, public access blocked, default SSE-S3, versioned, release objects expiring after 3 days.
 - CREATE its TLS-only bucket policy allowing `s3:GetObject` on `releases/*` solely to the existing EC2 SSM instance role, with no public grants.
-- CREATE `PaperGithubSsmDeployRole`: `aitrading-paper-ec2-ssm-deploy`, OIDC trusted only from the immutable GitHub `dev` identity, narrowly scoped `ssm:SendCommand` on the exact EC2 plus AWS-RunShellScript, `ssm:GetCommandInvocation`, SSM/EC2 inventory, exact Scheduler read and release-prefix S3 object upload.
+- CREATE `PaperGithubSsmDeployRole`: `aitrading-paper-ec2-ssm-deploy`, OIDC trusted only from the exact GitHub `dev` and `main` branch subjects, narrowly scoped `ssm:SendCommand` on the exact EC2 plus AWS-RunShellScript, `ssm:GetCommandInvocation`, SSM/EC2 inventory, exact Scheduler read and release-prefix S3 object upload.
 - CREATE 2 output values for bucket name and deploy role ARN.
 
 **Block the update** if the change set proposes replacing/deleting any existing state bucket, role, scheduled stop or EC2 resource. This stack creates no EC2 instances and should not alter the 22:00 IST nightly stop or main-branch manual controls.
@@ -23,12 +23,12 @@ If SSM is not Online, diagnose the existing EC2 role, VPC egress and cloud-init 
 
 ## 3. Build and deploy the app
 
-Only after readiness succeeds, a separate exact one-file `infra/ec2-paper/requests/ssm-release.json` commit to `dev` starts the release workflow:
+Only after readiness succeeds, a separate exact one-file `infra/ec2-paper/requests/ssm-release.json` commit to `main` starts the production release workflow:
 
 1. Builds production Flutter Web at the reviewed GitHub SHA.
 2. Builds/executes actual ARM64 Spring Boot Java 21 and ARM64 Nginx images **on the GitHub runner** (not on EC2).
 3. Packs only `images.tar.gz`, `paper-compose.yml` and `run_paper.sh` in a tar archive; records an independent SHA256 digest.
-4. Assumes the restricted **dev-only** SSM deployment role and confirms exact running PAPER EC2, SSM Online and nightly stop schedule.
+4. Assumes the restricted one-host SSM delivery role and confirms exact running PAPER EC2, SSM Online and nightly stop schedule.
 5. Uploads the content-addressed encrypted artifact to `releases/{commit}/{sha256}/release.tar`, expiring after three days.
 6. Runs only the version-controlled SSM host script. The host downloads the artifact using its instance role, verifies SHA256 and exact archive members, loads both images, reuses generated root-owned local secrets, backs up any running PostgreSQL before upgrades, and checks PostgreSQL-backed Java, Flutter static page and Flutter→Java proxy health.
 7. The GitHub run marks success **only** when the SSM command returns Success after connected health checks.

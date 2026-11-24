@@ -6,7 +6,7 @@
       "Type": "AWS::IAM::Role",
       "Properties": {
         "RoleName": "aitrading-paper-ec2-ssm-deploy",
-        "Description": "Dev-only SSM command and temporary encrypted artifact upload to one existing Mumbai PAPER EC2; no EC2 lifecycle, Terraform or LIVE orders.",
+        "Description": "One-host PAPER SSM operations and main-branch application delivery in the existing Mumbai environment; no EC2 lifecycle, Terraform or LIVE orders.",
         "MaxSessionDuration": 3600,
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
@@ -20,7 +20,10 @@
               "Condition": {
                 "StringEquals": {
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+                  "token.actions.githubusercontent.com:sub": [
+                    "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+                    "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/main"
+                  ]
                 }
               }
             }

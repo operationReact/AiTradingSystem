@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Strict exact-host PAPER deployment gate and SSM remote execution client.
 
-GitHub dev-only one-file request -> audited AWS identity/schedule/EC2/SSM ->
+GitHub main-only one-file release request -> audited AWS identity/schedule/EC2/SSM ->
 AWS-RunShellScript command targeting one existing EC2. A new AWS role and
 encrypted artifact bucket must be provisioned in CloudFormation before use.
 No EC2 start/stop, Terraform apply, SSH or LIVE broker functionality.
@@ -84,7 +84,7 @@ def verify_aws() -> None:
     if (actor.get("Account") != ACCOUNT
         or not isinstance(arn, str)
         or not arn.startswith(f"arn:aws:sts::{ACCOUNT}:assumed-role/{ROLE}/")):
-        raise Rejected("not using exact dev-only PAPER SSM deployment role")
+        raise Rejected("not using exact PAPER SSM delivery role")
 
     data = aws_json("ec2", "describe-instances", "--instance-ids", INSTANCE)
     reservations = data.get("Reservations", [])
