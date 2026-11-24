@@ -3,6 +3,7 @@ package in.aitradingsystem.news.feature;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import in.aitradingsystem.news.NewsService;
+import in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -29,6 +30,7 @@ class NewsFeatureEnrichmentIT extends AbstractPostgresIT {
     }
 
     private String article(Instant publishedAt) {
+        NewsSourcePolicyTestSupport.approveFixture(jdbc, "fixture-source");
         String url = "https://news.example.test/enrichment/" + UUID.randomUUID();
         news.ingest(new NewsService.IngestRequest(List.of(new NewsService.ArticleInput(
             "fixture-source", null, "Fixture headline", url, "Fixture excerpt", publishedAt))));
