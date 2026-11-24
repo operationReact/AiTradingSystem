@@ -605,3 +605,50 @@ assert the NSE and Upstox volume/OI units are already equal, change
 eligibility, bypass the 44 correctly rejected near-expiry windows, or
 turn retrospective simulated opens into actual source-proven fills.
 Independent historical certification stays at **0/43**.
+
+## STR-176 expanded authenticated 90-day futures pilot (research tier)
+
+The actual owner-private read-only run
+[#45368422158](https://github.com/operationReact/AiTradingSystem/actions/runs/45368422158)
+showed that 44 of 75 fixed 20-day-cohort test windows were correctly rejected
+near contract expiry. The 31 eligible windows produced zero trades: 17 low
+volume-lift, 2 low volume-to-OI, 7 both, 5 no breakout. By original source,
+NSE-reconciled windows had 3 expiry and 3 lift failures, while Upstox-private
+windows had 41 expiry, 14 lift, 2 OI, 7 both, 5 no breakout. **These
+observations do not support loosening the 7-day-to-expiry guard.**
+
+`str176_expanded_upstox_research.py` directly addresses the *coverage*
+limitation rather than changing the strategy. It uses existing authenticated
+single-owner research authorization and SSM token on the exact PAPER host,
+with a fixed capped **49 read-only Upstox GETs**:
+1 expired monthly expiry list, 12 verified NIFTY futures contract metadata
+lookups (one per completed month), 36 historical DAY candle requests split into
+three consecutive **30-day** windows per expiry covering the last **90
+calendar days**. The provider's actual returned dates, OHLC, volume and OI
+are parsed and checked; unknown/ambiguous futures keys, non-trading weekends,
+duplicate candle days, abnormal prices, empty/missing contracts, unexpected
+requests or provider errors fail or report incomplete evidence. The source
+data is analyzed **in memory only** and never persisted/exported.
+
+The numerical reference preserves original STR-176 momentum/expiry/volume/OI
+thresholds: a distinct seven-completed-session decision window precedes
+each modeled future open; one-lot next-open-to-following-open fills are
+*simulated* with 20, 30 and 50 basis-point round-trip friction sensitivity,
+chronologically splitting oldest eight futures expiry months from last four
+out-of-sample. A same-contract overlapping entry is skipped; no arbitrary
+price, trade, broker execution, exchange calendar or provider source
+publication timestamp is invented. An exact-host protected OIDC/SSM workflow
+may return only bounded aggregate futures rows, candidate/evaluator windows,
+modeled trades and after-cost OOS values.
+
+The first 3,929-row owner canonical cache remains **unmodified**. The new
+90-day cohort can be broader than the 171 old futures rows, but its
+actual provider responses, source value quality and ability to generate
+STR-176 signals must be established by the **host-proof** receipt, not
+from the synthetic unit tests. This does not establish point-in-time
+availability at past decision dates, exact official NSE trading calendars,
+Java evaluator parity on source rows, historical spread/bid-ask, broker
+fills, or independently accepted cost-aware OOS market replay.
+**Historical independent E2E remains 0/43** until all acceptance criteria
+are independently met. No user-side licensing request, new AWS resource,
+PAPER order or LIVE execution is included.
