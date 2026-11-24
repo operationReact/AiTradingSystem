@@ -54,12 +54,19 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
     }
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool resetPrevious = false}) async {
     final generation = ++_generation;
+    if (resetPrevious && _scroll.hasClients) _scroll.jumpTo(0);
     setState(() {
       _loading = true;
       _error = null;
       _paginationError = null;
+      if (resetPrevious) {
+        // Prior results must never appear under a different selected filter.
+        _items.clear();
+        _page = 0;
+        _hasNext = false;
+      }
     });
     try {
       final result = await widget.repository.events(
@@ -286,7 +293,7 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
       onSelected: (_) {
         if (_category == value) return;
         setState(() => _category = value);
-        unawaited(_reload());
+        unawaited(_reload(resetPrevious: true));
       },
     ),
   );
@@ -300,7 +307,7 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
       onSelected: (_) {
         if (_windowDays == days) return;
         setState(() => _windowDays = days);
-        unawaited(_reload());
+        unawaited(_reload(resetPrevious: true));
       },
     ),
   );
@@ -310,7 +317,7 @@ class _MarketEventTimelinePageState extends State<MarketEventTimelinePage> {
     FocusScope.of(context).unfocus();
     if (value == _query) return;
     setState(() => _query = value);
-    unawaited(_reload());
+    unawaited(_reload(resetPrevious: true));
   }
 
   Widget _emptyState() => Center(
