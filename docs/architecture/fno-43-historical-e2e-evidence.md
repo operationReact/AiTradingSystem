@@ -673,3 +673,27 @@ duplicate, excessively large, private or unrecognized error yields
 `UNCLASSIFIED_SOURCE_FAILURE`. The workflow still fails nonzero on a
 blocked host, never returns a synthetic success, never writes data or
 orders and never promotes STR-176 E2E certification.
+
+## STR-176 90-day source shape diagnosed from actual host
+
+Protected one-file owner PAPER [run #45371845546](
+https://github.com/operationReact/AiTradingSystem/actions/runs/45371845546)
+**failed closed** with the allowlisted receipt
+`UNVERIFIED_AUTHENTICATED_CANDLES`. The previous generic blocked
+source status was thus traced into the historical Upstox candle response
+structure, not an order failure or a trading strategy signal.
+No source row or successful 90-day EOD result is implied.
+
+Upstox publishes a success envelope with `data.candles` as an array:
+https://upstox.com/developer/api-documentation/get-expired-historical-candle-data/.
+The existing authenticated `Discovery.get` returns only the `data`
+part of the verified success envelope. The strict decoder previously
+combined three different failure causes into one status. The diagnostic
+update disambiguates **missing data object**,
+**missing/non-array `candles`**, and **more than 30 received daily
+candles in a bounded 30-calendar-day request**. It does not treat a
+null/unsupported object as legitimate empty source history. The only
+host-visible values are these allowlisted fixed strings; raw provider
+responses, instrument IDs, source bytes and credentials remain private.
+The same expired contract keys, API windows, original STR-176 thresholds,
+transaction costs and independent E2E false gate remain unchanged.

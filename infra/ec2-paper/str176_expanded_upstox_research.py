@@ -94,10 +94,14 @@ def chosen_future(rows, expiry, underlying):
     return candidates[0]
 
 def decode_expired_chunk(payload, first, last):
-    if (not isinstance(payload,dict)
-            or not isinstance(payload.get("candles"),list)
-            or len(payload["candles"])>PER_GET_DAYS):
-        raise ValueError("UNVERIFIED_AUTHENTICATED_CANDLES")
+    # Preserve the API's documented data.candles contract. Never silently
+    # reinterpret a missing/unsupported response as an empty candle history.
+    if not isinstance(payload,dict):
+        raise ValueError("HISTORICAL_DATA_OBJECT_MISSING")
+    if not isinstance(payload.get("candles"),list):
+        raise ValueError("HISTORICAL_CANDLE_ARRAY_MISSING")
+    if len(payload["candles"])>PER_GET_DAYS:
+        raise ValueError("HISTORICAL_CANDLE_WINDOW_OVERSIZED")
     result=[]
     seen=set()
     for row in payload["candles"]:
@@ -350,6 +354,9 @@ SAFE_BLOCK_CODES=frozenset((
   "INVALID_SOURCE_SESSION",
   "INVALID_SOURCE_QUANTITY",
   "UNVERIFIED_AUTHENTICATED_CANDLES",
+  "HISTORICAL_DATA_OBJECT_MISSING",
+  "HISTORICAL_CANDLE_ARRAY_MISSING",
+  "HISTORICAL_CANDLE_WINDOW_OVERSIZED",
   "ORIGINAL_SOURCE_PRICE_INVALID",
   "ORIGINAL_SOURCE_OHLC_INVALID",
   "DUPLICATE_SOURCE_SESSION_ACROSS_REQUESTS",
