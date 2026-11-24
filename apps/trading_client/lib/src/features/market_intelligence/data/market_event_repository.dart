@@ -120,7 +120,13 @@ class MarketEventPage {
 }
 
 abstract interface class MarketEventRepository {
-  Future<MarketEventPage> events({required int page, int size = 20});
+  Future<MarketEventPage> events({
+    required int page,
+    int size = 20,
+    String? category,
+    String? query,
+    int windowDays = 0,
+  });
 }
 
 /// No direct publisher calls, broker data mutation or Gemini credentials in Flutter.
@@ -129,12 +135,27 @@ class HttpMarketEventRepository implements MarketEventRepository {
   final AuthenticatedApiClient api;
 
   @override
-  Future<MarketEventPage> events({required int page, int size = 20}) async {
-    if (page < 0 || page > 200 || size < 1 || size > 50) {
+  Future<MarketEventPage> events({
+    required int page,
+    int size = 20,
+    String? category,
+    String? query,
+    int windowDays = 0,
+  }) async {
+    if (page < 0 || page > 200 || size < 1 || size > 50 ||
+        !{0, 1, 7, 30}.contains(windowDays) ||
+        (category != null && category.length > 40) ||
+        (query != null && query.length > 100)) {
       throw ArgumentError('Invalid event page request');
     }
     final json = await api.getJson('/api/customer/market-intelligence/events',
-      query: {'page': '$page', 'size': '$size'});
+      query: {
+        'page': '$page',
+        'size': '$size',
+        if (category != null && category.isNotEmpty) 'category': category,
+        if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+        if (windowDays > 0) 'windowDays': '$windowDays',
+      });
     return MarketEventPage.fromJson(json);
   }
 }
