@@ -21,6 +21,7 @@ class NewsArticleBridgeIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
     @Autowired NewsService news;
     @Autowired NewsSourceHealthRepository health;
+    @Autowired in.aitradingsystem.news.policy.NewsSourcePolicyService policy;
 
     private static String hash64() {
         return (UUID.randomUUID().toString() + UUID.randomUUID().toString()).replace("-", "");
@@ -49,7 +50,10 @@ class NewsArticleBridgeIT extends AbstractPostgresIT {
     }
 
     private NewsArticleBridge bridge(List<String> approved) {
-        return new NewsArticleBridge(jdbc, news, health, approved, Clock.systemUTC());
+        if (approved.contains("moneycontrol")) {
+            in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport.approveFixture(jdbc, "moneycontrol");
+        }
+        return new NewsArticleBridge(jdbc, news, health, policy, approved, Clock.systemUTC());
     }
 
     @Test

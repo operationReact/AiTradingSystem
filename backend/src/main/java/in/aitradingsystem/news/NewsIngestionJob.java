@@ -2,6 +2,8 @@ package in.aitradingsystem.news;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import in.aitradingsystem.news.policy.NewsSourcePolicy;
+import in.aitradingsystem.news.policy.NewsSourcePolicyService;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +21,7 @@ public class NewsIngestionJob {
     private final NewsRepository repository;
     private final GeminiNewsSummarizer summarizer;
     private final NewsSourceHealthRepository sourceHealth;
+    private final NewsSourcePolicyService policy;
     private final List<String> sourceIds;
     private final List<String> watchlist;
     private final int maxPayloadBytes;
@@ -29,6 +32,7 @@ public class NewsIngestionJob {
 
     public NewsIngestionJob(RssFeedClient feedClient, RssFeedParser parser, NewsRepository repository,
         GeminiNewsSummarizer summarizer, NewsSourceHealthRepository sourceHealth,
+        NewsSourcePolicyService policy,
         @Value("${app.news.ingestion.sources:}") List<String> sourceIds,
         @Value("${app.news.ingestion.watchlist:}") List<String> watchlist,
         @Value("${app.news.ingestion.max-payload-bytes:1048576}") int maxPayloadBytes,
@@ -41,6 +45,7 @@ public class NewsIngestionJob {
         this.repository = repository;
         this.summarizer = summarizer;
         this.sourceHealth = sourceHealth;
+        this.policy = policy;
         this.sourceIds = sourceIds;
         this.watchlist = watchlist;
         this.maxPayloadBytes = Math.max(1024, Math.min(maxPayloadBytes, 2_097_152));
@@ -66,17 +71,39 @@ public class NewsIngestionJob {
             int insertedForSource = 0;
             int summariesForSource = 0;
             try {
+                // The original RSS fetch is also rights-gated. Bridge and analysis gates alone are
+                // insufficient because this job can store content and invoke Gemini independently.
+                var ingestDecision = policy.decide(id, NewsSourcePolicy.Use.INGEST, Instant.now());
+                if (!ingestDecision.permitted()) {
+                    sourceHealth.record(id, startedAt, Instant.now(), "FAILED", 0, 0, 0,
+                        "RIGHTS_INGEST_BLOCKED", ingestDecision.name());
+                    continue;
+                }
+                var retentionDecision = policy.decide(id, NewsSourcePolicy.Use.RETAIN, Instant.now());
+                if (!retentionDecision.permitted()) {
+                    sourceHealth.record(id, startedAt, Instant.now(), "FAILED", 0, 0, 0,
+                        "RIGHTS_RETENTION_BLOCKED", retentionDecision.name());
+                    continue;
+                }
                 NewsSource source = NewsSource.byId(id);
                 byte[] body = feedClient.fetch(source, maxPayloadBytes);
                 List<NewsArticle> articles = parser.parse(body, source, watchlist,
                     Math.min(maxItemsPerSource, maxArticlesPerRun - inserted));
                 fetchedForSource = articles.size();
                 for (NewsArticle article : articles) {
+                    // Recheck after network I/O: an operator may revoke permission mid-run.
+                    if (!policy.permitted(id, NewsSourcePolicy.Use.INGEST, Instant.now())
+                        || !policy.permitted(id, NewsSourcePolicy.Use.RETAIN, Instant.now())) {
+                        throw new IllegalStateException("SOURCE_RIGHTS_REVOKED");
+                    }
                     var newId = repository.insert(article);
                     if (newId.isEmpty()) continue;
                     inserted++;
                     insertedForSource++;
-                    if (summaries < maxSummariesPerRun) {
+                    // Summarization is a separate external-model transfer; source ingestion
+                    // permission does not imply consent to NLP transfer.
+                    if (summaries < maxSummariesPerRun
+                        && policy.permitted(id, NewsSourcePolicy.Use.NLP_TRANSFER, Instant.now())) {
                         try {
                             var summary = summarizer.summarize(article);
                             if (summary.isPresent()) {
