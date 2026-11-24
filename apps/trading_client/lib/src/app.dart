@@ -68,6 +68,7 @@ import 'features/trading_rooms/presentation/minttick_home_activity_page.dart';
 import 'features/trading_rooms/presentation/minttick_home_command_centre.dart';
 import 'features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'features/market_intelligence/data/market_news_repository.dart';
+import 'features/market_intelligence/data/market_event_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
 import 'presentation/backtests_page.dart';
@@ -301,6 +302,7 @@ class _TradingAppState extends State<TradingApp> {
             ? MintTickCustomerMarketPage(
                 repository: HttpCustomerMarketRepository(_api),
                 marketNewsRepository: HttpMarketNewsRepository(_api),
+                marketEventRepository: HttpMarketEventRepository(_api),
                 onConnectBroker: () => _navigate('/broker/angel-one'),
                 rooms: _roomDrafts,
                 fnoDiscovery: CustomerFnoDiscoveryRepository(_api),
@@ -312,6 +314,7 @@ class _TradingAppState extends State<TradingApp> {
             ? MintTickCustomerMarketPage(
                 repository: HttpCustomerMarketRepository(_api),
                 marketNewsRepository: HttpMarketNewsRepository(_api),
+                marketEventRepository: HttpMarketEventRepository(_api),
                 rooms: _roomDrafts,
                 fnoDiscovery: CustomerFnoDiscoveryRepository(_api),
                 onOpenFnoRoom: _openRoom,

@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/market_news_repository.dart';
+import '../data/market_event_repository.dart';
+import 'market_event_timeline_page.dart';
 
 /// Read-only, source-attributed news surface. This view deliberately does not
 /// reinterpret an article as a verified stock event, options signal or order.
 class MarketIntelligencePage extends StatefulWidget {
-  const MarketIntelligencePage({required this.repository, super.key});
+  const MarketIntelligencePage({
+    required this.repository, this.eventRepository, super.key,
+  });
 
   final MarketNewsRepository repository;
+  final MarketEventRepository? eventRepository;
 
   @override
   State<MarketIntelligencePage> createState() => _MarketIntelligencePageState();
@@ -114,6 +119,15 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
       appBar: AppBar(
         title: const Text('Market intelligence'),
         actions: [
+          if (widget.eventRepository != null)
+            IconButton(
+              key: const ValueKey('market-events-open'),
+              tooltip: 'Event timeline',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => MarketEventTimelinePage(repository: widget.eventRepository!),
+              )),
+              icon: const Icon(Icons.timeline_rounded),
+            ),
           IconButton(
             key: const ValueKey('market-news-refresh'),
             tooltip: 'Refresh news',

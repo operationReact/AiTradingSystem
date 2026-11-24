@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../../data/instrument_repository.dart';
 import '../../market_intelligence/data/market_news_repository.dart';
+import '../../market_intelligence/data/market_event_repository.dart';
 import '../../market_intelligence/presentation/market_intelligence_page.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_fno_discovery_repository.dart';
@@ -40,10 +41,12 @@ class MintTickCustomerMarketPage extends StatefulWidget {
   const MintTickCustomerMarketPage({
     required this.repository, this.onConnectBroker,
     this.rooms, this.fnoDiscovery, this.onOpenFnoRoom,
-    this.onCreateFnoRoom, this.marketNewsRepository, super.key,
+    this.onCreateFnoRoom, this.marketNewsRepository,
+    this.marketEventRepository, super.key,
   });
   final CustomerMarketRepository repository;
   final MarketNewsRepository? marketNewsRepository;
+  final MarketEventRepository? marketEventRepository;
   final VoidCallback? onConnectBroker;
   final TradingRoomDraftStore? rooms;
   final CustomerFnoDiscoveryRepository? fnoDiscovery;
@@ -195,7 +198,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     final repository = widget.marketNewsRepository;
     if (repository == null) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => MarketIntelligencePage(repository: repository),
+      builder: (_) => MarketIntelligencePage(
+        repository: repository, eventRepository: widget.marketEventRepository,
+      ),
     ));
   }
 
