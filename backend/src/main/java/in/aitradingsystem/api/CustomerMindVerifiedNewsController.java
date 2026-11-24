@@ -90,7 +90,10 @@ public class CustomerMindVerifiedNewsController {
      */
     public record VerifiedNewsResponse(
         String contractVersion, long instrumentId, Instant researchCutoff,
-        UUID catalogueVersion, String verificationStatus, UUID verifiedListingId,
+        UUID catalogueVersion, String verificationStatus,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+            com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS)
+        UUID verifiedListingId,
         int evidenceCount, boolean includedInDecision, boolean canAuthorizeCapital,
         List<PublisherProof> evidence) {}
 }
