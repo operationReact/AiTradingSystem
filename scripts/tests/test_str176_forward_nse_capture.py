@@ -29,6 +29,11 @@ class CaptureTest(unittest.TestCase):
         self.assertIn(b"fno_personal_nse_archive_probe",source)
         self.assertIn(b"def read_udiff",source)
 
+    def test_archive_url_matches_published_nse_archive(self):
+        self.assertEqual(
+            "https://nsearchives.nseindia.in/content/fo/BhavCopy_NSE_FO_0_0_0_20261123_F_0000.csv.zip",
+            m.archive_url(DAY))
+
     def test_scope_is_bounded_and_not_before_final_eod(self):
         m.require_scope(DAY,OBS)
         for bad in (OBS-timedelta(hours=8),OBS+timedelta(days=3)):

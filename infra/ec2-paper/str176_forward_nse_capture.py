@@ -99,9 +99,12 @@ def require_scope(day,now):
     if not cutoff<=now.astimezone(IST)<=cutoff+timedelta(hours=36):
         raise Blocked("SOURCE_OBSERVATION_WINDOW_EXPIRED")
 
+def archive_url(day):
+    return ("https://nsearchives.nseindia.in/content/fo/BhavCopy_NSE_FO_0_0_0_"
+            +day.strftime("%Y%m%d")+"_F_0000.csv.zip")
+
 def acquire(day, opener=None):
-    url=("https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_"
-         +day.strftime("%Y%m%d")+"_F_0000.csv.zip")
+    url=archive_url(day)
     req=urllib.request.Request(url,method="GET",headers={
         "Accept":"application/zip","User-Agent":"MintTick-Personal-Research/1.0"})
     try:
