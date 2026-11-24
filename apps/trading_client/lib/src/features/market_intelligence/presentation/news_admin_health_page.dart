@@ -158,8 +158,13 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
                               _line('Recorded Gemini analyses',
                                 _snapshot!.model.recordedGeminiAnalysisReceipts?.toString() ?? 'UNAVAILABLE'),
                               _line('Gemini readiness', _geminiReadiness(_snapshot!.model.geminiReadiness)),
+                              _line('Last Gemini attempt', _snapshot!.model.lastGeminiAttemptAt == null
+                                ? 'UNAVAILABLE' : _ist(_snapshot!.model.lastGeminiAttemptAt!)),
+                              _line('Gemini transport result',
+                                _geminiAttemptOutcome(_snapshot!.model.lastGeminiAttemptOutcome)),
                               const Text('Recorded analyses do not prove current provider connectivity.'),
-
+                              const Text('Transport observations reset when the backend restarts; '
+                                'a completed response does not certify structured analysis.'),
                             ],
                           ),
                         ),
@@ -272,6 +277,18 @@ class _NewsAdminHealthPageState extends State<NewsAdminHealthPage> {
   };
 
   static String _yesNo(bool enabled) => enabled ? 'YES' : 'NO';
+
+  static String _geminiAttemptOutcome(String? outcome) => switch (outcome) {
+    'NO_OBSERVATION' => 'No attempt observed',
+    'COMPLETED_WITH_REQUEST_ID' => 'Completed with request ID',
+    'COMPLETED_WITHOUT_REQUEST_ID' => 'Completed without request ID',
+    'UNCONFIGURED' => 'Not configured',
+    'TIMEOUT' => 'Timed out',
+    'RATE_LIMITED' => 'Rate limited',
+    'HTTP_ERROR' => 'Provider HTTP error',
+    'INVALID_RESPONSE' => 'Invalid provider response',
+    _ => 'UNAVAILABLE',
+  };
 
   static String _ist(DateTime value) {
     final t = value.toUtc().add(const Duration(hours: 5, minutes: 30));

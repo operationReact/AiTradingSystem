@@ -72,6 +72,41 @@ void main() {
     expect(model.selectedProviderConfigured, isNull);
     expect(model.recordedGeminiAnalysisReceipts, isNull);
     expect(model.geminiReadiness, isNull);
+    expect(model.lastGeminiAttemptAt, isNull);
+    expect(model.lastGeminiAttemptOutcome, isNull);
+  });
+
+  test('runtime observation distinguishes no attempt, completion and failure without certification', () {
+    final fixture = fixtureHealth();
+    final model = fixture['model'] as Map<String, dynamic>;
+    model['lastGeminiAttemptOutcome'] = 'NO_OBSERVATION';
+    expect(NewsAdminHealthSnapshot.fromJson(fixture).model.lastGeminiAttemptAt, isNull);
+    for (final outcome in ['COMPLETED_WITH_REQUEST_ID', 'COMPLETED_WITHOUT_REQUEST_ID',
+      'UNCONFIGURED', 'TIMEOUT', 'RATE_LIMITED', 'HTTP_ERROR', 'INVALID_RESPONSE']) {
+      model['lastGeminiAttemptOutcome'] = outcome;
+      model['lastGeminiAttemptAt'] = '2026-11-24T09:59:00+05:30';
+      final decoded = NewsAdminHealthSnapshot.fromJson(fixture).model;
+      expect(decoded.lastGeminiAttemptOutcome, outcome);
+      expect(decoded.lastGeminiAttemptAt, DateTime.utc(2026, 11, 24, 4, 29));
+      expect(decoded.lastGeminiAttemptAt!.isUtc, isTrue);
+      expect(decoded.realProviderCallVerified, isFalse);
+    }
+  });
+
+  test('rejects incomplete, future, unknown or contradictory runtime observations', () {
+    for (final observation in [
+      {'lastGeminiAttemptAt': '2026-11-24T04:29:00Z'},
+      {'lastGeminiAttemptOutcome': 'TIMEOUT'},
+      {'lastGeminiAttemptOutcome': 'NO_OBSERVATION', 'lastGeminiAttemptAt': '2026-11-24T04:29:00Z'},
+      {'lastGeminiAttemptOutcome': 'TIMEOUT', 'lastGeminiAttemptAt': false},
+      {'lastGeminiAttemptOutcome': 'TIMEOUT', 'lastGeminiAttemptAt': 'invalid'},
+      {'lastGeminiAttemptOutcome': 'TIMEOUT', 'lastGeminiAttemptAt': '2026-11-24T04:31:00Z'},
+      {'lastGeminiAttemptOutcome': 'arbitrary-provider-payload', 'lastGeminiAttemptAt': '2026-11-24T04:29:00Z'},
+    ]) {
+      final fixture = fixtureHealth();
+      (fixture['model'] as Map<String, dynamic>).addAll(observation);
+      expect(() => NewsAdminHealthSnapshot.fromJson(fixture), throwsFormatException);
+    }
   });
 
   test('decodes recorded Gemini receipts without asserting live verification', () {
