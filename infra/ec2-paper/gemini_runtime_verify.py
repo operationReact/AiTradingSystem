@@ -145,7 +145,14 @@ def host():
         config = json.loads(docker("inspect", "--format", "{{json .Config}}", ids[0]))
         if not isinstance(config, dict) or not isinstance(config.get("Env"), list):
             raise ValueError("INVALID_CONTAINER_CONFIG")
-        env = dict(row.split("=", 1) for row in config["Env"] if isinstance(row, str) and "=" in row)
+        env = {}
+        for row in config["Env"]:
+            if not isinstance(row, str) or "=" not in row:
+                raise ValueError("INVALID_CONTAINER_ENV")
+            name, value = row.split("=", 1)
+            if name in env:
+                raise ValueError("DUPLICATE_CONTAINER_ENV")
+            env[name] = value
         image = config.get("Image", "")
         revision = re.fullmatch(r"aitradingsystem-paper-backend-arm64:([0-9a-f]{40})", image)
         if not revision or env.get("APP_BUILD_REVISION") != revision.group(1):
@@ -189,8 +196,8 @@ def runner():
     if len(payload) > 23000:
         raise RuntimeError("GEMINI_RUNTIME_PAYLOAD_TOO_LARGE")
     # Run the downloaded diagnostic without installing or changing host state.
-    cmd = ("set -eu\nprintf '%s' '" + payload + "' | base64 -d | gzip -dc > /tmp/minttick-gemini-check.py\n"
-           "cd /opt/aitradingsystem-paper\nPYTHONDONTWRITEBYTECODE=1 python3 -c \"import sys; sys.path.insert(0, '/opt/aitradingsystem-paper'); import importlib.util,json; p=importlib.util.spec_from_file_location('gemini_runtime_verify','/tmp/minttick-gemini-check.py'); m=importlib.util.module_from_spec(p); p.loader.exec_module(m); print('" + MARKER + "'+json.dumps(m.host(),sort_keys=True))\"\n")
+    cmd = ("set -eu\ntmp=$(mktemp /tmp/minttick-gemini-check.XXXXXX.py)\ntrap 'rm -f \"$tmp\"' EXIT\nprintf '%s' '" + payload + "' | base64 -d | gzip -dc > \"$tmp\"\n"
+           "cd /opt/aitradingsystem-paper\nCHECK_SCRIPT=\"$tmp\" PYTHONDONTWRITEBYTECODE=1 python3 -c \"import sys; sys.path.insert(0, '/opt/aitradingsystem-paper'); import importlib.util,json,os; p=importlib.util.spec_from_file_location('gemini_runtime_verify',os.environ['CHECK_SCRIPT']); m=importlib.util.module_from_spec(p); p.loader.exec_module(m); print('" + MARKER + "'+json.dumps(m.host(),sort_keys=True))\"\n")
     sent = aws("ssm", "send-command", "--document-name", "AWS-RunShellScript", "--instance-ids", INSTANCE,
                "--timeout-seconds", "70", "--comment", "MintTick one-call Gemini runtime verification",
                "--parameters", json.dumps({"commands": [cmd]}))
@@ -207,7 +214,13 @@ def runner():
             receipt = json.loads(out[0][len(MARKER):])
             allowed = {"status", "deployedSha", "model", "providerCallAttempted", "providerResponseCompleted",
                        "challengeValidated", "requestIdPresent", "latencyMs", "httpStatus"}
-            if set(receipt) != allowed or receipt["deployedSha"] is None or not SHA.fullmatch(receipt["deployedSha"]):
+            if (set(receipt) != allowed
+                    or (receipt["deployedSha"] is not None
+                        and (not isinstance(receipt["deployedSha"], str)
+                             or not SHA.fullmatch(receipt["deployedSha"])))
+                    or (receipt["model"] is not None
+                        and (not isinstance(receipt["model"], str)
+                             or not MODEL.fullmatch(receipt["model"])) )):
                 raise RuntimeError("GEMINI_RUNTIME_RECEIPT_INVALID")
             receipt["expectedSha"] = os.environ["GITHUB_SHA"]
             receipt["revisionMatchesRequest"] = receipt["deployedSha"] == receipt["expectedSha"]
