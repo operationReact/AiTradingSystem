@@ -400,3 +400,38 @@ The exact deployed PAPER V102 receipt from GitHub Actions #45349531935 had
 Until actual source records and authentic market-as-of fill evidence exist
 and the runtime is deployed, this new service cannot independently certify
 any strategy. **Historical independent E2E remains 0/43.**
+
+## 2026-11-24 — Direct STR-176 futures input expansion (source, not certification)
+
+The existing owner-private expired-NIFTY collection covered only the **last
+20 calendar days before each expiry**, leaving relatively few eligible seven
+completed-session STR-176 decision windows once the 7-day-to-expiry rule is
+applied. New owner-private bounded collector
+`str176_private_futures_capture.py` requests **up to 60 calendar days** of
+historical **FUTURES ONLY**, for at most **12 expired NIFTY contract months**.
+It uses the existing private owner-scoped Upstox token and approved data-use
+context. It keeps actual source HTTP response bytes, SHA-256, received-at
+timestamp, provider-issued contract key/expiry and lot size in a separate
+append-only, private SQLite file. It never fabricates the vendor's original
+historical publication time; the candle timestamp remains a session label.
+
+The one-file exact-host request workflow is separate from code review CI;
+the host collector is not triggered by a PR or ordinary merge. It uses
+the existing owner PAPER EC2, a maximum of 25 GETs (one expiries request,
+12 futures metadata requests, up to 12 candle requests), and no live/order
+credentials. Malformed, ambiguous or double-labelled daily bars are
+quarantined instead of silently picking a row or being called market-proof.
+The output contains only aggregate month, row and quarantine counts,
+no futures keys, tokens, market values or URLs. It is **not a V102 write**,
+does not create verified third-party rights or calendar rows, and does not
+change PAPER/LIVE rights.
+
+The independent historical E2E acceptance remains:
+authentic data and contract metadata, exchange-calendar and volume-unit
+reconciliation, decisions calculated solely from completed prior sessions,
+modeled next-session open fills with explicit documented execution costs,
+chronological train/OOS, source-independent decision comparison, repeatable
+immutable evidence receipts. Historical simulation does not require actual
+broker fill receipts; those are a *separate* PAPER/LIVE certification gate.
+No sample will count as 1/43 until the real host execution and the independent
+replay/OOS tests pass all these requirements.
