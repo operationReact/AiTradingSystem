@@ -6,6 +6,8 @@ import importlib.util
 import json
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -56,6 +58,73 @@ def fixture(root: Path, tamper=False):
 
 
 class ProgressSnapshotTests(unittest.TestCase):
+    def test_handover_waits_for_activating_oneshot_without_stopping_it(self):
+        states = [subprocess.CompletedProcess([], 0, 'activating\n', ''),
+                  subprocess.CompletedProcess([], 0, 'inactive\n', '')]
+        with patch.object(progress.subprocess, 'run', side_effect=states) as run, \
+                patch.object(progress.time, 'sleep') as sleep:
+            progress.wait_for_previous_publisher()
+            self.assertEqual(2, run.call_count)
+            sleep.assert_called_once_with(2)
+            for call in run.call_args_list:
+                self.assertEqual(['systemctl', 'show', '--value', '-p', 'ActiveState',
+                                  'minttick-owner-history.service'], call.args[0])
+
+    def test_handover_is_bounded_and_rejects_unavailable_unit_state(self):
+        with patch.object(progress.subprocess, 'run', return_value=
+                subprocess.CompletedProcess([], 0, 'activating\n', '')), \
+                patch.object(progress.time, 'monotonic', side_effect=[0, 1]):
+            with self.assertRaisesRegex(progress.ProgressUnavailable, 'PUBLICATION_HANDOVER_BUSY'):
+                progress.wait_for_previous_publisher(timeout=0)
+        with patch.object(progress.subprocess, 'run', return_value=
+                subprocess.CompletedProcess([], 1, '', 'fixture-private-details')):
+            with self.assertRaisesRegex(progress.ProgressUnavailable, 'PUBLICATION_HANDOVER_UNAVAILABLE'):
+                progress.wait_for_previous_publisher()
+
+    def test_publication_lock_excludes_another_process_then_releases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = '''import importlib.util,sys
+from pathlib import Path
+s=importlib.util.spec_from_file_location("progress",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+with m.publication_lock(Path(sys.argv[2]), timeout=0):
+ print("LOCKED",flush=True)
+ sys.stdin.readline()
+'''
+            child = subprocess.Popen([sys.executable, '-c', script, str(MODULE), tmp],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual('LOCKED', child.stdout.readline().strip())
+                with self.assertRaisesRegex(progress.ProgressUnavailable, 'PUBLICATION_BUSY'):
+                    with progress.publication_lock(Path(tmp), timeout=0):
+                        self.fail('Two publishers entered the critical section')
+                child.communicate('\n', timeout=5)
+                self.assertEqual(0, child.returncode)
+                with progress.publication_lock(Path(tmp), timeout=0):
+                    pass
+                self.assertTrue((Path(tmp) / '.publication.lock').exists())
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.communicate()
+
+    def test_publication_lock_rejects_symlink_and_public_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / 'fixture'
+            target.write_text('fixture')
+            lock = root / '.publication.lock'
+            lock.symlink_to(target)
+            with self.assertRaises(OSError):
+                with progress.publication_lock(root, timeout=0):
+                    self.fail('Symlink lock accepted')
+            lock.unlink()
+            lock.write_text('')
+            lock.chmod(0o644)
+            with self.assertRaisesRegex(progress.ProgressUnavailable, 'UNTRUSTED_PUBLICATION_LOCK'):
+                with progress.publication_lock(root, timeout=0):
+                    self.fail('Public lock accepted')
+
     def test_monthly_accepts_exact_integral_provider_volume_without_rounding(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

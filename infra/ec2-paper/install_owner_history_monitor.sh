@@ -48,7 +48,8 @@ PY
 import sys
 sys.path.insert(0,sys.argv[1])
 from owner_history_scheduler import STATE, load_state
-from owner_history_progress import publish
+from owner_history_progress import publish, wait_for_previous_publisher
+wait_for_previous_publisher()
 publish(status="IDLE", scheduler_state=load_state(STATE))
 PY
   test -f "$root/monitor/progress.json" && test ! -L "$root/monitor/progress.json"

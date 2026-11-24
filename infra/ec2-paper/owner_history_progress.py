@@ -8,7 +8,9 @@ The raw root-private archive and SQLite stay outside the backend container.
 from __future__ import annotations
 
 import collections
+from contextlib import contextmanager
 import datetime as dt
+import fcntl
 import gzip
 import hashlib
 import json
@@ -17,7 +19,10 @@ from pathlib import Path
 import re
 import shutil
 import sqlite3
+import stat
+import subprocess
 import tempfile
+import time
 from zoneinfo import ZoneInfo
 
 ROOT = Path("/var/lib/minttick/owner-personal-angelone-history")
@@ -415,7 +420,7 @@ class _OwnerMonthlySink:
             shutil.rmtree(self.stage)
 
 
-def publish(root: Path = ROOT, output: Path = OUTPUT, *,
+def _publish_snapshot(root: Path = ROOT, output: Path = OUTPUT, *,
             now: dt.datetime | None = None, status: str = "IDLE",
             scheduler_state: dict | None = None, last_run: dict | None = None) -> None:
     if os.geteuid() != 0:
@@ -454,3 +459,71 @@ def publish(root: Path = ROOT, output: Path = OUTPUT, *,
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+
+@contextmanager
+def publication_lock(directory: Path, *, timeout: float = 120):
+    """Serialize timer and deployment publishers without locking/downloading candles."""
+    path = directory / '.publication.lock'
+    fd = None
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                or info.st_nlink != 1 or info.st_mode & 0o077):
+            raise ProgressUnavailable('UNTRUSTED_PUBLICATION_LOCK')
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise ProgressUnavailable('PUBLICATION_BUSY') from None
+                time.sleep(0.1)
+        yield
+    finally:
+        # Closing releases the lock even if building/committing the cache fails.
+        # Never unlink the lock inode: a waiting process may already reference it.
+        if fd is not None:
+            os.close(fd)
+
+
+def wait_for_previous_publisher(*, timeout: float = 720) -> None:
+    """Let an already-running legacy oneshot finish before adopting writer locks.
+
+    No timer/service is stopped and no provider work is started. A new service
+    after this handover imports the installed module and uses publication_lock.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            process = subprocess.run(['systemctl', 'show', '--value', '-p', 'ActiveState',
+                                      'minttick-owner-history.service'],
+                                     capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            raise ProgressUnavailable('PUBLICATION_HANDOVER_UNAVAILABLE') from None
+        state = process.stdout.strip()
+        if process.returncode or state not in {'inactive', 'failed', 'active', 'activating', 'deactivating', 'reloading'}:
+            raise ProgressUnavailable('PUBLICATION_HANDOVER_UNAVAILABLE')
+        if state in {'inactive', 'failed'}:
+            return
+        if time.monotonic() >= deadline:
+            raise ProgressUnavailable('PUBLICATION_HANDOVER_BUSY')
+        time.sleep(2)
+
+
+def publish(root: Path = ROOT, output: Path = OUTPUT, *,
+            now: dt.datetime | None = None, status: str = 'IDLE',
+            scheduler_state: dict | None = None, last_run: dict | None = None) -> None:
+    if os.geteuid() != 0:
+        raise ProgressUnavailable('ROOT_REQUIRED')
+    directory = output.parent
+    if directory.is_symlink():
+        raise ProgressUnavailable('UNTRUSTED_MONITOR_PATH')
+    directory.mkdir(parents=True, exist_ok=True)
+    if directory.stat().st_uid != 0:
+        raise ProgressUnavailable('UNTRUSTED_MONITOR_PATH')
+    with publication_lock(directory):
+        _publish_snapshot(root, output, now=now, status=status,
+                          scheduler_state=scheduler_state, last_run=last_run)
