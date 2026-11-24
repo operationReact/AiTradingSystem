@@ -72,6 +72,23 @@ jobs:
         env:
           AWS_REGION: ap-south-1
         run: python3 infra/ec2-paper/gemini_runtime_preflight.py runner
+      - name: Record whether the existing Gemini repository secret is accessible
+        env:
+          REPOSITORY_GEMINI_SECRET_ACCESSIBLE: ${{ secrets.GEMINI_API_KEY != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          value = os.environ['REPOSITORY_GEMINI_SECRET_ACCESSIBLE']
+          assert value in ('true', 'false')
+          path = Path('gemini-runtime-preflight.json')
+          report = json.loads(path.read_text())
+          report['repositoryGeminiSecretAccessible'] = value == 'true'
+          path.write_text(json.dumps(report, indent=2) + '\n')
+          print('Existing repository GEMINI_API_KEY accessible: ' + value)
+          PY
       - name: Retain sanitized preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
