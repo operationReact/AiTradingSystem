@@ -29,16 +29,21 @@ class NewsArticleBridgeIT extends AbstractPostgresIT {
 
     /** Inserts an RSS-ingested row exactly as NewsRepository would (news_item). */
     private String rssRow(String source, String url, String title, Instant publishedAt) {
+        return rssRow(source, url, title, publishedAt, "fixture body");
+    }
+
+    private String rssRow(String source, String url, String title, Instant publishedAt, String content) {
         jdbc.sql("""
                 INSERT INTO news_item (source, publisher, source_url, published_at, title,
                                        normalized_content, content_hash)
-                VALUES (:source, :publisher, :url, :publishedAt, :title, 'fixture body', :hash)
+                VALUES (:source, :publisher, :url, :publishedAt, :title, :content, :hash)
                 """)
             .param("source", source)
             .param("publisher", "Fixture Publisher")
             .param("url", url)
             .param("publishedAt", OffsetDateTime.ofInstant(publishedAt, ZoneOffset.UTC))
             .param("title", title)
+            .param("content", content)
             .param("hash", hash64())
             .update();
         return url;
@@ -85,6 +90,52 @@ class NewsArticleBridgeIT extends AbstractPostgresIT {
         // Deduplication: a second pass over the same RSS rows does not create a second article.
         b.runOnce();
         assertThat(articleCount(approvedUrl)).isEqualTo(1);
+    }
+
+    @Test
+    void approvedRssDescriptionReachesAnalyzerAsBoundedPlainText() {
+        String url = "https://www.moneycontrol.com/news/excerpt-" + UUID.randomUUID() + ".html";
+        Instant publication = Instant.now().minusSeconds(400);
+        String rssDescription = "<p>Quarterly <b>results</b> &amp; management update</p> " + "x".repeat(2100);
+        rssRow("moneycontrol", url, "Official results headline", publication, rssDescription);
+
+        bridge(List.of("moneycontrol")).runOnce();
+
+        NewsService.ArticleView result = jdbc.sql("""
+                SELECT id FROM news_articles WHERE url = :url
+                """).param("url", url).query(UUID.class).optional()
+            .flatMap(news::findArticle).orElseThrow();
+        assertThat(result.source()).isEqualTo("moneycontrol");
+        assertThat(result.url()).isEqualTo(url);
+        assertThat(result.publishedAt()).isEqualTo(publication);
+        assertThat(result.excerpt()).startsWith("Quarterly results & management update");
+        assertThat(result.excerpt()).doesNotContain("<p>", "<b>");
+        assertThat(result.excerpt()).hasSizeLessThanOrEqualTo(2000);
+        assertThat(NewsAnalysisService.userPrompt(result)).contains(result.excerpt());
+    }
+
+    @Test
+    void anIngestApprovalWithoutRetentionRightsDoesNotPublishToAnalyzerStore() {
+        String url = "https://www.moneycontrol.com/news/no-retain-" + UUID.randomUUID() + ".html";
+        rssRow("moneycontrol", url, "Title allowed to fetch but not store",
+            Instant.now().minusSeconds(600), "Sensitive permitted-only-for-fetch excerpt");
+        in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport.approveFixture(jdbc, "moneycontrol");
+        jdbc.sql("""
+            UPDATE news_source_policy SET permitted_uses = ARRAY['INGEST']::text[]
+             WHERE source_id = 'moneycontrol'
+            """).update();
+
+        try {
+            new NewsArticleBridge(jdbc, news, health, policy, List.of("moneycontrol"),
+                Clock.systemUTC()).runOnce();
+            assertThat(articleCount(url)).isZero();
+            var result = health.latest().stream()
+                .filter(h -> "moneycontrol".equals(h.source())).findFirst();
+            assertThat(result).isPresent();
+            assertThat(result.orElseThrow().errorCode()).isEqualTo("RIGHTS_NOT_PERMITTED");
+        } finally {
+            in.aitradingsystem.news.policy.NewsSourcePolicyTestSupport.resetToPending(jdbc, "moneycontrol");
+        }
     }
 
     @Test
