@@ -22,7 +22,10 @@ class _NewsHealthAdminPageState extends State<NewsHealthAdminPage> {
     _snapshot = widget.repository.fetch();
   }
 
-  void _refresh() => setState(() => _snapshot = widget.repository.fetch());
+  void _refresh() {
+    final next = widget.repository.fetch();
+    setState(() { _snapshot = next; });
+  }
 
   @override
   Widget build(BuildContext context) {
