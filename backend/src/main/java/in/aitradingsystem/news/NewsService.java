@@ -104,8 +104,11 @@ public class NewsService {
     }
 
     public PageResponse<ArticleView> articles(int page, int size) {
-        long total = jdbc.sql("SELECT count(*) FROM news_articles").query(Long.class).single();
-        List<ArticleView> items = jdbc.sql(ARTICLE_SELECT + """
+        // The customer-facing list must not expose content from unknown, unapproved,
+        // expired or revoked sources merely because articles remain in the audit DB.
+        long total = jdbc.sql("SELECT count(*) FROM news_articles a " + DISPLAY_ALLOWED)
+            .query(Long.class).single();
+        List<ArticleView> items = jdbc.sql(ARTICLE_SELECT + DISPLAY_ALLOWED + """
                 ORDER BY a.published_at DESC
                 LIMIT :limit OFFSET :offset
                 """)
@@ -122,6 +125,17 @@ public class NewsService {
             .query(this::mapArticle)
             .optional();
     }
+
+    private static final String DISPLAY_ALLOWED = """
+        WHERE EXISTS (
+            SELECT 1 FROM news_source_policy p
+             WHERE p.source_id = a.source
+               AND p.license_state = 'APPROVED'
+               AND 'DISPLAY' = ANY(p.permitted_uses)
+               AND p.effective_from <= CURRENT_TIMESTAMP
+               AND (p.effective_to IS NULL OR CURRENT_TIMESTAMP < p.effective_to)
+        )
+        """;
 
     private static final String ARTICLE_SELECT = """
         SELECT a.id, a.source, a.title, a.url, a.excerpt, a.published_at, a.ingested_at,
