@@ -142,7 +142,7 @@ class ExpandedOwnerResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"HISTORICAL_DUPLICATE_SESSION_DAY"):
             m.decode_expired_chunk(double,start,end)
         wrong={"candles":[["2026-10-01T09:15:00+05:30",100,101,99,100,1,1]]}
-        with self.assertRaisesRegex(ValueError,"INVALID_SOURCE_SESSION"):
+        with self.assertRaisesRegex(ValueError,"HISTORICAL_NONCANONICAL_DAILY_TIME"):
             m.decode_expired_chunk(wrong,start,end)
 
     def test_missing_or_oversized_authenticated_response_is_diagnosed_without_raw_data(self):
