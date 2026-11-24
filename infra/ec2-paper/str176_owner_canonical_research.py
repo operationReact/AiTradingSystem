@@ -259,15 +259,9 @@ def evaluate(groups, metadata, *, cost_bps=COST_BPS):
             "oosMaxDrawdownPaise":drawdown}
 
 def run_research(root=ROOT,now=None,fetch=None):
-    try:
-        groups=read_eligible(root,now)
-        expiries={date.strptime(key.rsplit("|",1)[1],"%d-%m-%Y")
-                  for key in groups}
-    except AttributeError:
-        # Python datetime.strptime used for full cross-platform date decoding.
-        groups=read_eligible(root,now)
-        expiries={datetime.strptime(key.rsplit("|",1)[1],"%d-%m-%Y").date()
-                  for key in groups}
+    groups=read_eligible(root,now)
+    expiries={datetime.strptime(key.rsplit("|",1)[1],"%d-%m-%Y").date()
+              for key in groups}
     if fetch is None:raise ValueError("EXPLICIT_PROVIDER_METADATA_FETCH_REQUIRED")
     metadata,calls=metadata_futures(expiries,fetch)
     result=evaluate(groups,metadata)
