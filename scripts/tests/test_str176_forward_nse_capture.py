@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"infra/ec2-paper"))
 m=importlib.import_module("str176_forward_nse_capture")
 DAY=date.fromisoformat(m.EXACT["session_date"])
-OBS=datetime(2026,11,24,15,0,tzinfo=timezone.utc)
+OBS=datetime(2026,11,23,15,0,tzinfo=timezone.utc)
 COUNTS={"indexFutures":3,"indexOptions":25}
 class CaptureTest(unittest.TestCase):
     def test_failure_receipts_never_publish_arbitrary_host_output(self):
