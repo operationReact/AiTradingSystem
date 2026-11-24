@@ -337,8 +337,13 @@ class _OwnerMonthlySink:
             if hi < max(op, close) or lo > min(op, close) or lo > hi:
                 raise ValueError("Invalid OHLC bounds")
             volume = row[5]
-            if type(volume) is not int or volume < 0 or volume > 10**12:
+            # The collector accepts finite integral provider volume such as
+            # 12345.0 without rewriting the SHA-checked original payload.
+            # Normalize only this exact integer quantity for monthly export.
+            if (type(volume) not in (int, float) or not 0 <= volume <= 10**12
+                    or volume != int(volume)):
                 raise ValueError("Invalid volume")
+            volume = int(volume)
         except (TypeError, ValueError, IndexError, OverflowError):
             raise ProgressUnavailable("INVALID_MONTHLY_SOURCE_ROW") from None
         if self.last_session is not None and session <= self.last_session:

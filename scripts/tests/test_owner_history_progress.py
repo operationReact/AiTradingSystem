@@ -56,6 +56,34 @@ def fixture(root: Path, tamper=False):
 
 
 class ProgressSnapshotTests(unittest.TestCase):
+    def test_monthly_accepts_exact_integral_provider_volume_without_rounding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sink = progress._OwnerMonthlySink(root,
+                dt.datetime(2024, 1, 4, tzinfo=dt.timezone.utc))
+            try:
+                sink('2885', 'RELIANCE-EQ', ['2024-01-02T15:30:00+05:30', 100, 110, 99, 105, 12345.0])
+                sink('2885', 'RELIANCE-EQ', ['2024-01-03T15:30:00+05:30', 106, 111, 102, 108, 9876])
+                sink.complete()
+            finally:
+                sink.discard()
+            row = json.loads((root / 'monthly/2885.json').read_text())['rows'][0]
+            self.assertEqual([100, 111, 99, 108, 22221], row[1:])
+            self.assertIs(type(row[5]), int)
+
+    def test_monthly_rejects_fractional_nonfinite_boolean_and_invalid_volume(self):
+        for volume in (0.5, float('nan'), float('inf'), True, -1, 10**12 + 1, '12345'):
+            with self.subTest(volume=volume), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                sink = progress._OwnerMonthlySink(root,
+                    dt.datetime(2024, 1, 4, tzinfo=dt.timezone.utc))
+                try:
+                    with self.assertRaises(progress.ProgressUnavailable):
+                        sink('2885', 'RELIANCE-EQ', ['2024-01-02T15:30:00+05:30', 100, 110, 99, 105, volume])
+                finally:
+                    sink.discard()
+                self.assertFalse((root / 'monthly').exists())
+
     def test_exact_year_counts_and_incomplete_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
