@@ -53,6 +53,8 @@ class MindDecisionHistoryServiceIT extends AbstractPostgresIT {
             .containsExactly(VALID);
         var row = rows.getFirst();
         assertThat(row.decisionPosture()).isEqualTo("RECORDED_CANDIDATE");
+        // The original persisted scan instrument ID, never a ticker-derived substitute.
+        assertThat(row.instrumentId()).isEqualTo(1L);
         assertThat(row.paperOrderSubmitted()).isFalse();
         assertThat(row.executionEnabled()).isFalse();
         assertThat(row.liveMoney()).isFalse();

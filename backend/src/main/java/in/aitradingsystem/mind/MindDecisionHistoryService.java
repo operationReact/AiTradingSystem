@@ -48,7 +48,7 @@ public class MindDecisionHistoryService {
                            // Always serialized: null is an explicit "not recorded", never an omitted field.
                            @com.fasterxml.jackson.annotation.JsonInclude(
                                com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS)
-                           NewsContext news) {}
+                           NewsContext news, Long instrumentId) {}
 
     public record History(String contract, Instant generatedAt, int limit, List<Decision> decisions,
                           List<String> limitations) {}
@@ -60,7 +60,7 @@ public class MindDecisionHistoryService {
         List<Row> rows = jdbc.query("""
                 SELECT r.id AS run_id, r.completed_at AS run_completed_at,
                        c.strategy, c.strategy_config_version, c.catalogue_version,
-                       c.trading_symbol, c.exchange, c.interval, c.signal_candle_time,
+                       c.instrument_id, c.trading_symbol, c.exchange, c.interval, c.signal_candle_time,
                        c.data_cutoff_at, c.candidate_fingerprint, c.reasons,
                        c.news_context::text AS news_context, c.news_context_contract
                   FROM research_scan_candidate c
@@ -89,7 +89,8 @@ public class MindDecisionHistoryService {
                         splitReasons(rs.getString("reasons")),
                         "RECORDED_CANDIDATE",
                         false, false, false,
-                        parseNews(rs.getString("news_context"), rs.getString("news_context_contract")));
+                        parseNews(rs.getString("news_context"), rs.getString("news_context_contract")),
+                        rs.getLong("instrument_id") > 0 ? rs.getLong("instrument_id") : null);
                     return new Row(decision, signalAt, cutoffAt);
                 }, MAX_ROWS);
         // Fail closed in Java too: any row whose lineage is not valid is dropped, never shown.
