@@ -25,6 +25,19 @@ REQUEST = Path("infra/ec2-paper/requests/gemini-runtime-preflight.json")
 MARKER = "MINTTICK_GEMINI_PREFLIGHT:"
 SHA = re.compile(r"[0-9a-f]{40}")
 STATUSES = {"INSPECTED", "INVALID_HOST", "BACKEND_UNAVAILABLE", "INVALID_RESPONSE"}
+HISTORY_FAILURES = {
+    "NOT_OBSERVED", "UNCLASSIFIED_HISTORY_FAILURE", "COLLECTOR_PREREQUISITE_UNTRUSTED",
+    "PRIVATE_ARCHIVE_UNAVAILABLE", "TOO_MANY_PAGES", "INVALID_ARCHIVE_IDENTITY",
+    "INVALID_ARCHIVE_MANIFEST", "INVALID_ARCHIVE_FILE", "ARCHIVE_CHECKSUM_MISMATCH",
+    "ARCHIVE_METADATA_MISMATCH", "INVALID_SESSION_DATE", "OUTSIDE_REQUESTED_RANGE",
+    "DUPLICATE_ARCHIVE_SESSION", "INVALID_MONTHLY_SOURCE_ROW", "OUT_OF_ORDER_MONTHLY_SOURCE",
+    "INVALID_MONTHLY_CHART_IDENTITY", "MONTHLY_EXPORT_LIMIT", "SNAPSHOT_TOO_LARGE",
+    "UNTRUSTED_MONITOR_PATH", "UNTRUSTED_MONITOR_FILE", "INVALID_STATE", "UNTRUSTED_STATE",
+    "INSTANCE_IDENTITY_UNAVAILABLE", "WRONG_EC2_INSTANCE", "UNTRUSTED_CHART_PATH",
+    "UNTRUSTED_CHART_BACKUP", "UNTRUSTED_MONTHLY_CHART_PATH", "UNTRUSTED_MONTHLY_CHART_BACKUP",
+    "INVALID_CHART_ROW", "INVALID_CHART_IDENTITY_OR_LIMIT", "OVERSIZE_CHART",
+    "OVERSIZE_MONTHLY_CHART", "INVALID_CHART_TOKEN", "INVALID_MONTHLY_TOKEN",
+}
 BOOL_FIELDS = ("geminiKeyEnvironmentPresent", "geminiModelEnvironmentPresent",
                "operatorKeyEnvironmentPresent", "hostSettingsReadable", "providerCallAttempted",
                "runtimeConnectivityVerified")
@@ -38,6 +51,7 @@ def expected_request():
 
 def report(status="INSPECTED", **fields):
     result = {"status": status, "deployedSha": None, "selectedProviderEnvironment": "UNKNOWN",
+              "lastHistoryPrecheckFailure": "NOT_OBSERVED",
               "hostGeminiKeyPresent": None, "hostSelectedProviderEnvironment": "UNKNOWN",
               "adminHealthHttpStatus": None, **dict.fromkeys(BOOL_FIELDS, False)}
     result.update(fields)
@@ -46,7 +60,7 @@ def report(status="INSPECTED", **fields):
 
 def validate_report(value):
     keys = {"status", "deployedSha", "selectedProviderEnvironment", "adminHealthHttpStatus",
-            "hostGeminiKeyPresent", "hostSelectedProviderEnvironment", *BOOL_FIELDS}
+            "hostGeminiKeyPresent", "hostSelectedProviderEnvironment", "lastHistoryPrecheckFailure", *BOOL_FIELDS}
     if not isinstance(value, dict) or set(value) != keys or value["status"] not in STATUSES:
         raise ValueError("INVALID_PREFLIGHT_REPORT")
     if value["deployedSha"] is not None and (not isinstance(value["deployedSha"], str)
@@ -56,6 +70,8 @@ def validate_report(value):
         raise ValueError("INVALID_PROVIDER")
     if value["hostSelectedProviderEnvironment"] not in {"NONE", "GEMINI", "CLAUDE", "UNKNOWN"}:
         raise ValueError("INVALID_HOST_PROVIDER")
+    if value["lastHistoryPrecheckFailure"] not in HISTORY_FAILURES:
+        raise ValueError("INVALID_HISTORY_FAILURE")
     present = value["hostGeminiKeyPresent"]
     if present is not None and type(present) is not bool:
         raise ValueError("INVALID_HOST_PRESENCE")
@@ -132,6 +148,37 @@ def host_settings():
         return {}
 
 
+def classify_history_failure(text):
+    if "MINTTICK_DEPLOY_FAILED_STAGE:history_precheck" not in text:
+        return "NOT_OBSERVED"
+    match = re.search(r"(?:ProgressUnavailable|SchedulerBlocked): ([A-Z_]+)(?:\r?\n|$)", text)
+    return match.group(1) if match and match.group(1) in HISTORY_FAILURES else "UNCLASSIFIED_HISTORY_FAILURE"
+
+
+def history_precheck_failure():
+    # Read only recent SSM deployment stderr on this exact host. Never return
+    # a log line, path, traceback, archive content or arbitrary exception text.
+    root = Path("/var/lib/amazon/ssm") / INSTANCE / "document/orchestration"
+    try:
+        candidates = list(root.glob("*/awsrunShellScript/*/stderr"))
+        if len(candidates) > 4096:
+            return "NOT_OBSERVED"
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for path in candidates[:32]:
+            if (path.is_symlink() or not path.is_file() or path.stat().st_uid != 0
+                    or not path.resolve().is_relative_to(root.resolve())
+                    or time.time() - path.stat().st_mtime > 3600):
+                continue
+            with path.open("rb") as stream:
+                stream.seek(max(0, path.stat().st_size - 65536))
+                code = classify_history_failure(stream.read(65536).decode("utf-8", errors="replace"))
+            if code != "NOT_OBSERVED":
+                return code
+    except OSError:
+        pass
+    return "NOT_OBSERVED"
+
+
 def admin_health_status(key, opener):
     if not key:
         return None
@@ -165,6 +212,7 @@ def host():
         config = json.loads(docker("inspect", "--format", "{{json .Config}}", ids[0]))
         result = summarize_config(config)
         result.update(host_settings())
+        result["lastHistoryPrecheckFailure"] = history_precheck_failure()
         key = next((row.split("=", 1)[1] for row in config["Env"] if row.startswith("APP_API_KEY=")), "")
         result["adminHealthHttpStatus"] = admin_health_status(
             key, urllib.request.build_opener(NoRedirect()))
