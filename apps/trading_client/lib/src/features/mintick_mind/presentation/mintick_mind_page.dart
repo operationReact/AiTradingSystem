@@ -4,6 +4,7 @@ import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_opening_range_replay_repository.dart';
+import '../data/mind_orb_walkforward_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
 import '../data/mind_prospective_signals_repository.dart';
@@ -16,6 +17,7 @@ import 'mind_prospective_cohort_panel.dart';
 import 'mind_ma_walkforward_panel.dart';
 import 'mind_strategy_replay_panel.dart';
 import 'mind_opening_range_replay_panel.dart';
+import 'mind_orb_walkforward_panel.dart';
 import 'mind_readiness_panel.dart';
 import 'mind_widgets.dart';
 import 'mind_progress_panel.dart';
@@ -27,6 +29,7 @@ import '../data/mind_progress_repository.dart';
 class MintickMindPage extends StatefulWidget {
   const MintickMindPage({this.readinessRepository, this.strategyReplayRepository,
     this.openingRangeReplayRepository,
+    this.orbWalkForwardRepository,
     this.walkForwardRepository, this.prospectiveRepository,
     this.prospectiveSignalsRepository, this.prospectiveOutcomesRepository,
     this.prospectiveEvidenceCompletenessRepository,
@@ -37,6 +40,7 @@ class MintickMindPage extends StatefulWidget {
   final MindReadinessRepository? readinessRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
   final MindOpeningRangeReplayRepository? openingRangeReplayRepository;
+  final MindOrbWalkForwardRepository? orbWalkForwardRepository;
   final MindMaWalkForwardRepository? walkForwardRepository;
   final MindProspectiveCohortRepository? prospectiveRepository;
   final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
@@ -116,6 +120,10 @@ class _MintickMindPageState extends State<MintickMindPage> {
               if (_tab == 1 && widget.openingRangeReplayRepository != null) ...[
                 MindOpeningRangeReplayPanel(
                     repository: widget.openingRangeReplayRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.orbWalkForwardRepository != null) ...[
+                MindOrbWalkForwardPanel(repository: widget.orbWalkForwardRepository!),
                 const SizedBox(height: 14),
               ],
               if (_tab == 1 && widget.walkForwardRepository != null) ...[
