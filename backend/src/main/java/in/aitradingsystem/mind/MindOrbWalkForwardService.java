@@ -115,8 +115,8 @@ public final class MindOrbWalkForwardService {
             if (custody.isEmpty()) {
                 return unavailable(now, from, to, "REFERENCE_SCAN_CUSTODY_MISSING");
             }
-            // V72 custody must match the original scan's 21 inputs before
-            // this instrument is even considered for historical research.
+            // ORB custody must match the original scan's captured inputs before
+            // the instrument is considered for historical research.
             // Presence of a hash alone is not an integrity verification.
             if (run.startedAt() == null || run.startedAt().isAfter(run.completedAt()) ||
                 selected.candleTime() == null || selected.catalogueVersion() == null ||
@@ -317,7 +317,7 @@ public final class MindOrbWalkForwardService {
         List<String> reasons = new ArrayList<>(baseBlockers());
         reasons.add(reason);
         return new Report(CONTRACT, now, "UNAVAILABLE", STRATEGY, "1",
-            null, "FIVE_MINUTE", "RECENT_SCANNER_CANDIDATE_SELECTION_BIASED",
+            null, null, "RECENT_SCANNER_CANDIDATE_SELECTION_BIASED",
             from, to, evaluator.assumptions(), List.of(), 0, 0,
             null, null, null, null, null, null,
             List.copyOf(reasons), "ABSTAIN", false, false, false, false);
