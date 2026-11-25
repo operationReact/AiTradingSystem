@@ -162,7 +162,7 @@ class PaperAppRuntimeContract(unittest.TestCase):
             backend = services["backend"]["environment"]
             self.assertEqual("GEMINI" if configured else "NONE", backend["NEWS_ANALYSIS_PROVIDER"])
             self.assertEqual("fixture-gemini-key" if configured else "", backend["GEMINI_API_KEY"])
-            self.assertEqual("fixture-model" if configured else "gemini-2.5-flash", backend["GEMINI_MODEL"])
+            self.assertEqual("fixture-model" if configured else "gemini-3.5-flash-lite", backend["GEMINI_MODEL"])
             expected_flag = "true" if configured else "false"
             for flag in (
                 "NEWS_INGESTION_ENABLED", "NEWS_EVENT_LEDGER_ENABLED",
