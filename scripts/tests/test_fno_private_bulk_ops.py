@@ -38,6 +38,8 @@ class BootstrapContractTest(unittest.TestCase):
             "FNO_BULK_SMOKE_FAILURE:UPSTOX_TOKEN_UNAVAILABLE\n"))
         self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",ops.parse_smoke_failure(
             "FNO_BULK_SMOKE_FAILURE:/private/token\n"))
+        self.assertEqual("SMOKE_NO_VALID_ROWS",ops.smoke_failure(
+            "FNO_BULK_SMOKE:NO_VALID_ROWS;complete=0;total=0;rows=0;calls=7\n"))
     def test_single_systemd_unit_is_not_broker_order_service(self):
         unit=ops.unit_text()
         self.assertIn("ExecStart=/usr/bin/python3",unit)

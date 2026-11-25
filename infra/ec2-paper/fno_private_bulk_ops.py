@@ -60,6 +60,7 @@ SAFE_SMOKE_FAILURES=frozenset({
     "INVALID_FNO_OHLCV_OI", "CONTRACT_NOT_EXPIRED_OR_WINDOW_EXCEEDS_EXPIRY",
     "INVALID_FNO_STATE", "INVALID_FNO_RECEIPT", "INVALID_RATE_LIMIT",
     "ORIGINAL_HTTP_RECEIPT_SINK_REQUIRED",
+    "SMOKE_NO_VALID_ROWS", "SMOKE_UNEXPECTED_OUTCOME", "SMOKE_OUTPUT_INVALID",
 })
 
 def smoke_failure(stdout):
@@ -68,6 +69,15 @@ def smoke_failure(stdout):
     found=re.findall(r"^FNO_BULK_ERROR:([A-Z0-9_]{1,64})$",stdout,re.M)
     if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
         return found[0]
+    outcomes=re.findall(r"^FNO_BULK_SMOKE:([A-Z_]+);complete=(\d+);"
+                        r"total=(\d+);rows=(\d+);calls=(\d+)$",stdout,re.M)
+    if len(outcomes)==1:
+        outcome,complete,total,rows,calls=outcomes[0]
+        if all(int(x)<=20000 for x in (complete,total,rows,calls)):
+            return ("SMOKE_NO_VALID_ROWS" if outcome=="NO_VALID_ROWS"
+                    else "SMOKE_UNEXPECTED_OUTCOME")
+    if "FNO_BULK_SMOKE:" in stdout:
+        return "SMOKE_OUTPUT_INVALID"
     return "UNCLASSIFIED_SAFE_FAILURE"
 
 def expected_request():
