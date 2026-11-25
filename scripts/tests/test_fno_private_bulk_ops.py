@@ -29,6 +29,18 @@ class BootstrapContractTest(unittest.TestCase):
         self.assertIsNone(ops.parse_receipt(ops.MARKER+"FAKE|0|0|0"))
         with self.assertRaises(ValueError):
             ops.receipt("STARTED",12,3,4)
+    def test_complete_cache_marker_is_strict_and_valid(self):
+        marker=("FNO_BULK_SMOKE:CACHE_ALREADY_COMPLETE;"
+                "complete=276;total=276;rows=4251;calls=0\n")
+        self.assertEqual((276,276,4251,0),ops.parse_complete_cache(marker))
+        self.assertEqual(("CACHE_ALREADY_COMPLETE",276,276,4251),
+            ops.parse_receipt(ops.receipt("CACHE_ALREADY_COMPLETE",276,276,4251)))
+        self.assertIsNone(ops.parse_complete_cache(
+            marker.replace("calls=0","calls=1")))
+        self.assertIsNone(ops.parse_complete_cache(
+            marker.replace("complete=276","complete=275")))
+        self.assertIsNone(ops.parse_complete_cache(marker+marker))
+
     def test_smoke_failure_receipt_is_allowlisted_and_redacted(self):
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",
             ops.smoke_failure("FNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"))

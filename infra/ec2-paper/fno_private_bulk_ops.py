@@ -29,8 +29,9 @@ REQUEST=Path("infra/ec2-paper/requests/fno-owner-private-bulk-start.json")
 MARKER="MINTTICK_FNO_PRIVATE_BULK_START_V1:"
 PINNED_MODULES=("fno_history_backfill.py", "upstox_fno_backfill_adapters.py")
 MAX_MODULE_PACKAGE=12000
-STATES={"STARTED","ALREADY_RUNNING","OWNER_SCOPE_REJECTED",
-        "HOST_REJECTED","CODE_REJECTED","SMOKE_FAILED","UNIT_REJECTED"}
+STATES={"STARTED","ALREADY_RUNNING","CACHE_ALREADY_COMPLETE",
+        "OWNER_SCOPE_REJECTED","HOST_REJECTED","CODE_REJECTED",
+        "SMOKE_FAILED","UNIT_REJECTED"}
 SAFE_SMOKE_FAILURES=frozenset({
     "FNO_DATA_RETENTION_NOT_AUTHORIZED", "FNO_DISCOVERY_AUTH_REJECTED",
     "FNO_DISCOVERY_INVALID_JSON", "FNO_DISCOVERY_INVALID_RESPONSE",
@@ -185,6 +186,21 @@ def parse_receipt(raw):
         return None
     return values[0],*nums
 
+def parse_complete_cache(raw):
+    """Accept only the worker's exact, complete existing-cache marker."""
+    if not isinstance(raw,str) or len(raw)>8000:
+        return None
+    found=re.findall(
+        r"^FNO_BULK_SMOKE:CACHE_ALREADY_COMPLETE;complete=(\d{1,5});"
+        r"total=(\d{1,5});rows=(\d{1,5});calls=(\d{1,2})$",
+        raw.replace("\r\n","\n"),re.M)
+    if len(found)!=1:
+        return None
+    complete,total,rows,calls=map(int,found[0])
+    if not (0<complete==total<=20000 and rows>0 and calls==0):
+        return None
+    return complete,total,rows,calls
+
 def parse_smoke_failure(raw):
     if not isinstance(raw,str) or len(raw)>8000:
         return "UNCLASSIFIED_SAFE_FAILURE"
@@ -307,6 +323,12 @@ def host():
         print(receipt("SMOKE_FAILED"),flush=True)
         print("FNO_BULK_SMOKE_FAILURE:"+safe_cause,flush=True)
         return 2
+    cache=parse_complete_cache(smoke.stdout)
+    if cache:
+        complete,total,rows,calls=cache
+        print(receipt("CACHE_ALREADY_COMPLETE",complete,total,rows),flush=True)
+        print("FNO_BULK_CACHE_REUSE:smokeCalls=0",flush=True)
+        return 0
     m=re.search(r"FNO_BULK_SMOKE:FIRST_BATCH_COMPLETE;complete=(\d+);"
                 r"total=(\d+);rows=(\d+);calls=(\d+)",smoke.stdout)
     if not m:
@@ -430,7 +452,8 @@ def runner():
                   "singleService=true; redistribution=false"+failure+counter_text+"; "
                   "ownerScopeExpiry=2026-11-28; providerLicenceUnverified=true",
                   flush=True)
-            if state!="Success" or code not in {"STARTED","ALREADY_RUNNING"}:
+            if state!="Success" or code not in {
+                    "STARTED","ALREADY_RUNNING","CACHE_ALREADY_COMPLETE"}:
                 raise SystemExit("FNO_BULK_HOST_START_FAILED")
             return
         if state not in {"Pending","InProgress","Delayed"}:
