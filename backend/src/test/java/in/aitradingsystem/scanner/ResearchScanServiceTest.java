@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.mind.MindSourceSnapshot;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import in.aitradingsystem.marketdata.MarketCandle;
