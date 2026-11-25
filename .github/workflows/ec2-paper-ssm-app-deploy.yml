@@ -151,6 +151,14 @@ jobs:
           gate.verify_aws()
           PY
 
+      - name: Bind Gemini secret to the exact host through encrypted SSM
+        shell: bash
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/gemini_secret_bind.py runner
+
       - name: Upload immutable encrypted short-retention S3 release asset
         shell: bash
         run: |
@@ -168,6 +176,12 @@ jobs:
           set -euo pipefail
           digest="$(cat "$RUNNER_TEMP/release.sha256")"
           python3 infra/ec2-paper/verify_ssm_release.py run deploy "$GITHUB_SHA" "$digest"
+
+      - name: Verify one genuine Gemini response from the deployed backend host
+        shell: bash
+        env:
+          AWS_REGION: ap-south-1
+        run: python3 infra/ec2-paper/gemini_runtime_verify.py runner
 
       - name: Remove temporary CI release archive, images and digests
         if: always()
