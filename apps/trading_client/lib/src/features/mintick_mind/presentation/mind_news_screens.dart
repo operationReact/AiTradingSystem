@@ -106,12 +106,6 @@ extension _MindNewsScreens on _MindWorkspaceState {
       ? _mindNewsPreviewItems
       : _newsArticles.map(_MindNewsPreview.fromArticle).toList(growable: false);
 
-  Color _newsImpactColor(String impact) => switch (impact) {
-    'Positive' => MindPalette.mint,
-    'Negative' => MindPalette.red,
-    _ => MindPalette.yellow,
-  };
-
   Widget newsAnalyzerScreen() {
     final selected = _currentMindNewsItems.where(
       (item) => item.id == _selectedNewsId,
@@ -191,86 +185,6 @@ extension _MindNewsScreens on _MindWorkspaceState {
     final cells=[('$_newsTotalItems','articles'),('$symbols','stocks linked'),('$analyzed','Gemini analyzed')];
     return Container(padding:const EdgeInsets.symmetric(vertical:8),decoration:BoxDecoration(color:MindPalette.panel,borderRadius:BorderRadius.circular(11),border:Border.all(color:MindPalette.border)),
       child:Row(children:[for(var i=0;i<cells.length;i++)Expanded(child:Container(padding:const EdgeInsets.symmetric(horizontal:10),decoration:BoxDecoration(border:i==0?null:const Border(left:BorderSide(color:MindPalette.border))),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(_newsLoading&&!_newsLoaded?'—':cells[i].$1,style:const TextStyle(color:MindPalette.text,fontSize:15,fontWeight:FontWeight.w800)),Text(cells[i].$2,style:const TextStyle(color:MindPalette.muted,fontSize:9))])))]));
-  }
-
-  Widget _newsOverview() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _metricGrid(_newsDemoMode ? const [
-        ('Articles today', '1,284', 'demo sources'),
-        ('Stocks matched', '142', 'sample coverage'),
-        ('Analyzed', '96.7%', 'demo items'),
-        ('Needs attention', '43', 'sample queue'),
-      ] : _customerNewsMetrics()),
-      const SizedBox(height: 12),
-      MindPanel(child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const MindSectionTitle(
-            title: 'Processing pipeline', icon: Icons.account_tree_outlined),
-          for (final row in _newsDemoMode ? const [
-            ('1', 'Source collection', '3 configured'),
-            ('2', 'Normalize & deduplicate', '8 duplicates'),
-            ('3', 'AI analysis', '43 pending'),
-            ('4', 'Verify stock matches', '386 links'),
-            ('5', 'Attach research context', 'Read only'),
-          ] : const [
-            ('1', 'Customer article endpoint', 'Connected'),
-            ('2', 'Publisher permission filtering', 'Server side'),
-            ('3', 'Stored analysis projection', 'Read only'),
-            ('4', 'Stock impact fields', 'When available'),
-            ('5', 'Mind use', 'Research only'),
-          ])
-            _newsPipelineRow(row.$1, row.$2, row.$3),
-        ],
-      )),
-      const SizedBox(height: 12),
-      _newsCardList(
-        title: 'Latest stock-linked news',
-        items: _currentMindNewsItems.take(3).toList(),
-        showAll: true,
-      ),
-      if (!_newsDemoMode && _newsLoading && _newsArticles.isEmpty)
-        const Center(child: Padding(padding: EdgeInsets.all(20),
-          child: CircularProgressIndicator(strokeWidth: 2))),
-      if (!_newsDemoMode && _newsError != null)
-        _newsUnavailable(_newsError!),
-      if (!_newsDemoMode && !_newsLoading && _newsError == null && _newsArticles.isEmpty)
-        _newsUnavailable('No approved publisher articles are available from the customer API.'),
-      const SizedBox(height: 4),
-      _newsBoundaryNote(),
-    ],
-  );
-
-  List<(String, String, String)> _customerNewsMetrics() {
-    if (_newsLoading && !_newsLoaded) {
-      return const [
-        ('Articles available', 'Loading', 'Customer news API'),
-        ('Stock links', '—', 'Waiting for articles'),
-        ('Analyzed', '—', 'Waiting for articles'),
-        ('Pending / failed', '—', 'Waiting for articles'),
-      ];
-    }
-    if (_newsError != null) {
-      return const [
-        ('Articles available', 'Unavailable', 'API error'),
-        ('Stock links', 'Unavailable', 'Not inferred'),
-        ('Analyzed', 'Unavailable', 'Not inferred'),
-        ('Pending / failed', 'Unavailable', 'Not inferred'),
-      ];
-    }
-    final analyzed = _newsArticles.where((article) =>
-        article.analysisStatus == 'ANALYZED').length;
-    final pending = _newsArticles.length - analyzed;
-    final symbols = _newsArticles
-        .expand((article) => article.stockImpact?.impactedSymbols ?? const <String>[])
-        .toSet().length;
-    return [
-      ('Articles available', '$_newsTotalItems', 'Customer API total'),
-      ('Stock links', '$symbols', 'Loaded page only'),
-      ('Analyzed', '$analyzed / ${_newsArticles.length}', 'Loaded page only'),
-      ('Pending / failed', '$pending', 'Loaded page only'),
-    ];
   }
 
   Widget _newsUnavailable(String message) => MindPanel(child: Row(
@@ -599,7 +513,7 @@ extension _MindNewsScreens on _MindWorkspaceState {
       final publishers = counts.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children:[Expanded(child:Text('${_newsTotalItems} articles match · ${_newsArticles.length} loaded',style:const TextStyle(color:MindPalette.text,fontSize:12,fontWeight:FontWeight.w700))),const MindTag('FEED DATA')]),
+          Row(children:[Expanded(child:Text('$_newsTotalItems articles match · ${_newsArticles.length} loaded',style:const TextStyle(color:MindPalette.text,fontSize:12,fontWeight:FontWeight.w700))),const MindTag('FEED DATA')]),
           const SizedBox(height:6),
           for(final publisher in publishers) Container(padding:const EdgeInsets.symmetric(vertical:8),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:MindPalette.border))),child:Row(children:[const Icon(Icons.circle,size:7,color:MindPalette.mint),const SizedBox(width:8),Expanded(child:Text(publisher.key,style:const TextStyle(color:MindPalette.text,fontSize:11,fontWeight:FontWeight.w700))),Text('${publisher.value} loaded',style:const TextStyle(color:MindPalette.muted,fontSize:10))])),
           if(publishers.isEmpty) const Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('No publisher records have loaded yet.',style:TextStyle(color:MindPalette.muted,fontSize:11))),
