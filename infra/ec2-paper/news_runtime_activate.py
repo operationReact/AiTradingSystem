@@ -201,7 +201,7 @@ def run() -> None:
     if not isinstance(command_id, str) or not re.fullmatch(r"[0-9a-f-]{36}", command_id):
         raise RuntimeError("INVALID_SSM_COMMAND")
 
-    for _ in range(90):
+    for _ in range(180):
         time.sleep(10)
         try:
             result = aws_json("ssm", "get-command-invocation",
