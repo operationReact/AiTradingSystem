@@ -222,10 +222,15 @@ class PaperSsmRelease(unittest.TestCase):
                 self.assertIn(required,s)
             for forbidden in ("workflow_dispatch:", "aws ec2 start-instances",
                               "aws ec2 run-instances","aws ec2 terminate-instances",
-                              "terraform apply","TRADING_MODE=LIVE","secrets.",
+                              "terraform apply","TRADING_MODE=LIVE",
                               "ssh ","scp ","--push", "docker push"):
                 with self.subTest(workflow=name,forbidden=forbidden):
                     self.assertNotIn(forbidden,s)
+        # The deployment may receive only the Gemini API key, and only for the
+        # encrypted host binding step. Reject all additional GitHub secret refs.
+        self.assertEqual(deploy.count("${{ secrets.GEMINI_API_KEY }}"),1)
+        self.assertEqual(deploy.count("secrets."),1)
+        self.assertNotIn("${{ secrets.",readiness)
         for required in ("docker buildx build --platform linux/arm64 --load",
                          "--file backend/Dockerfile.ec2-paper-prebuilt-arm64",
                          "flutter build web --release",
