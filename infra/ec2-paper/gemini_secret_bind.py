@@ -62,15 +62,14 @@ stage=complete
 
 
 def install_command(nonce: str, ciphertext_b64: str) -> str:
-    if not NONCE_RE.fullmatch(nonce) or not re.fullmatch(r"[A-Za-z0-9+/=]{1000}", ciphertext_b64):
-        # RSA-3072 OAEP ciphertext is exactly 384 bytes, so base64 has 512 chars.
-        if not NONCE_RE.fullmatch(nonce) or not re.fullmatch(r"[A-Za-z0-9+/=]{512}", ciphertext_b64):
-            raise BindError("invalid encrypted secret envelope")
+    # RSA-3072 OAEP ciphertext is exactly 384 bytes, so base64 has 512 chars.
+    if not NONCE_RE.fullmatch(nonce) or not re.fullmatch(r"[A-Za-z0-9+/=]{512}", ciphertext_b64):
+        raise BindError("invalid encrypted secret envelope")
     state = f"{ROOT}/.gemini-keybind-{nonce}"
     return f"""set -euo pipefail
 umask 077
 stage=identity
-trap 'rc=$?; printf "MINTTICK_GEMINI_BIND_FAILED:%s\\n" "$stage" >&2; exit "$rc"' ERR
+trap 'rc=$?; rm -rf -- '{state}'; printf "MINTTICK_GEMINI_BIND_FAILED:%s\\n" "$stage" >&2; exit "$rc"' ERR
 test "$(id -u)" -eq 0
 test "$(uname -m)" = "aarch64"
 test -d '{state}' && test ! -L '{state}'
