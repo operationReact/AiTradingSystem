@@ -4,6 +4,7 @@ import 'package:trading_client/src/features/mintick_mind/data/mind_orb_walkforwa
 import 'package:trading_client/src/features/mintick_mind/presentation/mind_orb_walkforward_panel.dart';
 
 class _Repository implements MindOrbWalkForwardRepository {
+  const _Repository();
   @override
   Future<MindOrbWalkForwardReport> load() async => MindOrbWalkForwardReport(
     generatedAt: DateTime.utc(2026, 11, 25),
