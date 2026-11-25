@@ -34,9 +34,13 @@ class BindError(RuntimeError):
     pass
 
 
-def validate_key(value: str) -> None:
-    if not isinstance(value, str) or not KEY_RE.fullmatch(value):
+def validate_key(value: str) -> str:
+    if not isinstance(value, str):
         raise BindError("Gemini key is absent or has an unsupported format")
+    value = value.strip()
+    if not KEY_RE.fullmatch(value):
+        raise BindError("Gemini key is absent or has an unsupported format")
+    return value
 
 
 def bootstrap_command(nonce: str) -> str:
@@ -227,7 +231,7 @@ def encrypt_for_host(public_key_b64: str, secret: str) -> str:
 
 
 def bind(secret: str) -> None:
-    validate_key(secret)
+    secret = validate_key(secret)
     os.environ["AWS_REGION"] = REGION
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import verify_ssm_release as release

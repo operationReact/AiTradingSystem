@@ -13,6 +13,7 @@ import gemini_secret_bind as bind
 class GeminiSecretBindTests(unittest.TestCase):
     def test_api_key_shape_is_bounded(self):
         bind.validate_key("AIzaSyExampleSyntheticKey0123456789_-")
+        self.assertEqual(bind.validate_key("  AIzaSyExampleSyntheticKey0123456789_-\n"), "AIzaSyExampleSyntheticKey0123456789_-")
         with self.assertRaises(bind.BindError):
             bind.validate_key("")
         with self.assertRaises(bind.BindError):
