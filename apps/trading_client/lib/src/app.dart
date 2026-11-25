@@ -232,6 +232,8 @@ class _TradingAppState extends State<TradingApp> {
                 fnoAutoPaperRepository: HttpMindFnoAutoPaperRepository(_api),
                 evidenceRepository: HttpMindEvidenceRepository(_api),
                 strategyReplayRepository: HttpMindStrategyReplayRepository(_api),
+                openingRangeReplayRepository:
+                    HttpMindOpeningRangeReplayRepository(_api),
                 decisionHistoryRepository: HttpMindDecisionHistoryRepository(_api),
                 verifiedNewsRepository: HttpMindVerifiedNewsRepository(_api),
                 decisionOutcomesRepository: HttpMindDecisionOutcomesRepository(_api),
