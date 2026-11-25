@@ -25,7 +25,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +48,7 @@ jobs:
             "instance_id":"i-09c01b470fb39b85a",
             "environment":"PAPER",
             "operation":"activate",
-            "source_ids":["moneycontrol","economic-times","sebi"],
+            "source_ids":["nse-announcements","moneycontrol","economic-times","sebi"],
             "permitted_uses":["INGEST","RETAIN","DISPLAY","NLP_TRANSFER"],
             "reviewer_ref":"owner-attestation:2026-11-25",
             "terms_ref":"owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
@@ -59,6 +59,15 @@ jobs:
           assert json.loads(p.read_text()) == expected
           PY
           fi
+      - name: Compile backend and run news source, parser, and PostgreSQL policy tests
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Verify news integration contracts
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=NewsSourceRegistryTest,NewsSourceCoverageTest,NewsSourceHealthControllerTest,CustomerMarketNewsControllerIT,RssFeedParserTest,NewsIngestionJobTest,NewsIntelligenceAdminHealthControllerIT,NewsSourcePolicyIT test
 
   activate:
     needs: validate

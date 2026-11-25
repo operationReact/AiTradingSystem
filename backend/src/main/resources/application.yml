@@ -151,7 +151,7 @@ app:
     ingestion:
       enabled: ${NEWS_INGESTION_ENABLED:false}
       interval-ms: ${NEWS_INGESTION_INTERVAL_MS:900000}
-      sources: ${NEWS_INGESTION_SOURCES:moneycontrol,economic-times}
+      sources: ${NEWS_INGESTION_SOURCES:nse-announcements,moneycontrol,economic-times,sebi}
       watchlist: ${NEWS_WATCHLIST:RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,ITC}
       max-payload-bytes: ${NEWS_MAX_PAYLOAD_BYTES:1048576}
       max-items-per-source: ${NEWS_MAX_ITEMS_PER_SOURCE:50}

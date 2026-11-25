@@ -10,6 +10,16 @@ import org.junit.jupiter.api.Test;
 
 class NewsSourceCoverageTest {
     @Test
+    void includesOfficialNseCorporateAnnouncementsRssSource() {
+        NewsSource nse = NewsSource.byId("nse-announcements");
+
+        assertThat(nse.publisher()).isEqualTo("NSE India");
+        assertThat(nse.feedUri().toString())
+            .isEqualTo("https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml");
+        assertThat(nse.articleHosts()).contains("nsearchives.nseindia.com", "www.nseindia.com");
+    }
+
+    @Test
     void includesVerifiedSebiRegulatoryRssSource() {
         NewsSource sebi = NewsSource.byId("sebi");
 
@@ -38,7 +48,7 @@ class NewsSourceCoverageTest {
             new NewsSourceHealthController(repository).health();
 
         assertThat(health).extracting(NewsSourceHealthController.SourceHealthView::source)
-            .contains("moneycontrol", "economic-times", "sebi");
+            .contains("nse-announcements", "moneycontrol", "economic-times", "sebi");
         var sebi = health.stream().filter(row -> row.source().equals("sebi")).findFirst().orElseThrow();
         assertThat(sebi.status()).isEqualTo("SUCCESS");
         assertThat(sebi.fetchedItems()).isEqualTo(8);

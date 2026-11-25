@@ -25,11 +25,13 @@ class NewsIntelligenceAdminHealthControllerIT extends AbstractPostgresIT {
     }
 
     @Test
-    void requiresAdminNotOperatorCustomerOrUnauthenticated() throws Exception {
+    void allowsAdminAndOperatorButRejectsCustomerAndUnauthenticated() throws Exception {
         String path = "/api/admin/market-intelligence/health";
         mvc.perform(get(path)).andExpect(status().isUnauthorized());
         mvc.perform(get(path).header("X-API-Key", API_KEY))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk());
+        mvc.perform(get(path).with(role("OPERATOR")))
+            .andExpect(status().isOk());
         mvc.perform(get(path).with(role("CUSTOMER")))
             .andExpect(status().isForbidden());
         mvc.perform(get(path).with(role("ADMIN")))
@@ -53,12 +55,14 @@ class NewsIntelligenceAdminHealthControllerIT extends AbstractPostgresIT {
         assertThat(body.path("model").path("recordedGeminiAnalysisReceipts").asLong()).isGreaterThanOrEqualTo(0L);
         assertThat(body.path("model").path("geminiReadiness").isTextual()).isTrue();
         assertThat(body.path("model").path("lastGeminiAttemptOutcome").asText()).isEqualTo("NO_OBSERVATION");
+        assertThat(body.path("model").path("lastSuccessfulAnalysisAtBySource").isObject()).isTrue();
         // The application omits null JSON properties; either omitted or explicit null is unknown.
         assertThat(body.path("model").hasNonNull("lastGeminiAttemptAt")).isFalse();
         assertThat(body.path("eventLedgerEnabled").asBoolean()).isFalse();
         assertThat(body.path("analysisSchedulerEnabled").asBoolean()).isFalse();
         assertThat(raw).doesNotContain("apiKey", "geminiApiKey",
             "clientSecret", "totpSecret", "errorDetail", "ssmParameterValue");
-        assertThat(body.path("sources").toString()).contains("moneycontrol", "economic-times", "sebi");
+        assertThat(body.path("sources").toString()).contains(
+            "nse-announcements", "moneycontrol", "economic-times", "sebi");
     }
 }

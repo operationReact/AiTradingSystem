@@ -25,7 +25,7 @@ EXPECTED = {
     "instance_id": INSTANCE,
     "environment": "PAPER",
     "operation": "activate",
-    "source_ids": ["moneycontrol", "economic-times", "sebi"],
+    "source_ids": ["nse-announcements", "moneycontrol", "economic-times", "sebi"],
     "permitted_uses": ["INGEST", "RETAIN", "DISPLAY", "NLP_TRANSFER"],
     "reviewer_ref": "owner-attestation:2026-11-25",
     "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
@@ -59,7 +59,7 @@ for line in lines:
     values[k]=v
 key=values.get("APP_API_KEY","")
 if not re.fullmatch(r"[0-9a-f]{64}", key): raise SystemExit("APP_KEY_INVALID")
-sources=("moneycontrol","economic-times","sebi")
+sources=("nse-announcements","moneycontrol","economic-times","sebi")
 uses=["INGEST","RETAIN","DISPLAY","NLP_TRANSFER"]
 now=datetime.now(timezone.utc).isoformat()
 for source in sources:
@@ -147,9 +147,10 @@ def safe_health_snapshot(payload):
                   "uses":[x.get(k) is True for k in
                     ("canIngest","canRetain","canDisplay","canTransferToModel")]}
                  for x in payload.get("sources",[]) if x.get("sourceId") in
-                    ("moneycontrol","economic-times","sebi")],
+                    ("nse-announcements","moneycontrol","economic-times","sebi")],
       "geminiAttempted":bool(model.get("lastGeminiAttemptAt")),
       "geminiOutcome":model.get("lastGeminiAttemptOutcome"),
+      "lastSuccessfulAnalysisAtBySource":model.get("lastSuccessfulAnalysisAtBySource",{}),
     }
 def emit_health_snapshot(payload):
     line="MINTTICK_NEWS_HEALTH_DIAG:"+json.dumps(safe_health_snapshot(payload),sort_keys=True)
@@ -187,18 +188,20 @@ while time.monotonic()<deadline:
     if model.get("selectedProvider")!="GEMINI":
         emit_health_snapshot(health)
         raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
-    for source_id in ("moneycontrol","economic-times","sebi"):
+    for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"):
         source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
         if not source or source.get("rightsState")!="APPROVED" or not all(
             source.get(field) is True for field in
             ("canIngest","canRetain","canDisplay","canTransferToModel")):
             emit_health_snapshot(health)
             raise SystemExit("NEWS_SOURCE_POLICY_NOT_APPROVED")
-    source_done=any(
-        source.get("latestStatus")=="SUCCESS" and (source.get("lastFetchedItems") or 0)>0
-        and source.get("lastFinishedAt") and
-        utc_instant(source["lastFinishedAt"],"SOURCE")>=activated
-        for source in health.get("sources",[]))
+    source_by_id={source.get("sourceId"):source for source in health.get("sources",[])}
+    source_done=all(
+        source_by_id.get(source_id,{}).get("latestStatus")=="SUCCESS"
+        and (source_by_id.get(source_id,{}).get("lastFetchedItems") or 0)>0
+        and source_by_id.get(source_id,{}).get("lastFinishedAt")
+        and utc_instant(source_by_id[source_id]["lastFinishedAt"],"SOURCE")>=activated
+        for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"))
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
     newly_inserted=sum(
@@ -206,8 +209,10 @@ while time.monotonic()<deadline:
         if source.get("lastFinishedAt") and
         utc_instant(source["lastFinishedAt"],"SOURCE")>=activated)
     gemini_floor=activated if newly_inserted>0 else activated-datetime.timedelta(minutes=60)
-    gemini_done=bool(attempted_at and
-        utc_instant(attempted_at,"GEMINI")>=gemini_floor and
+    nse_analysis_at=(model.get("lastSuccessfulAnalysisAtBySource") or {}).get("nse-announcements")
+    gemini_done=bool(nse_analysis_at and
+        utc_instant(nse_analysis_at,"NSE_ANALYSIS")>=activated and
+        attempted_at and utc_instant(attempted_at,"GEMINI")>=gemini_floor and
         outcome in ("COMPLETED_WITH_REQUEST_ID","COMPLETED_WITHOUT_REQUEST_ID"))
     if source_done and gemini_done:
         print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
