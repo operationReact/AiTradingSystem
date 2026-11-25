@@ -59,7 +59,6 @@ jobs:
           aws-region: ap-south-1
           role-session-name: minttick-gemini-prod-${{ github.run_id }}
           role-duration-seconds: 900
-          allowed-account-ids: '098859530205'
       - name: Check only Gemini secret format metadata
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
