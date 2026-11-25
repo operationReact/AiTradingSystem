@@ -116,7 +116,7 @@ class MindOrbWalkForwardServiceTest {
 
     private void setupHistory(List<MarketCandle> rows) {
         when(market.backtestCandles(eq(42L), eq("FIVE_MINUTE"),
-            any(Instant.class), any(Instant.class), eq(20001))).thenReturn(rows);
+            any(Instant.class), any(Instant.class), eq(50001))).thenReturn(rows);
     }
 
     private void fixedMetrics(int validationTrades) {
@@ -205,7 +205,7 @@ class MindOrbWalkForwardServiceTest {
             new BigDecimal("100.25"), first.high(), first.low(), first.close(),
             first.volume(), first.source(), first.fetchedAt()));
         when(market.recentCandlesAsOf(
-            42L, "FIVE_MINUTE", NOW.minusSeconds(600), 21)).thenReturn(source);
+            42L, "FIVE_MINUTE", NOW.minusSeconds(600), MindSourceSnapshot.OPENING_RANGE_BARS)).thenReturn(source);
         var report = service.inspect();
         assertEquals("UNAVAILABLE", report.status());
         assertTrue(report.blockers().contains("REFERENCE_INPUT_REVISION_DETECTED"));
