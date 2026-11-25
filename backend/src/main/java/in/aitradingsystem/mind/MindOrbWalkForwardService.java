@@ -37,7 +37,7 @@ public final class MindOrbWalkForwardService {
     private static final int TRAINING_DAYS = 60;
     private static final int VALIDATION_DAYS = 20;
     private static final int STEP_DAYS = VALIDATION_DAYS;
-    private static final int MAX_CANDLES = 20000;
+    private static final int MAX_CANDLES = 50000;
     private static final int REQUIRED_FOLDS = 3;
     private static final int REQUIRED_OOS_TRADES = 20;
     private static final BigDecimal MIN_COVERAGE = new BigDecimal("95");
