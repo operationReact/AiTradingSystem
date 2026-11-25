@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 10837)
+Total output lines: 650
+
 #!/usr/bin/env python3
 """Build the audited Mintick Mind capability manifest (issue #998, PR A).
 
@@ -267,160 +270,7 @@ SCREEN_AUDIT: dict[str, dict] = {
     "experiment-detail": {
         "status": "IMPLEMENTING",
         "blockerCode": "FIXTURE_CARDS_REMAIN_WITHOUT_SERVER_RECORD",
-        "note": "With the server walk-forward record wired, shows only that report (research only, no order authority). Without it, the fixture cards are labelled MOCK.",
-        "endpoints": ["/api/customer/mind/v1/ma-walkforward"],
-        "missing": ["Experiment catalogue and compare view still fixtures", "Flutter web/Android/iOS runtime evidence"],
-    },
-    "design-gallery": {
-        "status": "MOCK",
-        "blockerCode": "DESIGN_REFERENCE_ONLY",
-        "note": "Design reference only: layout and visual mockups, not a product feature. Labelled on screen.",
-        "endpoints": [],
-        "missing": [],
-    },
-    "design-preview": {
-        "status": "MOCK",
-        "blockerCode": "DESIGN_REFERENCE_ONLY",
-        "note": "Design reference only: clickable layout preview, not a product feature. Labelled on screen.",
-        "endpoints": [],
-        "missing": [],
-    },
-    "assistant": {
-        "status": "IMPLEMENTING",
-        "note": "Read-only grounded assistant (/api/customer/mind/v1/assistant/query): answers from the progress registry, PAPER portfolio and journal with sources and timestamps; refuses trade requests; no language model.",
-        "endpoints": ["/api/customer/mind/v1/assistant/query"],
-        "missing": ["Broader question coverage", "Flutter web/Android/iOS runtime evidence"],
-    },
-    "research-engines": {
-        "status": "IMPLEMENTING",
-        "note": "Server registry of named research engines (/api/customer/mind/v1/research-engines). All five are reported NOT_CONNECTED or NOT_APPLICABLE; none is available until an adapter and its own runtime evidence exist.",
-        "endpoints": ["/api/customer/mind/v1/research-engines"],
-        "missing": ["Adapters for VectorBT, Backtesting.py, Nautilus and LEAN", "Flutter web/Android/iOS runtime evidence"],
-    },
-    "settings": {
-        "status": "IMPLEMENTING",
-        "note": "Real controls only: per-room PAPER pause/resume (existing wallet service), execution boundary (PAPER only, LIVE not authorized) and the deployed backend revision from the progress registry. Fake monitoring switches removed.",
-        "endpoints": ["/api/customer/mind/v1/paper-portfolio", "/api/customer/trading-rooms/{roomId}/paper/pause", "/api/customer/mind/v1/progress"],
-        "missing": ["Flutter web/Android/iOS runtime evidence"],
-    },
-    "room-detail": {
-        "status": "IMPLEMENTING",
-        "note": "Hosts the real Mind PAPER strategy cycle panel (funded room, watchlist instrument, server outcome, "
-                "orders/positions/P&L). Remaining room cards are fixtures.",
-        "endpoints": ["/api/customer/trading-rooms/{roomId}/mind/paper-cycles"],
-        "missing": ["Replace remaining fixture room cards", "Flutter web/Android/iOS runtime evidence"],
-    },
-}
-DEFAULT_SCREEN_MISSING = ["Audit each control and value", "Server API for every displayed value",
-                          "Replace fixture data or label unavailable", "Flutter web/Android/iOS runtime evidence"]
-NAV_SCREENS = {"app-home", "design-gallery", "design-preview", "settings"}
-
-# --------------------------------------------------------------------------
-# Strategy catalog -> verified implementations (name match is exact catalog name).
-# --------------------------------------------------------------------------
-JAVA_TEST = "backend/src/test/java/in/aitradingsystem/"
-JAVA_MAIN = "backend/src/main/java/in/aitradingsystem/"
-PY_MAIN = "intelligence/src/aitrading_intelligence/"
-PY_TEST = "intelligence/tests/"
-
-STRATEGY_IMPL: dict[str, dict] = {
-    "SMA Cross": {
-        "code": "SMA_TREND_VOLUME_V1", "version": "1", "match": "VARIANT", "runtime": "JAVA_DETERMINISTIC",
-        "note": "5/20 SMA trend with volume confirmation; also the MA walk-forward research subject.",
-        "paths": [JAVA_MAIN + "strategy/StrategyService.java", JAVA_MAIN + "mind/MindMaWalkForwardEvaluator.java"],
-        "tests": [JAVA_TEST + "strategy/StrategyServiceTest.java", JAVA_TEST + "strategy/StrategyQualityGateTest.java"],
-        "intervals": ["ONE_MINUTE", "FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR", "ONE_DAY"],
-    },
-    "Opening Range Breakout": {
-        "code": "OPENING_RANGE_BREAKOUT_V1", "version": "1", "match": "EXACT", "runtime": "JAVA_DETERMINISTIC",
-        "note": "09:15-09:30 IST opening range breakout with volume confirmation (scanner registry).",
-        "paths": [JAVA_MAIN + "scanner/OpeningRangeBreakoutStrategy.java"],
-        "tests": [JAVA_TEST + "scanner/ExtendedScannerStrategiesTest.java", JAVA_TEST + "scanner/StrategyRegistryTest.java"],
-    },
-    "RSI Oversold Rebound": {
-        "code": "RSI_REVERSAL_V1", "version": "1", "match": "EXACT", "runtime": "JAVA_DETERMINISTIC",
-        "note": "Prior RSI < 30 recovering above 30 with price confirmation (scanner registry).",
-        "paths": [JAVA_MAIN + "scanner/RsiReversalStrategy.java"],
-        "tests": [JAVA_TEST + "scanner/ExtendedScannerStrategiesTest.java"],
-    },
-    "Donchian Channel Breakout": {
-        "code": "VOLUME_BREAKOUT_V1", "version": "1", "match": "VARIANT", "runtime": "JAVA_DETERMINISTIC",
-        "note": "Close above prior 20-bar high with >=1.5x average volume (Donchian high + volume filter).",
-        "paths": [JAVA_MAIN + "scanner/VolumeBreakoutStrategy.java"],
-        "tests": [JAVA_TEST + "scanner/ExtendedScannerStrategiesTest.java"],
-    },
-    "Anchored VWAP Trend": {
-        "code": "VWAP_MOMENTUM_V1", "version": "1", "match": "VARIANT", "runtime": "JAVA_DETERMINISTIC",
-        "note": "Rolling (not anchored) VWAP momentum; anchoring not implemented.",
-        "paths": [JAVA_MAIN + "scanner/VwapMomentumStrategy.java"],
-        "tests": [JAVA_TEST + "scanner/ExtendedScannerStrategiesTest.java"],
-    },
-    "20 EMA Pullback": {
-        "code": "MA_RECLAIM_V1", "version": "1", "match": "VARIANT", "runtime": "JAVA_DETERMINISTIC",
-        "note": "Reclaim of 20-bar SMA (not EMA) while 5 SMA > 20 SMA.",
-        "paths": [JAVA_MAIN + "scanner/MovingAverageReclaimStrategy.java"],
-        "tests": [JAVA_TEST + "scanner/ExtendedScannerStrategiesTest.java"],
-    },
-    # Execution & risk gates (deterministic Java risk engine; legacy automated-paper path).
-    "Exposure Cap": {
-        "code": "RISK_GROSS_EXPOSURE+MAX_ORDER_NOTIONAL", "version": "1", "match": "EXACT", "runtime": "JAVA_RISK_GATE",
-        "paths": [JAVA_MAIN + "risk/rules/GrossPortfolioExposureRule.java", JAVA_MAIN + "risk/rules/MaxOrderNotionalRule.java"],
-        "tests": [JAVA_TEST + "risk/ProductionRiskRulesTest.java"],
-    },
-    "Drawdown Kill Switch": {
-        "code": "RISK_DAILY_LOSS+EMERGENCY_STOP", "version": "1", "match": "VARIANT", "runtime": "JAVA_RISK_GATE",
-        "note": "Daily-loss limit and emergency stop; no multi-day drawdown curve gate.",
-        "paths": [JAVA_MAIN + "risk/rules/DailyLossRule.java", JAVA_MAIN + "risk/rules/EmergencyStopRule.java"],
-        "tests": [JAVA_TEST + "risk/ProductionRiskRulesTest.java"],
-    },
-    "Stop Loss Discipline": {
-        "code": "RISK_PRICE_LEVELS+MIN_REWARD_RISK", "version": "1", "match": "VARIANT", "runtime": "JAVA_RISK_GATE",
-        "paths": [JAVA_MAIN + "risk/rules/PriceLevelsRule.java", JAVA_MAIN + "risk/rules/MinimumRewardRiskRule.java"],
-        "tests": [JAVA_TEST + "risk/ProductionRiskRulesTest.java"],
-    },
-    "Trailing Exit": {
-        "code": "TRAILING_PROTECTION_POLICY", "version": "1", "match": "EXACT", "runtime": "JAVA_RISK_GATE",
-        "paths": [JAVA_MAIN + "paper/TrailingProtectionPolicy.java"],
-        "tests": [JAVA_TEST + "paper/AutomatedPaperPositionMonitorServiceTest.java"],
-    },
-    "Broker Reconciliation Gate": {
-        "code": "PAPER_RECONCILIATION", "version": "1", "match": "VARIANT", "runtime": "JAVA_RISK_GATE",
-        "note": "PAPER ledger reconciliation only; no LIVE broker reconciliation.",
-        "paths": [JAVA_MAIN + "paper/PaperReconciliationService.java"],
-        "tests": [JAVA_TEST + "paper/PaperReconciliationServiceIT.java"],
-    },
-    "Quote Staleness Gate": {
-        "code": "RISK_MARKET_STATE_FRESHNESS+PAPER_TICK_15S", "version": "1", "match": "EXACT", "runtime": "JAVA_RISK_GATE",
-        "paths": [JAVA_MAIN + "risk/rules/MarketStateFreshnessRule.java", JAVA_MAIN + "tradingrooms/CustomerPaperOrderService.java"],
-        "tests": [JAVA_TEST + "tradingrooms/CustomerPaperOrderServiceIT.java"],
-    },
-    # Python research implementations: tested in isolation, not wired to Mind runtime.
-    "Tabular Alpha Classification": {"code": "PY_LIGHTGBM", "match": "VARIANT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "lightgbm_model.py"], "tests": [PY_TEST + "test_lightgbm_model.py"]},
-    "Market Regime HMM": {"code": "PY_REGIME_HMM", "match": "EXACT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "regime_hmm.py"], "tests": [PY_TEST + "test_regime_hmm.py"]},
-    "Isolation Forest Anomaly Gate": {"code": "PY_REGIME_ANOMALY", "match": "VARIANT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "regime_anomaly.py"], "tests": [PY_TEST + "test_regime_anomaly.py"]},
-    "Static Ensemble": {"code": "PY_FUSION", "match": "EXACT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "fusion.py"], "tests": [PY_TEST + "test_fusion.py"]},
-    "Adaptive Ensemble": {"code": "PY_ADAPTIVE_FUSION", "match": "EXACT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "adaptive_fusion.py"], "tests": [PY_TEST + "test_adaptive_fusion.py"]},
-    "Cross-Sectional ML Ranker": {"code": "PY_CROSS_SECTIONAL_RANKING", "match": "EXACT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "cross_sectional_ranking.py"], "tests": [PY_TEST + "test_cross_sectional_ranking.py"]},
-    "Uncertainty Abstention": {"code": "PY_ENSEMBLE_UNCERTAINTY", "match": "EXACT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "ensemble_uncertainty.py"], "tests": [PY_TEST + "test_ensemble_uncertainty.py"]},
-    "Model Disagreement Gate": {"code": "PY_FUSION_DISAGREEMENT", "match": "EXACT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "fusion_disagreement_control.py"], "tests": [PY_TEST + "test_fusion_disagreement_control.py"]},
-    "Time-Series Forecast": {"code": "PY_PATCH_TRANSFORMER", "match": "VARIANT", "runtime": "PYTHON_RESEARCH",
-        "paths": [PY_MAIN + "india_patch_transformer.py"], "tests": [PY_TEST + "test_india_patch_transformer.py"]},
-    "Financial NLP Context": {"code": "PY_INDIA_FIN_NLP", "match": "VARIANT", "runtime": "PYTHON_RESEARCH",
-        "status": "RIGHTS_BLOCKED", "blocker": "NEWS_LICENCE_REVIEW",
-        "paths": [PY_MAIN + "india_financial_nlp_corpus.py"], "tests": [PY_TEST + "test_india_financial_nlp_corpus.py"]},
-}
-
-# Families that need data the canonical feed (#924) does not yet provide.
-FAMILY_DATA_DEPENDENCY = {
-    "Event Driven": "corporate-events feed", "Fundamental & Multibagger": "fundamentals feed",
+        "note": "With the server walk-forward record wired, shows only that report (research only, no order a…2837 tokens truncated…ger": "fundamentals feed",
     "Factor & Portfolio": "fundamentals + cross-sectional universe", "Market Microstructure": "order-book depth feed",
     "Futures": "F&O contracts + OI feed", "Options — Directional": "option chain feed",
     "Options — Volatility": "option chain + IV feed", "Options — Hedging": "option chain + greeks feed",
@@ -570,8 +420,9 @@ def build() -> dict:
             implementation = {k: impl.get(k) for k in ("code", "version", "match", "runtime")}
             implementation["version"] = implementation["version"] or "research"
             evidence = [{"kind": "SOURCE", "path": p} for p in impl["paths"]] + [{"kind": "TEST", "path": p} for p in impl["tests"]]
-            missing = ["Connect to Mind strategy-to-PAPER orchestration", "Backtest + walk-forward evidence per strategy",
-                       "Runtime evaluation evidence on deployed revision"]
+            missing = impl.get("missing", ["Connect to Mind strategy-to-PAPER orchestration",
+                       "Backtest + walk-forward evidence per strategy",
+                       "Runtime evaluation evidence on deployed revision"])
             note = impl.get("note")
         else:
             status = "DATA_BLOCKED" if dep else "NOT_STARTED"
