@@ -9,10 +9,12 @@ class _FixtureNews implements MarketNewsRepository {
   final bool fail;
   final bool empty;
   int calls = 0;
+  String? lastSymbol;
 
   @override
-  Future<MarketNewsPage> articles({required int page, int size = 20}) async {
+  Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol}) async {
     calls++;
+    lastSymbol = symbol;
     if (fail) throw StateError('Fixture API unavailable');
     return MarketNewsPage(
       page: page, size: size, totalItems: empty ? 0 : 1,
@@ -50,6 +52,25 @@ void main() {
     expect(find.text('Open publisher source'), findsOneWidget);
     expect(find.textContaining('Observed by MintTick'), findsOneWidget);
     expect(repo.calls, 1);
+  });
+
+  testWidgets('stock filter requests matching impact and article sheet explains model evidence', (tester) async {
+    final repo = _FixtureNews();
+    await tester.pumpWidget(MaterialApp(home: MarketIntelligencePage(repository: repo)));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const ValueKey('market-news-symbol-filter')), 'tcs');
+    await tester.tap(find.byKey(const ValueKey('market-news-symbol-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastSymbol, 'TCS');
+    expect(find.textContaining('affecting TCS'), findsOneWidget);
+
+    await tester.tap(find.text('Synthetic corporate filing headline'));
+    await tester.pumpAndSettle();
+    expect(find.text('MintTick Mind · stock impact assessment'), findsOneWidget);
+    expect(find.textContaining('Affected symbols: TCS'), findsOneWidget);
+    expect(find.textContaining('not a price or return forecast'), findsOneWidget);
   });
 
   testWidgets('empty collection is distinct from unavailable source', (tester) async {
