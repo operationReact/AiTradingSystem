@@ -30,7 +30,7 @@ class MindOrbOutOfSampleEvaluatorTest {
                     : target ? new BigDecimal("108")
                     : signal ? new BigDecimal("104") : new BigDecimal("100.5");
             BigDecimal l = i < 3 ? new BigDecimal("99")
-                    : entry ? new BigDecimal("102") : new BigDecimal("99.5");
+                    : (entry || target) ? new BigDecimal("102") : new BigDecimal("99.5");
             BigDecimal c = signal ? new BigDecimal("103")
                     : target ? new BigDecimal("106") : new BigDecimal("100");
             bars.add(new MarketCandle(i + 1L, 42L, "NSE", "INFY-EQ", "1234",
