@@ -174,43 +174,7 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
                                 style: Theme.of(context).textTheme.labelMedium
                                     ?.copyWith(color: scheme.onSurfaceVariant)),
                             ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                              child: Row(children: [
-                                Expanded(
-                                  child: TextField(
-                                    key: const ValueKey('market-news-symbol-filter'),
-                                    controller: _symbolInput,
-                                    textCapitalization: TextCapitalization.characters,
-                                    textInputAction: TextInputAction.search,
-                                    onSubmitted: (_) => _applySymbol(),
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      labelText: 'Filter by stock symbol',
-                                      hintText: 'e.g. RELIANCE',
-                                      prefixIcon: const Icon(Icons.search, size: 19),
-                                      suffixIcon: _activeSymbol == null ? null : IconButton(
-                                        tooltip: 'Clear stock filter',
-                                        onPressed: () {
-                                          _symbolInput.clear();
-                                          setState(() { _activeSymbol = null; });
-                                          unawaited(_refresh());
-                                        },
-                                        icon: const Icon(Icons.close, size: 18),
-                                      ),
-                                      border: const OutlineInputBorder(),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton.filledTonal(
-                                  key: const ValueKey('market-news-symbol-submit'),
-                                  tooltip: 'Filter news',
-                                  onPressed: _loading ? null : _applySymbol,
-                                  icon: const Icon(Icons.arrow_forward),
-                                ),
-                              ]),
-                            ),
+                            _symbolSearchBar(scheme),
                             if (_activeSymbol != null)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -249,22 +213,74 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
     );
   }
 
-  Widget _emptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(_error == null ? Icons.article_outlined : Icons.cloud_off_outlined,
-            size: 30, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(_error ?? 'No approved publisher articles are available.',
-            textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: () => unawaited(_refresh()),
-            child: const Text('Retry')),
-        ]),
+  Widget _symbolSearchBar(ColorScheme scheme) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+    child: Row(children: [
+      Expanded(
+        child: TextField(
+          key: const ValueKey('market-news-symbol-filter'),
+          controller: _symbolInput,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => _applySymbol(),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: 'Filter by stock symbol',
+            hintText: 'e.g. RELIANCE',
+            prefixIcon: const Icon(Icons.search, size: 19),
+            suffixIcon: _activeSymbol == null ? null : IconButton(
+              tooltip: 'Clear stock filter',
+              onPressed: () {
+                _symbolInput.clear();
+                setState(() { _activeSymbol = null; });
+                unawaited(_refresh());
+              },
+              icon: const Icon(Icons.close, size: 18),
+            ),
+            border: const OutlineInputBorder(),
+          ),
+        ),
       ),
-    );
+      const SizedBox(width: 8),
+      IconButton.filledTonal(
+        key: const ValueKey('market-news-symbol-submit'),
+        tooltip: 'Filter news',
+        onPressed: _loading ? null : _applySymbol,
+        icon: const Icon(Icons.arrow_forward),
+      ),
+    ]),
+  );
+
+  Widget _emptyState() {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(children: [
+      _symbolSearchBar(scheme),
+      if (_activeSymbol != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text('Showing successfully analyzed articles affecting $_activeSymbol',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ),
+      Expanded(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(_error == null ? Icons.article_outlined : Icons.cloud_off_outlined,
+                size: 30, color: scheme.onSurfaceVariant),
+              const SizedBox(height: 12),
+              Text(_activeSymbol == null
+                  ? (_error ?? 'No approved publisher articles are available.')
+                  : (_error ?? 'No successfully analyzed news for $_activeSymbol.'),
+                textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              OutlinedButton(onPressed: () => unawaited(_refresh()),
+                child: const Text('Retry')),
+            ]),
+          ),
+        ),
+      ),
+    ]);
   }
 
   Widget _message(String message, IconData icon) => Padding(
