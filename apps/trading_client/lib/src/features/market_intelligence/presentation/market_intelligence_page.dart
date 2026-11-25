@@ -95,7 +95,26 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
   static String? _normalizeSymbol(String? value) {
     final normalized = value?.trim().toUpperCase();
     if (normalized == null || normalized.isEmpty) return null;
-    return RegExp(r'^[A-Z0-9&.-]{1,20}
+    return RegExp(r'^[A-Z0-9&.-]{1,20}$').hasMatch(normalized)
+        ? normalized
+        : null;
+  }
+
+  void _applySymbol() {
+    final raw = _symbolInput.text.trim();
+    final normalized = _normalizeSymbol(raw);
+    if (raw.isNotEmpty && normalized == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter one valid stock symbol.')),
+      );
+      return;
+    }
+    if (normalized == _activeSymbol) return;
+    setState(() => _activeSymbol = normalized);
+    unawaited(_refresh());
+  }
+
+  Future<void> _loadMore() async {
     if (_loading || _loadingMore || !_hasMore) return;
     final generation = _generation;
     final requestedPage = _nextPage;
@@ -104,7 +123,10 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
       _pageError = null;
     });
     try {
-      final page = await widget.repository.articles(page: requestedPage, symbol: _activeSymbol);
+      final page = await widget.repository.articles(
+        page: requestedPage,
+        symbol: _activeSymbol,
+      );
       if (!mounted || generation != _generation) return;
       final known = _articles.map((a) => a.id).toSet();
       setState(() {
@@ -385,6 +407,44 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
     );
   }
 
+  Widget _impactCard(BuildContext context, MarketNewsImpact impact) {
+    final theme = Theme.of(context);
+    final direction = impact.sentiment.toLowerCase();
+    final score = impact.directionScore == null
+        ? 'Not scored'
+        : impact.directionScore!.toStringAsFixed(2);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('MintTick Mind · advisory assessment',
+            style: theme.textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text('Sentiment: ${impact.sentiment} · Direction score: $score'),
+          Text('Category: ${impact.category}${impact.horizon == null ? '' : ' · ${impact.horizon}'}'),
+          if (impact.impactedSymbols.isNotEmpty)
+            Text('Affected symbols: ${impact.impactedSymbols.join(', ')}'),
+          if (impact.confidence != null)
+            Text('Evidence confidence: ${(impact.confidence! * 100).round()}%'),
+          const SizedBox(height: 8),
+          Text(impact.evidence),
+          if (impact.risks.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Risks / caveats: ${impact.risks.join(' • ')}'),
+          ],
+          if (impact.ambiguity == true || impact.contradiction == true)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('The source contains ambiguity or conflicting signals.'),
+            ),
+          const SizedBox(height: 8),
+          Text('Research context only. Not a forecast or trading instruction.',
+            style: theme.textTheme.bodySmall),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _openOriginal(String original) async {
     final uri = Uri.tryParse(original);
     if (uri == null || !{'http', 'https'}.contains(uri.scheme) || uri.host.isEmpty) {
@@ -609,6 +669,14 @@ class _ArticleLine extends StatelessWidget {
                     Text(article.excerpt!),
                   ],
                   const SizedBox(height: 16),
+                  if (article.analysisStatus == 'ANALYZED' && article.stockImpact != null)
+                    _impactCard(sheetContext, article.stockImpact!)
+                  else
+                    Text(article.analysisStatus == 'FAILED'
+                        ? 'MintTick Mind analysis failed; no impact assessment is shown.'
+                        : 'MintTick Mind has not analyzed this article yet.',
+                      style: Theme.of(sheetContext).textTheme.bodySmall),
+                  const SizedBox(height: 12),
                   Text('Observed by MintTick · ${_ist(article.ingestedAt)}',
                     style: Theme.of(sheetContext).textTheme.labelSmall),
                   const SizedBox(height: 12),
