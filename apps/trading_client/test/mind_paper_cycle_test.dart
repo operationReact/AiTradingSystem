@@ -39,6 +39,8 @@ class _Repo implements MindPaperCycleRepository {
   final bool fail;
   final bool noRooms;
   int runs = 0;
+  String? lastStrategyCode;
+  String? lastInterval;
   Completer<void>? gate;
 
   @override
@@ -46,8 +48,11 @@ class _Repo implements MindPaperCycleRepository {
   @override
   Future<List<MindPaperInstrument>> instruments() async => [const MindPaperInstrument(7, 'MINDA-EQ · NSE')];
   @override
-  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId, required String interval}) async {
+  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId,
+      required String interval, required String strategyCode}) async {
     runs++;
+    lastStrategyCode = strategyCode;
+    lastInterval = interval;
     if (gate != null) await gate!.future;
     if (fail) throw StateError('timeout');
     return MindPaperCycleResult.parse(resultJson());
@@ -105,6 +110,23 @@ void main() {
     expect(find.byKey(const ValueKey('mind-paper-error')), findsOneWidget);
     expect(repo.runs, 1);
     expect(find.byKey(const ValueKey('mind-paper-result')), findsNothing);
+  });
+
+  testWidgets('ORB PAPER selection only offers 1m, 3m and 5m and sends strategy identity', (tester) async {
+    final repo = _Repo();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+        child: MindPaperCyclePanel(repository: repo)))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Opening Range Breakout'));
+    await tester.pumpAndSettle();
+    expect(find.text('1m'), findsOneWidget);
+    expect(find.text('3m'), findsOneWidget);
+    expect(find.text('5m'), findsOneWidget);
+    expect(find.text('15m'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('mind-paper-run')));
+    await tester.pumpAndSettle();
+    expect(repo.lastStrategyCode, 'OPENING_RANGE_BREAKOUT_V1');
+    expect(repo.lastInterval, 'FIVE_MINUTE');
   });
 
   testWidgets('no funded PAPER room means nothing can run', (tester) async {
