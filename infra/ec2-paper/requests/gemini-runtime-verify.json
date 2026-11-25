@@ -1,5 +1,6 @@
 {
   "provider": "GEMINI",
+
   "kind": "minttick-gemini-runtime-verify-v1",
   "account": "098859530205",
   "region": "ap-south-1",
