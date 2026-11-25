@@ -133,72 +133,72 @@ if not all(health.get(k) is True for k in expected):
     raise SystemExit("NEWS_RUNTIME_FLAGS_NOT_ACTIVE")
 if health.get("model",{}).get("selectedProvider") != "GEMINI":
     raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
-if any(source.get("rightsState") != "APPROVED" or
-       not all(source.get(field) is True for field in
-               ("canIngest","canRetain","canDisplay","canTransferToModel"))
-       for source in health.get("sources",[])):
-    raise SystemExit("NEWS_SOURCE_POLICY_NOT_APPROVED")
+for source_id in ("moneycontrol","economic-times","sebi"):
+    source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
+    if not source or source.get("rightsState")!="APPROVED" or not all(
+        source.get(field) is True for field in ("canIngest","canRetain","canDisplay","canTransferToModel")):
+        raise SystemExit("NEWS_SOURCE_POLICY_NOT_APPROVED")
 print("MINTTICK_NEWS_RUNTIME_FLAGS:READY")
 PY
 echo "MINTTICK_NEWS_ACTIVATION_OK:paper-only"
-""";
+"""
 
-function awsJson(...args) {
-  const p = subprocess.run(["aws", ...args, "--region", REGION, "--output", "json",
-      "--no-cli-pager"], capture_output=True, text=True, timeout=60);
-  if (p.returncode) throw new Error("AWS_REQUEST_FAILED");
-  return JSON.parse(p.stdout);
-}
+def aws_json(*args: str) -> dict:
+    proc = subprocess.run(["aws", *args, "--region", REGION, "--output", "json",
+                           "--no-cli-pager"], capture_output=True, text=True, timeout=60)
+    if proc.returncode:
+        raise RuntimeError("AWS_REQUEST_FAILED")
+    try:
+        result = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("AWS_RESPONSE_INVALID") from exc
+    if not isinstance(result, dict):
+        raise RuntimeError("AWS_RESPONSE_INVALID")
+    return result
 
-function validateRequest() {
-  const data = JSON.parse(REQUEST_PATH.read_text());
-  if (JSON.stringify(data) !== JSON.stringify(EXPECTED)) {
-    throw new Error("EXACT_NEWS_ACTIVATION_REQUEST_MISMATCH");
-  }
-}
 
-function run() {
-  if (process.argv[2] !== "runner") throw new Error("RUNNER_MODE_REQUIRED");
-  if (process.env.AWS_REGION !== REGION) throw new Error("WRONG_AWS_REGION");
-  validateRequest();
-  gate.verify_aws();
-  const sent = awsJson("ssm", "send-command",
-    "--document-name", "AWS-RunShellScript",
-    "--instance-ids", INSTANCE,
-    "--timeout-seconds", "1800",
-    "--comment", "MintTick news activation: attested PAPER sources only",
-    "--parameters", JSON.stringify({commands: [REMOTE]}));
-  const commandId = sent?.Command?.CommandId;
-  if (typeof commandId !== "string" || !/^[0-9a-f-]{36}$/.test(commandId)) {
-    throw new Error("INVALID_SSM_COMMAND");
-  }
-  for (let attempt = 0; attempt < 90; attempt += 1) {
-    time.sleep(10);
-    let result;
-    try {
-      result = awsJson("ssm", "get-command-invocation", "--command-id", commandId,
-        "--instance-id", INSTANCE);
-    } catch {
-      continue;
-    }
-    if (result.Status === "Success") {
-      const lines = (result.StandardOutputContent || "").split("\n");
-      if (!lines.includes(MARKER + "paper-only")) throw new Error("NEWS_RECEIPT_MISSING");
-      console.log("PAPER news activation succeeded; credentials and article contents were not returned");
-      return;
-    }
-    if (!["Pending", "InProgress", "Delayed"].includes(result.Status)) {
-      const output = result.StandardErrorContent || "";
-      const stage = output.match(/MINTTICK_PAPER_FAILED_STAGE:([A-Z_]+)/);
-      throw new Error("NEWS_ACTIVATION_FAILED:" + (stage?.[1] || result.Status));
-    }
-  }
-  throw new Error("NEWS_ACTIVATION_TIMEOUT");
-}
+def run() -> None:
+    if len(sys.argv) != 2 or sys.argv[1] != "runner":
+        raise RuntimeError("RUNNER_MODE_REQUIRED")
+    if os.environ.get("AWS_REGION") != REGION:
+        raise RuntimeError("WRONG_AWS_REGION")
+    if not REQUEST_PATH.is_file() or REQUEST_PATH.is_symlink():
+        raise RuntimeError("ACTIVATION_REQUEST_MISSING")
+    if json.loads(REQUEST_PATH.read_text()) != EXPECTED:
+        raise RuntimeError("EXACT_NEWS_ACTIVATION_REQUEST_MISMATCH")
 
-try {
-  run();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : "NEWS_ACTIVATION_FAILED");
-  process.exitCode = 1;
-}
+    gate.verify_aws()
+    sent = aws_json("ssm", "send-command", "--document-name", "AWS-RunShellScript",
+        "--instance-ids", INSTANCE, "--timeout-seconds", "1800",
+        "--comment", "MintTick news activation: attested PAPER sources only",
+        "--parameters", json.dumps({"commands": [REMOTE]}))
+    command_id = sent.get("Command", {}).get("CommandId")
+    if not isinstance(command_id, str) or not re.fullmatch(r"[0-9a-f-]{36}", command_id):
+        raise RuntimeError("INVALID_SSM_COMMAND")
+
+    for _ in range(90):
+        time.sleep(10)
+        try:
+            result = aws_json("ssm", "get-command-invocation",
+                "--command-id", command_id, "--instance-id", INSTANCE)
+        except RuntimeError:
+            continue
+        if result.get("Status") == "Success":
+            if MARKER + "paper-only" not in (result.get("StandardOutputContent") or "").splitlines():
+                raise RuntimeError("NEWS_RECEIPT_MISSING")
+            print("PAPER news activation succeeded; credentials and article contents were not returned")
+            return
+        if result.get("Status") not in {"Pending", "InProgress", "Delayed"}:
+            error = result.get("StandardErrorContent") or ""
+            match = re.search(r"MINTTICK_PAPER_FAILED_STAGE:([A-Z_]+)", error)
+            raise RuntimeError("NEWS_ACTIVATION_FAILED:" + (match.group(1) if match else result.get("Status", "UNKNOWN")))
+    raise RuntimeError("NEWS_ACTIVATION_TIMEOUT")
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as exc:
+        print(str(exc) if isinstance(exc, RuntimeError) else "NEWS_ACTIVATION_FAILED",
+              file=sys.stderr)
+        sys.exit(1)
