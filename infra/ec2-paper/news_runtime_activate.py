@@ -91,6 +91,7 @@ updates={
  "NEWS_INGESTION_INTERVAL_MS":"900000",
  "NEWS_INGESTION_SOURCES":",".join(sources),
  "NEWS_WATCHLIST":"RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,ITC",
+ "MINTTICK_NEWS_ACTIVATED_AT":now,
 }
 for k,v in updates.items():
     if k in values: lines=[line for line in lines if not line.startswith(k+"=")]
@@ -110,7 +111,7 @@ cd "$root"
 ./run_paper.sh "$current"
 stage=HEALTH
 python3 - "$root/runtime.env" <<'PY'
-import json,re,sys,urllib.error,urllib.request
+import datetime,json,re,sys,time,urllib.error,urllib.request
 from pathlib import Path
 values={}
 for line in Path(sys.argv[1]).read_text().splitlines():
@@ -120,24 +121,48 @@ for line in Path(sys.argv[1]).read_text().splitlines():
         values[k]=v
 key=values.get("APP_API_KEY","")
 if not re.fullmatch(r"[0-9a-f]{64}",key): raise SystemExit("APP_KEY_INVALID")
-req=urllib.request.Request("http://127.0.0.1:8080/api/admin/market-intelligence/health",
-    headers={"X-API-Key":key})
 try:
-    with urllib.request.urlopen(req,timeout=15) as response:
-        health=json.loads(response.read())
-except (urllib.error.URLError,TimeoutError,ValueError):
-    raise SystemExit("NEWS_HEALTH_UNAVAILABLE")
-expected=("ingestionEnabled","eventLedgerEnabled","analyzerBridgeEnabled",
-          "analysisSchedulerEnabled","mindContextEnabled")
-if not all(health.get(k) is True for k in expected):
-    raise SystemExit("NEWS_RUNTIME_FLAGS_NOT_ACTIVE")
-if health.get("model",{}).get("selectedProvider") != "GEMINI":
-    raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
-for source_id in ("moneycontrol","economic-times","sebi"):
-    source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
-    if not source or source.get("rightsState")!="APPROVED" or not all(
-        source.get(field) is True for field in ("canIngest","canRetain","canDisplay","canTransferToModel")):
-        raise SystemExit("NEWS_SOURCE_POLICY_NOT_APPROVED")
+    activated=datetime.datetime.fromisoformat(values["MINTTICK_NEWS_ACTIVATED_AT"])
+except (KeyError,ValueError):
+    raise SystemExit("ACTIVATION_TIMESTAMP_MISSING")
+url="http://127.0.0.1:8080/api/admin/market-intelligence/health"
+deadline=time.monotonic()+1500
+while time.monotonic()<deadline:
+    req=urllib.request.Request(url,headers={"X-API-Key":key})
+    try:
+        with urllib.request.urlopen(req,timeout=15) as response:
+            health=json.loads(response.read())
+    except (urllib.error.URLError,TimeoutError,ValueError):
+        time.sleep(20); continue
+    flags=("ingestionEnabled","eventLedgerEnabled","analyzerBridgeEnabled",
+           "analysisSchedulerEnabled","mindContextEnabled")
+    if not all(health.get(k) is True for k in flags):
+        raise SystemExit("NEWS_RUNTIME_FLAGS_NOT_ACTIVE")
+    model=health.get("model",{})
+    if model.get("selectedProvider")!="GEMINI":
+        raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
+    for source_id in ("moneycontrol","economic-times","sebi"):
+        source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
+        if not source or source.get("rightsState")!="APPROVED" or not all(
+            source.get(field) is True for field in
+            ("canIngest","canRetain","canDisplay","canTransferToModel")):
+            raise SystemExit("NEWS_SOURCE_POLICY_NOT_APPROVED")
+    source_done=any(
+        source.get("latestStatus")=="SUCCESS" and (source.get("lastFetchedItems") or 0)>0
+        and source.get("lastFinishedAt") and
+        datetime.datetime.fromisoformat(source["lastFinishedAt"].replace("Z","+00:00"))>=activated
+        for source in health.get("sources",[]))
+    attempted_at=model.get("lastGeminiAttemptAt")
+    outcome=model.get("lastGeminiAttemptOutcome") or ""
+    gemini_done=bool(attempted_at and
+        datetime.datetime.fromisoformat(attempted_at.replace("Z","+00:00"))>=activated and
+        outcome.startswith("COMPLETED_WITH_"))
+    if source_done and gemini_done:
+        print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
+        break
+    time.sleep(20)
+else:
+    raise SystemExit("SOURCE_OR_GEMINI_RUNTIME_EVIDENCE_TIMEOUT")
 print("MINTTICK_NEWS_RUNTIME_FLAGS:READY")
 PY
 echo "MINTTICK_NEWS_ACTIVATION_OK:paper-only"
