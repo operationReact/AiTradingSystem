@@ -1774,16 +1774,16 @@
      "path": "backend/src/main/java/in/aitradingsystem/scanner/OpeningRangeBreakoutStrategy.java"
     },
     {
-     "kind": "SOURCE",
-     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
-    },
-    {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/scanner/ExtendedScannerStrategiesTest.java"
     },
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/scanner/StrategyRegistryTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
     },
     {
      "kind": "TEST",
@@ -5329,21 +5329,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "NSE_EQ spot and matching NSE_FO futures exchange-time bid/ask",
+    "Verified contract, expiry and lot size",
+    "Financing, dividend, borrowing and all-in execution cost assumptions"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_BASIS_CARRY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesBasisCarryV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesBasisCarryV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/architecture/fno-canonical-strategy-feed.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified source-backed spot/futures snapshot adapter",
+    "Actual India funding, dividend, borrow and settlement-cost validation",
+    "No-lookahead historical backtest and walk-forward evidence",
+    "Deployed PAPER-only runtime and brokerage-readiness proof"
+   ],
+   "note": "First deterministic research-only cost-adjusted evaluator in PR #1488. No source adapter, backtest, PAPER order path or LIVE permission. Status stays DATA_BLOCKED.",
    "id": "strategy.STR-170",
    "kind": "STRATEGY",
    "name": "Futures Basis Carry",
@@ -5355,21 +5374,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "NSE_FO near/far contracts on the same underlying with distinct expiries and matching lot sizes",
+    "Research-rights verified exchange-time bid/ask for both futures legs",
+    "Funding, dividend and two-leg round-trip cost assumptions"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_CALENDAR_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesCalendarSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesCalendarSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/architecture/fno-canonical-strategy-feed.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified source-backed two-expiry futures quote/contract snapshot adapter",
+    "Actual Indian financing, dividend, margin, delivery, slippage and statutory cost verification",
+    "No-lookahead historical calendar spread replay, out-of-sample and walk-forward tests",
+    "Deployed PAPER-only strategy integration and market-session proof"
+   ],
+   "note": "Deterministic research-only near/far futures calendar spread valuation evaluator with no broker feed, orders or backtest wired. Status remains DATA_BLOCKED pending genuine source and PAPER evidence.",
    "id": "strategy.STR-171",
    "kind": "STRATEGY",
    "name": "Futures Calendar Spread",
@@ -5381,21 +5419,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Source-verified near and next NSE_FO futures contract IDs, expiries and identical underlying/lot size",
+    "Three exchange-session-complete, provider-observed near/far OI and daily volume snapshots with as-of timestamps",
+    "Closing bid/ask for both futures, source-use rights, and explicit estimated execution friction thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_ROLLOVER_SIGNAL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesRolloverSignalV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesRolloverSignalV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-172-futures-rollover-signal.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Verified, licensed, session-complete NSE futures near/next OI and traded-volume history adapter",
+    "Actual provider timestamps and exchange-session calendar validation; OI publication latency checks",
+    "Out-of-sample historical rollover events and no-lookahead walk-forward research",
+    "Deployed PAPER-only observation evaluation, cost/liquidity/risk acceptance and audited results"
+   ],
+   "note": "STR-172 is a deterministic research-only two-step OI migration classifier with near/far source and estimated friction gates. OI rollover does NOT imply bullish/bearish price direction or authorize an order. No provider adapter, PAPER action or LIVE order path. Remains DATA_BLOCKED.",
    "id": "strategy.STR-172",
    "kind": "STRATEGY",
    "name": "Rollover Signal",
@@ -5407,21 +5464,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Exact source-listed NSE_FO futures contract identity, expiry, lot size, and research-use provenance",
+    "Five consecutive calendar-verified, completed futures sessions with finalized OI and volume in consistent underlying units",
+    "As-of exchange close and first-observed OI publication timestamps plus explicit trend/participation thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_OPEN_INTEREST_TREND_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesOpenInterestTrendV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesOpenInterestTrendV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-173-futures-open-interest-trend.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified session-complete five-session OI/volume adapter and independent provider observation timestamps",
+    "Exchange holiday/calendar validation and OI publication latency/normalization/contract-adjustment proofs",
+    "Backtested out-of-sample OI trend relevance (not price direction), historical expiry windows and walk-forward evidence",
+    "Deployed bounded read-only strategy evaluation and audited PAPER-only observation readiness"
+   ],
+   "note": "STR-173 is a same-futures-contract five-completed-session OI growth/decline trend classifier with explicit participation and outlier guards. A rising/falling OI trend is not a bullish/bearish trading signal. Pure deterministic research, no feed subscription or order path. DATA_BLOCKED pending real provider and backtest evidence.",
    "id": "strategy.STR-173",
    "kind": "STRATEGY",
    "name": "Open Interest Trend",
@@ -5433,21 +5509,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Source-verified same NSE_FO futures contract across five completed trading sessions",
+    "Rights-verified finalized futures close price and open-interest snapshots with original as-of publication times",
+    "Session-normalized OI and traded volume plus explicit divergence and source-quality thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_PRICE_OI_DIVERGENCE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesPriceOiDivergenceV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesPriceOiDivergenceV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-174-futures-price-oi-divergence.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed, verified same-contract five-session futures price/OI/volume source adapter and originally observed publication times",
+    "Exchange holiday/session calendar, settlement price provenance, OI contract-unit normalization and corporate actions",
+    "Out-of-sample no-lookahead historical divergence replay and realistic cost/impact testing",
+    "Deployed read-only strategy evaluation and audited PAPER-only research lifecycle"
+   ],
+   "note": "STR-174 deterministic research-only futures price-versus-OI divergence classifier (up price/down OI or down price/up OI); neither pattern proves a buy or sell. No provider adapter, PAPER/LIVE order, UI, or trading authority. Remains DATA_BLOCKED pending actual source and backtest evidence.",
    "id": "strategy.STR-174",
    "kind": "STRATEGY",
    "name": "Price OI Divergence",
@@ -5459,21 +5554,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "STR-170 approved single-stock NSE_EQ spot and matching NSE_FO futures basis-carry research decision",
+    "Same-provider, source-verified exchange-timed spot ASK / futures BID depth for complete lot",
+    "Broker-verified full cash equity purchase, futures margin, stress variation margin and delivery settlement buffer",
+    "Independently verified incremental fees, slippage, dividends and corporate action uncertainty, with non-duplicated cost model"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CASH_FUTURES_ARBITRAGE_RESEARCH_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCashFuturesArbitrageResearchV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCashFuturesArbitrageResearchV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-175-cash-futures-arbitrage-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authorized source-backed spot and future exchange-time bid/ask and matching depth snapshots",
+    "Verified Indian exchange physical-delivery, actual broker margin/cash ledger, complete statutory fees and uncertainty model",
+    "Historical as-of stock/futures depth, actual dividends/corporate actions and no-lookahead walk-forward research",
+    "Audited PAPER-only feasibility research plus separately approved risk/trading readiness"
+   ],
+   "note": "Research-only feasibility overlay on STR-170 basis carry; validates one-lot cash buy/future short pair for depth, capital, margin, settlement and incremental stress costs. Reuses FNO_FUTURES_BASIS_CARRY_V1 (STR-170) rather than duplicating carry logic, no guaranteed arbitrage, no broker execution. DATA_BLOCKED pending genuine source and backtest evidence.",
    "id": "strategy.STR-175",
    "kind": "STRATEGY",
    "name": "Cash Futures Arbitrage Research",
@@ -5485,21 +5600,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Provider-verified same NSE_FO futures contract, listed-from date, expiry and lot size",
+    "Seven session-complete NSE futures OHLCV bars and final OI in consistent underlying units, with separate original as-of publication timestamps",
+    "Separately verified internal research rights for OHLCV and OI, exchange session provenance and explicit momentum, volume and cost thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_MOMENTUM_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMomentumV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMomentumV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-176-futures-momentum.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Verified licensed source adapter for same-futures-contract seven completed OHLCV and OI sessions and actual first-known timestamps",
+    "NSE holiday and session calendar, contract listing/expiry and continuity validation; corporate actions and source latency",
+    "Out-of-sample no-lookahead momentum research with realistic execution costs, slippage and walk-forward/regime evidence",
+    "Deployed read-only strategy evaluation, PAPER lifecycle acceptance and Flutter platform verification"
+   ],
+   "note": "Pure deterministic seven-session same-contract price breakout momentum with volume, OI, OHLCV, expiry, as-of publication-time and estimated cost gates. Research classification only, no broker feed order/PAPER execution or proven profitability. DATA_BLOCKED.",
    "id": "strategy.STR-176",
    "kind": "STRATEGY",
    "name": "Futures Momentum",
@@ -5511,21 +5645,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Same source-listed NSE_FO futures contract, listing/expiry/lot and ten completed trading-session OHLCV closes",
+    "Separately observed and rights-verified finalized OHLCV/OI timestamps, source provenance, normalized volume and OI",
+    "Eight-session baseline volatility, ninth-session extreme, tenth-session partial recovery, liquidity and explicit after-cost research thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_MEAN_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-177-futures-mean-reversion.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Source-permitted ten-completed-session same-contract F&O OHLCV and normalized OI feed with original first-observed timestamps",
+    "Official NSE session/holiday calendar, verified expiry/listing chronology and rights to compute retained historical signals",
+    "No-lookahead mean-reversion out-of-sample research, transaction/impact/stop/risk analysis and walk-forward regime evidence",
+    "Runtime source adapter and separately gated audited PAPER strategy lifecycle, Flutter and backend deployment verification"
+   ],
+   "note": "Deterministic research-only futures mean-reversion classifier based on eight-baseline-session mean and std, ninth extreme, tenth partial reversal, volume/OI and illustrative cost gates. Signals are observations, never an order or guaranteed profit. Remains DATA_BLOCKED.",
    "id": "strategy.STR-177",
    "kind": "STRATEGY",
    "name": "Futures Mean Reversion",
@@ -5537,21 +5690,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Reconciled portfolio index-beta INR exposure including existing futures/options hedges and verified beta model, timestamped within five minutes",
+    "Source-verified NSE index-futures contract expiry and same-index identity, market session, fresh bid/ask, open interest and order-book depth",
+    "Broker-verified cash/margin/variation stress reserves plus explicit stress index move, basis divergence, round-trip cost and room-level hedge limits",
+    "Separately verified market, contract discovery and portfolio-data internal research rights"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_HEDGE_OVERLAY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHedgeOverlayV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHedgeOverlayV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-178-futures-hedge-overlay.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed source-backed index futures bid/ask/depth/OI and exchange-session/timestamp proofs with portfolio index match",
+    "Portfolio beta-exposure provenance, actual positions including existing hedges, broker margin and cash ledger integration",
+    "Historical risk/hedge behavior under stress, cross-asset basis error, transaction costs and out-of-sample/forward validation",
+    "Deployed rights-gated read-only evaluator and independently audited PAPER hedge lifecycle, Flutter platform acceptance"
+   ],
+   "note": "STR-178 is a deterministic research-only index-futures portfolio hedge scenario evaluator, not a directional alpha strategy. Uses full-lot sizing without overhedging, verified portfolio beta, market depth, broker margin, liquidity and stress risk after costs. No execution or broker permissions. Remains DATA_BLOCKED.",
    "id": "strategy.STR-178",
    "kind": "STRATEGY",
    "name": "Futures Hedge Overlay",
@@ -5563,21 +5736,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Provider-verified NSE_FO future or option instrument key, underlying, expiry, option strike/side and lot size",
+    "Three original source-observed, chronologically ordered same-provider Level-1 bid/ask/depth and exchange timestamps, verified exchange session",
+    "Original as-of OI and cumulative session-volume first-observed timestamps and consistent underlying-unit normalization",
+    "Independently verified research-use rights for quote/OI/volume/contract discovery and explicit depth, spread, impact, OI/volume and freshness thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CONTRACT_LIQUIDITY_GATE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoContractLiquidityGateV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoContractLiquidityGateV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-179-contract-liquidity-gate.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed actual futures/options contract metadata, bid/ask/depth/OI/volume feed and exchange timestamp/session proof",
+    "Provider data rights, original first-observed OI/volume dates, consistently normalized instrument lot quantities and feed availability/reconnect tests",
+    "Historical market-depth and two-sided liquidity disruptions with as-of replay, realistic fills/impact and OOS walk-forward",
+    "Deployed canonical read-only gate, audited PAPER flow, Flutter UI and live broker order independently authorized/verified"
+   ],
+   "note": "STR-179 is a deterministic source/rights-gated futures+options contract liquidity screen using three recent L1 snapshots, volume/OI, both sides depth, spread/impact and quote stability. Research PASS is never permission or guarantee to trade; no broker/API/order path. DATA_BLOCKED.",
    "id": "strategy.STR-179",
    "kind": "STRATEGY",
    "name": "Contract Liquidity Gate",
@@ -5589,21 +5782,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Source-verified matching listed NSE_EQ stock and NSE_FO single-stock futures contract, listing, expiry, lot size and deliverability",
+    "Five completed, chronological, same-provider NSE exchange-session close spot/future bid/ask pairs and independently verified finalized quote publication as-of times",
+    "Explicit financing/dividend rates, confirmed dividends/corporate actions and physical-delivery/Indian statutory cost review",
+    "Point-in-time signed carry-adjusted basis residuals, consecutive narrowing, residual costs and strict research thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_EXPIRY_BASIS_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoExpiryBasisReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoExpiryBasisReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-180-expiry-basis-reversion.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed same-stock NSE cash/futures historical closing bid/ask feed and source-first-observed settlement/quote timestamps, with verified original exchange dates",
+    "Verified contracts/corporate actions/actual dividend schedule/Indian funding and delivery/expiry restrictions and applicable taxes",
+    "No-lookahead five-session expiry approach historical basis convergence replay, transaction costs/fillability and out-of-sample walk-forward evidence",
+    "Deployed rights-gated canonical F&O data adapter and separately approved PAPER strategy lifecycle and Flutter runtime acceptance"
+   ],
+   "note": "STR-180 deterministic research-only five-session single-stock near-expiry carry-adjusted signed basis convergence classifier; distinct from STR-170 instantaneous basis carry. Excludes index-spot substitution, near delivery cutoff, cross-contract stitching and buy/sell orders. STATUS remains DATA_BLOCKED.",
    "id": "strategy.STR-180",
    "kind": "STRATEGY",
    "name": "Expiry Basis Reversion",
@@ -5615,21 +5828,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified NIFTY 50 closed daily 35+ session source candles with original first-known timestamps and bullish EMA8/EMA21 crossover",
+    "Rights-verified matching source-listed NSE_FO CE strike, expiry, lot, price tick and canonical NIFTY underlying",
+    "Same-provider time-synchronized NSE underlying and CE bid/ask, option depth and OI at valid exchange session timestamps",
+    "Explicit after-tax INR-per-lot costs, premium-at-risk budget and hypothetical at-expiry payoff scenario"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_CALL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongCallV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongCallV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-181-long-call.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed rights-verified real NSE NIFTY and CE option chain input with contract identities, original observation timestamps and calendar validations",
+    "Actual broker Indian fees, settlement, bid/ask depth and fills, source-proven price/option IV and exercise regime",
+    "Timestamp-correct out-of-sample historical replay and walk-forward calibration across market regimes",
+    "Separate authenticated PAPER order/ledger and Flutter acceptance, LIVE permissions and audit approvals"
+   ],
+   "note": "STR-181 deterministic NIFTY bullish completed EMA8/EMA21 crossover plus source-verified CE contract/quote/depth/expiry and hypothetical premium-risk scenario; never an order, profit forecast or options feed activation. DATA_BLOCKED pending source and PAPER evidence.",
    "id": "strategy.STR-181",
    "kind": "STRATEGY",
    "name": "Long Call",
@@ -5641,21 +5874,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ genuine completed NIFTY 50 daily closes, source first-known timestamp and a new EMA8-below-EMA21 bearish crossover",
+    "Verified listed NSE_FO NIFTY PE with strike, lot, expiry and tick provenance",
+    "Same-provider synchronized fresh underlying and PE ask/bid, verified depth/OI and research-use rights",
+    "Explicit downside-at-expiry hypothetical scenario, bid/ask/slippage, Indian transaction fees and premium-at-risk cap"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_PUT_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongPutV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongPutV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-182-long-put.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-authorized NSE option-chain/underlying adapters and original timestamp provenance",
+    "Verified real exchange expiry/lot contract, Indian option premium fees/taxes and settlement behavior",
+    "Out-of-sample timestamp-correct historical walk-forward replay and actual fill simulation",
+    "Separately approved PAPER lifecycle and Flutter acceptance, LIVE risk/permission audits"
+   ],
+   "note": "Deterministic bearish EMA crossover + PE source, liquidity, modeled maximum premium loss and hypothetical at-expiry payoff. Does not activate any option feed or trading; DATA_BLOCKED until independently verified.",
    "id": "strategy.STR-182",
    "kind": "STRATEGY",
    "name": "Long Put",
@@ -5667,21 +5920,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Source-verified completed NIFTY 50 daily bars and a new bullish EMA8/EMA21 crossover",
+    "Two source-verified NSE_FO NIFTY CE contracts: buy lower strike, sell higher, identical expiry/lot",
+    "Fresh synchronized 3-leg underlying/call bid-ask exchange timestamps, real OI/depth and independent research rights",
+    "Premium debit, costs and taxes, risk-capital allocation, bounded expiry payoff and after-cost reward/risk hurdle"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BULL_CALL_DEBIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBullCallDebitSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBullCallDebitSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-183-bull-call-debit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed synchronized canonical NSE index + two real NIFTY CE option quotes with original first-observed timestamps, instrument/lot/expiry source proof",
+    "Actual India options taxes, physical/expiry settlement/margin and depth, slippage, non-atomic two-leg fill evidence",
+    "Historical as-of replay and independent out-of-sample walk-forward with real market regimes",
+    "Separately approved PAPER lifecycle and Flutter customer acceptance, distinct LIVE F&O broker/account permission"
+   ],
+   "note": "Two-leg lower-strike long CE and upper-strike short CE: deterministic research only after new bullish EMA signal and three-leg rights/as-of/quotes/OI/cost checks. All outputs non-executable. DATA_BLOCKED until market data, OOS and PAPER acceptance.",
    "id": "strategy.STR-183",
    "kind": "STRATEGY",
    "name": "Bull Call Debit Spread",
@@ -5693,21 +5966,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified completed NIFTY 50 daily EMA8/EMA21 crossover below (bearish) with original source timestamps",
+    "Two matched NSE_FO NIFTY PE options: long higher strike, short lower strike, same expiry, lot and underlying",
+    "Real synchronized same-provider index and both put bid/ask, OI/depth, spread and research-use permissions",
+    "Round-trip fees, bid/ask slippage, estimated debit/maximum modeled expiry payoff and bounded research capital"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BEAR_PUT_DEBIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBearPutDebitSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBearPutDebitSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-184-bear-put-debit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed verified NSE NIFTY index and two real PE contracts/quotes and true source-first-known publication timestamps",
+    "Actual India spread fees and taxes, broker margin/execution and physical/expiry settlement validation",
+    "No-lookahead historical and out-of-sample walk-forward replay with non-atomic two-leg fills and slippage",
+    "Separate PAPER ledger/Flutter acceptance, and independently authorized LIVE options permissions"
+   ],
+   "note": "Two-leg bearish long higher-strike PE, short lower-strike PE research classifier; completed bearish EMA signal and strict 3-leg time, rights, quote depth and cost gates. Always non-executable. DATA_BLOCKED.",
    "id": "strategy.STR-184",
    "kind": "STRATEGY",
    "name": "Bear Put Debit Spread",
@@ -5719,21 +6012,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified 35+ completed NIFTY 50 index daily candles, original publication timestamps and new EMA8/EMA21 bullish crossover",
+    "Two matched real NSE_FO PE option contracts: short higher strike, long lower strike, identical expiry, lot and underlying",
+    "Same-provider fresh synchronized NIFTY and both PE bid/ask, true exchange timestamps, OI/depth/spread and independent research data rights",
+    "After-tax and after-slippage net credit, max-loss capital budget and realistic cost-adjusted maximum reward/risk"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BULL_PUT_CREDIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBullPutCreditSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBullPutCreditSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-185-bull-put-credit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original-observation NSE NIFTY and PE options market feed, verified contract expiry/lot/strike, official calendar and historical first-known timestamps",
+    "Real Indian brokerage and exchange taxes, per-account option margin, non-atomic leg execution and settlement regime validation",
+    "No-lookahead independent out-of-sample walk-forward and actual fillability/cost replay",
+    "Separately authorized PAPER lifecycle and Flutter acceptance; LIVE trading permissions and risk audit"
+   ],
+   "note": "Research-only two-leg bullish short higher-strike PE/long lower-strike PE credit vertical; validated new bullish EMA cross, time-synced licensed quotes and bounded after-cost theoretical loss. Non-executable, DATA_BLOCKED.",
    "id": "strategy.STR-185",
    "kind": "STRATEGY",
    "name": "Bull Put Credit Spread",
@@ -5745,21 +6058,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ true completed NSE NIFTY index closes with source first-known timestamps and new bearish EMA8/EMA21 crossover",
+    "Two verified matching NSE_FO CE instruments: sell lower-strike, buy higher-strike, same lot/expiry",
+    "Same-provider 3-leg time-synced real quotes, positive bid/ask depth and OI, strike/option/source research rights",
+    "Net credit after bid/ask/slippage and modeled fees, capped hypothetical expiry max loss and risk capital limit"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BEAR_CALL_CREDIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBearCallCreditSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBearCallCreditSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-186-bear-call-credit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified NSE source-listed NIFTY CE option chain and spot original source publication and live historical depth/quotes",
+    "Actual NSE session/lot/expiry/tax/settlement and broker account margin/non-atomic short-call/long-call execution verification",
+    "Timestamp-correct OOS and walk-forward replay with realistic costs and leg execution failure",
+    "Separately authorized PAPER life cycle and Flutter acceptance, LIVE broker entitlement/approval and audited guardrails"
+   ],
+   "note": "Research-only short lower CE long higher CE credit spread, verified new bearish crossover and three aligned source quotes; bounded model loss after fees, never a broker order. DATA_BLOCKED.",
    "id": "strategy.STR-186",
    "kind": "STRATEGY",
    "name": "Bear Call Credit Spread",
@@ -5771,21 +6104,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified one settled physically deliverable equity lot in broker-reconciled actual holdings, matching one source-listed NSE_FO PE contract and expiry",
+    "35+ true completed source-first-known NSE equity candles and an observed 20-session drawdown risk trigger",
+    "Rights-verified time-aligned same-provider held equity and genuine PE bid/ask, strike/lot/delivery mapping, OI/depth and original source timestamps",
+    "Nonzero estimated Indian put premium/fees, explicit downside hypothetical expiry comparison and premium-at-risk budget"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PROTECTIVE_PUT_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoProtectivePutV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoProtectivePutV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-187-protective-put.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed equity and options market data with original observation timestamps and actual official exchange calendar",
+    "Authenticated broker reconciliation proving exactly one settled owned-equity lot, matching real PE physical delivery, corporate actions and lot size",
+    "Correct Indian taxes/expiry/settlement and margin details, real option fills and no-lookahead historical out-of-sample replay",
+    "Separately approved PAPER ledger/UI acceptance and LIVE options permissions and broker order safety"
+   ],
+   "note": "Actual settled-equity protective PE (no proxy/index hedge) deterministic research scenario, requiring broker-reconciled ownership and source rights. Never executes; DATA_BLOCKED until genuine provider/holding integration and independent acceptance.",
    "id": "strategy.STR-187",
    "kind": "STRATEGY",
    "name": "Protective Put",
@@ -5797,21 +6150,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Source-confirmed settled and deliverable one-lot owned NSE equity shares with broker holdings provenance",
+    "One corresponding verified genuine listed NSE_FO CE option matching shares/lot/expiry and CE delivery rights",
+    "35+ verified completed NSE equity closes, original first-known timestamps and observed owned-position gain screening trigger",
+    "Licensed time-aligned true equity/CE quotes, bid depth, OI, slippage and nonzero Indian fees; full held-stock notional risk cap"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_COVERED_CALL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCoveredCallV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCoveredCallV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-188-covered-call.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original-observation NSE spot/CE option quotes, contract expiry/lot/physical-settlement metadata and official calendar",
+    "Real account-reconciled settled and unrestricted owned shares, covered-writing entitlement and continuous cover verification",
+    "Indian settlement/taxes, upside assignment/exercise and naked short-call contingency safety, broker account margin rules",
+    "Historical as-of OOS and walk-forward evidence, customer-approved PAPER ledger and Flutter acceptance, separately authorized LIVE rights"
+   ],
+   "note": "Research-only one-lot actually-owned deliverable stock and matching short CE; premium and scenario modeled with capped upside and large residual stock downside. Strict original as-of and rights checks. DATA_BLOCKED, never executable.",
    "id": "strategy.STR-188",
    "kind": "STRATEGY",
    "name": "Covered Call",
@@ -5823,21 +6196,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Genuine settled/reconciled one-lot NSE_EQ broker-owned shares, and source-listed physically matching NSE_FO lower-strike PE/higher-strike CE contracts with same expiry/lot",
+    "35+ verified completed NSE equity sessions with source-first-known publication and latest close versus 20-prior-session drawdown trigger",
+    "Licensed synchronous true bid/ask equity, put and call snapshots from same provider, OI/depth and valid quote age/skew, contract rights and market calendar",
+    "Explicit Indian tax/fees and leg slippage, theoretical expiry floor/cap, full held-stock notional budget and maximum net-debit budget"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_EQUITY_COLLAR_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoEquityCollarV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoEquityCollarV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-189-equity-collar.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed actual NSE_EQ/NSE_FO first-known three-leg quote snapshots and source-listed corporate-action-adjusted deliverables, contract expiry and official market sessions",
+    "Genuine broker-reconciled settled unrestricted stock holdings, correct short-call rights and margin/settlement controls, non-atomic two-option execution safety",
+    "India broker statutory taxes and physical-delivery obligations, original as-of historical and out-of-sample/walk-forward evidence",
+    "Independently accepted customer PAPER ledger + Flutter scenarios and LIVE options broker authorization, risk flags and audited kill switches"
+   ],
+   "note": "Research-only three-leg owned equity collar: long lower PE, short higher CE; source-verified ownership, original timestamps and explicit modeled floor/capped upside. No orders; DATA_BLOCKED.",
    "id": "strategy.STR-189",
    "kind": "STRATEGY",
    "name": "Collar",
@@ -5849,21 +6242,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "At least 35 verified completed original-observation NIFTY daily closes with independently checked bullish EMA8/EMA21 crossover",
+    "True source-listed NSE_FO same-expiry/lot NIFTY CE contracts, buy 1 lower strike and sell 2 higher strike; short bid depth enough for two contracts",
+    "Same-provider synchronised original-exchange-time index and both CE quotes, rights, valid bid/ask OI/depth and as-of availability",
+    "Three-leg after-cost net debit/credit, explicit upside stress scenario and documented unbounded upside loss with research non-execution"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CALL_RATIO_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCallRatioSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCallRatioSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-190-call-ratio-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original as-of NIFTY and NSE_FO CE source chain and official market calendars, verified current lot/expiry and at least two real short-leg depth",
+    "Margin and risk policy for uncovered extra short call, plus unbounded-loss tail beyond any stress-price budget; capital preservation review",
+    "Full Indian statutory taxes, true non-atomic 1x2 execution and partial-fill short-call safety and independent out-of-sample historical replay",
+    "Separate signed PAPER and LIVE permissions, brokerage order and account-level uncovered-write authorization and kill switches"
+   ],
+   "note": "Research-only 1x2 call ratio spread has theoretically UNBOUNDED upside loss: one long lower CE plus TWO short higher CEs. A stress scenario is not a loss limit; never executable or trade authorized. DATA_BLOCKED.",
    "id": "strategy.STR-190",
    "kind": "STRATEGY",
    "name": "Call Ratio Spread Research",
@@ -5875,21 +6288,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ as-of original first-known genuinely completed NIFTY index daily closes and newly formed bearish EMA8/EMA21 crossover",
+    "Two genuine source-listed same-expiry NIFTY PE instruments: buy one higher-strike long put; sell two lower-strike short puts, adequate depth for two shorts",
+    "Rights-verified synchronized index and PE bid/ask, exchange timestamps, open interest and depth; authentic NSE expiry/lot/session mapping",
+    "True theoretical maximum expiry loss computed from S=0 and S>=higher strike, nonzero three-leg Indian modeled fees and short-put margin review"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PUT_RATIO_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPutRatioSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPutRatioSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-191-put-ratio-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed genuine first-known NIFTY and NSE_FO option chain with official option master/expiries/lot sizes and verified two-short-lot depth",
+    "Broker uncovered short-put margin/risk permissions; real three-leg non-atomic execution, market gap, liquidation and settlement obligations",
+    "Independent original-timestamp OOS and walk-forward research with realistic India fees, margin and fill slippage",
+    "Account-specific signed PAPER acceptance, LIVE broker permissions, risk caps, audited kill switches and app workflow"
+   ],
+   "note": "Research-only one higher PE long and TWO lower PE shorts, fresh bearish EMA crossover. Unlike naked call ratio loss, put ratio theoretical expiry maximum loss is finite at S=0 or S>=long strike; can still be very severe. Never executable. DATA_BLOCKED.",
    "id": "strategy.STR-191",
    "kind": "STRATEGY",
    "name": "Put Ratio Spread Research",
@@ -5901,21 +6334,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ verified completed source-first-known genuine NIFTY index daily candles and independently licensed index market data",
+    "True source-listed matched CE and PE same NIFTY strike/expiry/lot with authentic quoted ask and ask-depth, actual OI, and instrument metadata",
+    "Licensed same-provider NIFTY spot, CE and PE synchronized as-of quotes and independently source-derived annualized IV percentages for both options",
+    "Explicit two-leg modeled slippage/India statutory fees, full premium-at-risk research budget and transparent IV-one-sigma-versus-cost heuristic"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_STRADDLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongStraddleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongStraddleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-192-long-straddle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Genuine licensed NIFTY index and matching CE+PE source quotes, independently traceable annualized option IV, original quote-exchange/first-seen timestamps and official expiry/lot master",
+    "Actual Indian fees, broker contract permissions and two-leg fill/settlement validation with verified market holidays",
+    "Out-of-sample/walk-forward historic volatility, expiry breakeven and realistic spread/slippage/transaction costs evidence",
+    "User-accepted PAPER ledger/UI lifecycle and separately authorized LIVE broker orders, audited risk/kill switches"
+   ],
+   "note": "Research-only long same-strike CE+PE straddle with both option IV validated as percent, modeled full-debit max expiry loss and breakevens, one-sigma IV cost screening. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-192",
    "kind": "STRATEGY",
    "name": "Long Straddle",
@@ -5927,21 +6380,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ verified completed NIFTY daily closes with source-original first-known publication timestamps",
+    "Two licensed source-listed options: buy one OTM NIFTY CE above spot, buy one OTM PE below spot, matching genuine expiry and lot",
+    "Same-provider synchronous underlying/CE/PE true bid/ask, OI, ask-depth and separate source-derived annualized implied volatility percentages for both options",
+    "Nonzero two-leg estimated Indian fees, transaction slippage, full premium risk budget and illustrative IV-one-sigma movement versus OTM strike gaps/breakevens"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_STRANGLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongStrangleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongStrangleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-193-long-strangle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed true NSE index/OTM CE/PE source feed, original quote first-observation timestamps, original annualized CE/PE IV, actual NSE expiry/lot master",
+    "Accurate India statutory charges, official calendar, exchange and broker rights and market execution conditions",
+    "Independent original-time OOS, volatility-regime and walk-forward backtest with fill and bid-ask impact",
+    "Separately accepted PAPER ledger/Flutter UI and LIVE broker order entitlements, audit, risk limits and kill switches"
+   ],
+   "note": "Research-only long strangle buys OTM lower PE and higher CE; uses authentic IV and full premium at risk, correct asymmetric expiry breakevens, modeled volatility move. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-193",
    "kind": "STRATEGY",
    "name": "Long Strangle",
@@ -5953,21 +6426,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine verified completed original-first-known NIFTY daily index closes with licensed index research rights",
+    "Two genuine NSE_FO CE and PE sold at identical strike/expiry/lot/underlying from the licensed option chain, verified instrument metadata",
+    "Original-as-of synchronized true NIFTY/CE/PE quotes with authentic bid liquidity, OI and traceable separately licensed IV percent for each option",
+    "After-cost net short premium, explicitly modeled Indian transaction fees, illustrative volatility move and explicit unbounded theoretical upside loss flag"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_SHORT_STRADDLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-194-short-straddle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Genuine licensed NIFTY index/option chain and true CE/PE source IV, original quote as-of, official instrument/expiry/lot master and NSE calendar",
+    "Uncovered short CE theoretical unlimited upside loss, actual margin and broker permissions, crash/gap and partial-fill risk controls",
+    "True statutory India transaction fees and broker settlement rules, OOS walk-forward evidence with tails, spread and non-atomic execution",
+    "Independent PAPER ledger acceptance and LIVE opt-in, broker order rights, margin monitoring and audited risk kill switches"
+   ],
+   "note": "Research-only naked short same-strike CE+PE. THEORETICAL UPSIDE LOSS UNBOUNDED despite finite IV stress and premium budget; no PAPER/LIVE orders authorized. DATA_BLOCKED.",
    "id": "strategy.STR-194",
    "kind": "STRATEGY",
    "name": "Short Straddle Research",
@@ -5979,21 +6472,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine source-verified completed NIFTY daily closes and original source-first-known observation metadata",
+    "True licensed market option chain: short one OTM high-strike CE plus one OTM low-strike PE, valid NSE lot and identical expiry",
+    "Rights-verified contemporaneous underlying/CE/PE bid/ask and source annualized IV values, bid-side depth and OI, original as-of timestamps",
+    "After-cost option credit, theoretical lower/upper breakevens, finite zero-index put loss and UNLIMITED short-call upside risk"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_SHORT_STRANGLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStrangleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStrangleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-195-short-strangle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original as-of NIFTY CE/PE quoted bid and full underlying market history, genuine annualized option IV and NSE contract master/market calendar",
+    "Broker short option writing rights, uncovered margin/settlement obligations and gap or partial-leg execution safeguards; unlimited upside tail cannot be capped by a budget",
+    "Validated India brokerage/statutory fees and no-lookahead OOS walk-forward/backtests including realistic spread/liquidity and tail stress",
+    "Independently accepted PAPER execution lifecycle and LIVE broker authorizations, position monitoring and kill switches"
+   ],
+   "note": "Research-only OTM naked short strangle: sell higher CE and lower PE, true spot strictly between strikes. Uncovered CE theoretical upside loss UNLIMITED. Never PAPER or LIVE executable. DATA_BLOCKED.",
    "id": "strategy.STR-195",
    "kind": "STRATEGY",
    "name": "Short Strangle Research",
@@ -6005,21 +6518,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ source-completed genuine NIFTY daily closes with source-first-known timestamps and verified research permissions",
+    "Four independently source-listed NIFTY options, one long lower PE, short higher PE, short lower CE, long higher CE, identical expiry and lot, five synchronized original exchange quotes",
+    "Genuine bid liquidity/OI for both sold options, ask liquidity/OI for protective bought options, true annualized licensed IV for each four contracts",
+    "After-fees and slippage net credit, loss modeled using wider of asymmetric wings, profit/loss research thresholds and transparent IV move heuristic"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_IRON_CONDOR_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronCondorV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronCondorV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-196-iron-condor-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authenticated licensed NIFTY spot plus four genuine listed option contracts and true IV with original source-first-known timestamps and official expiry/lot calendar",
+    "Indian fees/settlement, all-four-leg fill/partial-execution risks, verified broker margin and hedge-completeness safeguards",
+    "Original as-of out-of-sample and walk-forward test evidence including real quotes, spread, slippage, IV and gap stress",
+    "Independently approved PAPER trading lifecycle plus separately authorized LIVE broker entitlements, audited account risk limits and kill switches"
+   ],
+   "note": "Deterministic research-only 4-leg iron condor. Theoretical expiry risk bounded if all four genuine protective legs intact; asymmetric maximum loss uses widest wing. This is NOT a broker margin or non-atomic-execution guarantee. DATA_BLOCKED, never executable.",
    "id": "strategy.STR-196",
    "kind": "STRATEGY",
    "name": "Iron Condor",
@@ -6031,21 +6564,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine first-known completed NIFTY index bars, licensed index research permissions and canonical instrument expiry/lot",
+    "Four source-listed options: buy lower PE, sell SAME CENTRAL STRIKE PE and CE, buy higher CE, all one expiry and lot",
+    "Five synchronized genuine exchange-time spot/option quotes with true buy ask/sell bid depth, OI, independent annualized source IV per each option",
+    "After-fee full credit, worst-width defined-wing theoretical expiry loss and modeled IV move versus protective wing research hurdles"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_IRON_BUTTERFLY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronButterflyV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronButterflyV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-197-iron-butterfly-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed genuine real NIFTY index and four NSE_FO options with original first-known as-of quotes, separately traceable annualized option IV, official NSE expiry/lot and exchange calendar",
+    "Actual Indian statutory charges and broker defined-wing multi-leg execution, partial-fill and margin safeguards; expiry payoff is not dynamic exit guarantee",
+    "Out-of-sample walk-forward tests on genuine original-as-of market history with IV, liquidity, costs and gap stress",
+    "Independent PAPER order ledger/UI acceptance and LIVE broker rights, risk exposure monitoring, signed-off kill switches"
+   ],
+   "note": "Research-only four-leg iron butterfly sells same-strike ATM CE+PE, buys lower PE and higher CE. Theoretical expiry loss bounded with all genuine wings intact using WIDER asymmetric wing; real broker risk unproven. DATA_BLOCKED and nonexecutable.",
    "id": "strategy.STR-197",
    "kind": "STRATEGY",
    "name": "Iron Butterfly",
@@ -6057,21 +6610,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine source-first-known completed historical NIFTY daily candles and licensed index research rights",
+    "Three separately source-listed, source-verified CALL options: buy low CE, sell TWO matching center CE lots, buy upper CE, symmetric strike spacing and same expiry/official lot",
+    "True contemporaneous same-provider NIFTY plus three CE bid/ask, original as-of exchange and first-known timestamps, authentic ask depth at long legs, TWO lots bid depth at center, open interest and annualized option IV",
+    "Actual modeled 4-contract India transaction fees, slippage, full after-cost debit at risk, theoretical symmetric butterfly expiry breakevens and research risk/reward/IV-move hurdles"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_BUTTERFLY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongButterflyV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongButterflyV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-198-long-butterfly-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original first-known NIFTY index and genuine three-strike NSE CE source quotes, independently reported original CE IV, official strike/lot/expiry calendar",
+    "Actual India statutory fees and broker multi-unit two-short-center fill, margin, option exercise, partial-order hedge and settlement safeguards",
+    "True original-as-of out-of-sample and walk-forward research including actual spread, option volatility, liquidity, slippage and gap stress",
+    "Independent PAPER ledger/Flutter acceptance and separately approved LIVE rights, account risk policies, audited emergency kill switches"
+   ],
+   "note": "Research-only symmetric long CALL butterfly: buy 1 lower CE, SELL 2 center CE, buy 1 upper CE, same expiry/lot. Theoretical maximum expiry loss equals after-cost net debit only with all contracts intact. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-198",
    "kind": "STRATEGY",
    "name": "Long Butterfly",
@@ -6083,21 +6656,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine completed NIFTY index daily bars with original first-known timestamps and licensed index research rights",
+    "Independently source-verified same-strike same-type NIFTY CE/PE near-expiry short option and far-expiry long option, official lot size and distinct authenticated expiration dates",
+    "Synchronized genuine original-as-of NIFTY/near-short/far-long quotes with separately sourced annualized IV per expiry, authentic near bid depth and far ask depth, actual OI and exchange-time freshness",
+    "After-cost two-leg calendar net debit, original source IV term-structure ratio, quoted premium coverage and illustrative near-expiry IV one-sigma movement, NO assumed same-expiry payoff"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CALENDAR_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-199-calendar-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed source NIFTY near/far expiry option-chain with genuine independent IV and original first-known timestamps, authentic listed expiry and official lot/calendar rules",
+    "Actual post-expiry long residual option market value, live multi-expiry liquidity, Indian option settlement/charges, near expiry broker writing margin and roll risk",
+    "Out-of-sample original-as-of historical term-structure and IV walk-forward evaluation with after-cost non-atomic fills, volatility shock and liquidation risks",
+    "Independently accepted PAPER app/ledger and separately authorized LIVE broker option-writing entitlements, expiry/assignment/settlement handling and risk/kill switches"
+   ],
+   "note": "Research-only long calendar spread: sell 1 near-expiry CE or PE and buy 1 farther-expiry same-strike/type/lot contract. As expiries differ, no static expiry max profit/loss or breakeven claims; far-dated residual mark unknown. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-199",
    "kind": "STRATEGY",
    "name": "Calendar Spread",
@@ -6109,21 +6702,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ original first-known source-completed NIFTY daily closes and independent licensed index research rights",
+    "Two separately source-listed NIFTY CE or PE instruments of SAME OPTION TYPE and LOT, but DIFFERENT authenticated strikes and ordered expiries: short OTM near leg, long ITM far leg",
+    "Same-provider original-as-of NIFTY index, near-short and far-long exchange quotes with original annualized source IV for BOTH expiries, real bid liquidity for sold leg and ask depth for bought leg",
+    "After-fee net debit, original near/far IV term-structure, option premium ratio and near-expiry illustrative IV movement research metrics; no synthetic expiry maximum loss or breakeven"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_DIAGONAL_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-200-diagonal-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original-source NIFTY index and genuine multiple-expiry CE/PE options, separately traceable annualized IV, original observation timestamps and official lot/strike/expiry calendar",
+    "Actual broker near-expiry short-writing permissions and margin, farther expiry residual value, India statutory charges and multi-leg partial-fill/settlement risk controls",
+    "Original-as-of OOS and walk-forward historical IV term-structure evidence with non-atomic fills, true fees, slippage, spread and shocked markets",
+    "Independent PAPER UI and ledger acceptance and separate LIVE broker option-writing entitlements, account exposure controls, settlement lifecycle and kill switches"
+   ],
+   "note": "Research-only long diagonal spread with different strikes AND expiries. Sell OTM near CE/PE, buy ITM farther same option type/lot. No static expiry P&L/maximum-realized-loss claim. DATA_BLOCKED, never PAPER/LIVE executable.",
    "id": "strategy.STR-200",
    "kind": "STRATEGY",
    "name": "Diagonal Spread",
@@ -6135,21 +6748,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "200+ authentic source-original first-known NIFTY completed daily OHLC index candles aligned session-by-session to independent 30-calendar-day constant-tenor ATM source IV history",
+    "Licensed original listed NIFTY option-chain derived 30-day constant-tenor source IV normalized in annualized percentages, with original interpolation, provider, temporal and research rights",
+    "Fresh independently source-verified current NIFTY normalized 30-day ATM IV quote with authentic exchange/first-known times and matching complete historical source",
+    "Historical 30-day IV rank, non-degenerate prior IV min/max, independent recent high/low and observed absolute vol-point pullback or rebound with no forward lookahead"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_IV_RANK_MEAN_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankMeanReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankMeanReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-201-iv-rank-mean-reversion-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authenticated licensed original-first-known NIFTY 30-day constant-tenor ATM IV as-of series and a current ATM IV value, genuine option-chain interpolation provenance and official NSE session calendar",
+    "Original source-consistent multi-month completed NIFTY index candles, verifiable data rights, normalization/tenor continuity, cross-regime source quality and historical IV timestamps",
+    "Independent no-lookahead OOS and walk-forward study proving volatility-rank pullback/rebound incremental predictive edge after actual spread, slippage, regime changes and transaction charges",
+    "Separately permitted PAPER option position/risk mapping, lifecycle ledger and Flutter acceptance, and explicit LIVE option broker permissions, margin, hedge safety and kill switches"
+   ],
+   "note": "Non-executable research-only source-proven 30-day constant-tenor ATM IV rank and observed extreme-then-reversal classifier; 200+ genuine aligned prior sessions, annualized IV percent and authentic current IV. No actual option order or profitability claim. DATA_BLOCKED.",
    "id": "strategy.STR-201",
    "kind": "STRATEGY",
    "name": "IV Rank Mean Reversion",
@@ -6161,21 +6794,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "Independently verified official NIFTY-sensitive calendar event with original schedule first-known, actual event start/end and licensed event-calendar research rights",
+    "35+ authentic completed source-verified NIFTY daily OHLC index candles with original 15:30 IST exchange close and first-known before the scheduled event",
+    "Two genuine source-verified same-provider NIFTY spot and normalized 30-calendar-day constant-tenor ATM implied-volatility snapshots, both original-first-known and correctly anchored before and after event",
+    "Independent chain/IV/constant-tenor/interpolation source rights, measured post-event annualized IV point decline, relative decline bps and actual spot move bps with no pre-event hindsight"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_VOLATILITY_CRUSH_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-202-volatility-crush-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Real licensed pre/post officially sourced NIFTY 30-day ATM constant-tenor implied volatility, original separately reported option-chain IV interpolation and genuine before/after spot snapshots",
+    "Original verified official event calendar with event schedule first-known timestamps, release timing and actual NSE session/holiday evidence",
+    "Independent ex-ante original-as-of event studies, out-of-sample walk-forward performance after spreads/IV/price/theta shocks and realistic India statutory fees, with no hindsight from post-event result",
+    "Actual broker market exposure and position sizing/margin/settlement controls, independently accepted PAPER ledger/UI and separately approved LIVE entitlements, risk kill switches"
+   ],
+   "note": "Strictly retrospective research classifier of genuine observed NIFTY 30d constant-tenor ATM IV decline following an independently verified already-finished event. A post-event drop cannot be used as a pre-event entry signal. No order, profitability, max loss or live-paper trading authorization. DATA_BLOCKED.",
    "id": "strategy.STR-202",
    "kind": "STRATEGY",
    "name": "Volatility Crush Research",
@@ -6187,21 +6840,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ source-verified completed NIFTY index closes with original exchange and first-known timestamps, separately licensed index/options/Greeks/futures/history research rights",
+    "Two independently verified same-strike/expiry/official lot NIFTY CE and PE and a separately official source-listed genuine NIFTY futures contract with valid expiry, tick and potentially distinct futures lot",
+    "Three or more synchronized original-first-known same-provider intraday NIFTY/index-futures/CE/PE samples with original option delta/gamma/theta per unit, annualized IV, authentic bid/ask/OI and actual futures bid/ask depth",
+    "Retrospective observed-gamma-capture approximation, historical theta drag, integer-lot futures delta hedge turnover and after-spread/slippage/fees hypothetical hedge cost with NO claimed actual fills"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_GAMMA_SCALPING_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-203-gamma-scalping-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed true NIFTY source listed same-strike CE/PE, original as-of delta/gamma/theta/IV path and actual independently listed futures quote and bid/ask depth source with official instrument/calendar proof",
+    "Real option/futures execution fills, initial purchased option premiums, final option liquidation values, futures cash flows, variation margin, funding/basis and genuine India brokerage/statutory charges",
+    "Original-first-known out-of-sample and walk-forward long-gamma futures hedge history proving actual after-cost strategy PnL, hedge frequency robustness, tail/gap risk and transaction fill constraints",
+    "Accepted PAPER option plus futures broker-sim order ledger/Flutter UI, and separately permitted LIVE option/futures entitlements, dynamic portfolio risk caps and kill switches"
+   ],
+   "note": "Research-only observed gamma scalping approximation: long 1 CE+1 PE same strike, hypothetical rounded NIFTY futures delta hedges with true source Greeks and quotes. Estimated gamma-minus-theta-minus-futures-cost is NOT realized PnL; no actual fills, backtest or trade authorization. DATA_BLOCKED.",
    "id": "strategy.STR-203",
    "kind": "STRATEGY",
    "name": "Gamma Scalping Research",
@@ -6213,21 +6886,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "35+ source-proven completed first-known NIFTY daily closes and six separately verified research rights: broker positions, NIFTY index, authentic NSE option chain, original delta Greeks, listed futures, completed history",
+    "One or more actually broker-confirmed distinct NSE_FO CE/PE positions with real signed option lots, official instrument lot/tick/expiry and original broker first-known evidence, plus verified current futures lots",
+    "Synchronized original-first-known same-provider NIFTY index spot, real option bid/ask/delta/open interest and genuine listed NIFTY futures bid/ask/depth observations",
+    "Pure retrospective signed portfolio delta aggregation and integer-lot hypothetical futures hedge improvement with authentic side-of-book liquidity, modeled spread/slippage/fees and residual-delta risk limits"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_DELTA_HEDGE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-204-delta-hedge-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actual licensed NIFTY source as-of option delta/quotes, verified futures quotes/depth, official NSE lot/expiry source and source rights; unit fixtures are not real data evidence",
+    "Actual broker reconciled option/futures positions, real brokerage and statutory fees, India margins, settlement, funding, futures rollover and broker short leg permissions",
+    "Original-first-known out-of-sample and walk-forward verified signed-delta hedge studies with real position/fill transaction ledgers, tail gaps, costs and execution constraints",
+    "Independently tested PAPER lifecycle and UI, plus separately authorized LIVE order entitlements, real-time portfolio guardrails and kill switches"
+   ],
+   "note": "Source-proven research-only NIFTY existing-option delta hedge; outputs a hypothetical signed integer futures-lot adjustment and residual delta only. No actual fills, profit, order permissions or broker activation. DATA_BLOCKED.",
    "id": "strategy.STR-204",
    "kind": "STRATEGY",
    "name": "Delta Hedge",
@@ -6239,21 +6932,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independent genuine research rights: authenticated broker long-equity holdings, original-first-known NIFTY daily history, as-of individual equity prices/history, licensed real option chain, original exchange Greeks and NSE-listed option master",
+    "65+ matched, original source-timestamped fully completed daily NIFTY plus every held NSE-equity closes, same provider/session and actual original first-known times; sufficient authentic index variance",
+    "Currently broker-confirmed positive equity shares, genuine synchronized underlying prices and real listed NIFTY long put or call option with original per-underlying-unit delta, annualized IV, bid/ask, OI, ask depth and valid official lot/expiry",
+    "Current-weight historical portfolio beta with no lookahead; hypothetical signed beta INR exposure, local long-option delta hedge in integer lots and true ask-side premium/slippage/fee liquidity and budget constraints"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BETA_HEDGE_OPTIONS_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-205-beta-hedge-options-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actual licensed original-time NSE index and every equity historical closes, adjustments for corporate actions, independently verified 60+ daily historical return observations and reproducible provider permissions",
+    "Actually reconciled signed broker portfolio equity quantities/current quotes, genuine authentic NSE index long option delta/IV/ask depth and official instrument lot/expiry mapping (test fixtures are fictional)",
+    "Point-in-time OOS/walk-forward changing-beta validation with actual option historical purchase and liquidation prices, full Indian statutory trading charges, corporate actions, horizon and actual after-cost hedged portfolio PnL",
+    "Independent accepted broker PAPER order/settlement/ledger and Flutter UI, plus separately consented and reviewed LIVE F&O permissions, premium/cash caps, risk and kill switches"
+   ],
+   "note": "Non-executable source-gated historical current-weight beta proxy and hypothetical bought put/call delta hedge for verified long equity holdings. No forecast, observed option fills, realized hedge results, PAPER/LIVE rights or app activation. DATA_BLOCKED.",
    "id": "strategy.STR-205",
    "kind": "STRATEGY",
    "name": "Beta Hedge with Options",
@@ -6265,21 +6978,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently attested rights: verified long-cash equity broker holdings, completed NIFTY original history, each held-equity original history, genuine exchange-listed options, original option delta/IV and official instrument master",
+    "65+ chronological source-verified completed daily NIFTY index and every currently held equity close with original first-known and matched provider/session provenance, proving the worst originally observed NIFTY negative daily session and coincident equity returns",
+    "Source-listed out-of-money NIFTY long put with true lot/strike/expiry/tick, genuine same-provider bid/ask, original put delta and annualized IV, ask depth/open interest, authentic current NIFTY and each holding price",
+    "Explicit hindsight-only fixed-current-holdings tail-session replay, hypothetical put intrinsic at expiry if worst observed daily shock persists, full estimated ask/slippage/fee debit, integer-lot purchase and loss-reduction/premium/depth policy checks"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_TAIL_RISK_PUT_HEDGE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-206-tail-risk-put-hedge-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed authentic original-time NIFTY index and every current holding historical stock closes, point-in-time source rights, stock corporate action treatment, independently verified actual NSE listed PE master/quote/IV/delta/OI/depth, genuine broker positions; fictional unit fixtures are not such evidence",
+    "Multiple true independently sourced historical tail scenarios (intraday gaps, multi-day index and holdings correlation breaks, IV repricing and option expiry outcomes) and original-first-known out-of-sample/walk-forward after-cost real option expiry/exit and portfolio hedge proof",
+    "True source broker execution bid/ask and fill/fees/settlement ledger, actual India statutory/broker charges and cash, premium affordability, official risk/lot/expiry handling and portfolio option inventory awareness",
+    "Accepted independent PAPER option-buy/settlement ledger and Flutter visibility, separately consented LIVE F&O broker entitlements, position-risk caps, guardrails, kill switches and no duplicate hedges"
+   ],
+   "note": "NON-EXECUTABLE hypothetical worst-origin-index-daily-tail current-holdings replay with listed OTM long NIFTY put intrinsic-only at a conditional later expiry. Neither observed hedge PnL nor market crash protection; no real rights, paper/live orders or runtime deployment. DATA_BLOCKED.",
    "id": "strategy.STR-206",
    "kind": "STRATEGY",
    "name": "Tail Risk Put Hedge",
@@ -6291,21 +7024,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently verifiable rights: broker-confirmed existing long NIFTY futures, source original index completed closes, official listed option chain, original per-leg delta and IV, genuine listed futures bid/ask and official NSE instrument master",
+    "35+ genuine original-first-known completed NIFTY index daily closes and synchronized original first-known same-provider current NIFTY index, futures and three independently listed option bid/ask/Greeks/OI/order-book quotes",
+    "Verified existing positive long NIFTY futures lots and original broker average entry price; exact same underlying/expiry/official lot as bought higher OTM put, sold lower OTM put and sold higher OTM call",
+    "Entire actual buy-ask/sell-bid quote depth, modeled directional slippage and nonzero India fees, exact 1:-1:-1 structures per verified long future lot, honest conditional common-expiry payoff at zero/lower put/higher put/short call strike with exposed extreme downside"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PUT_SPREAD_COLLAR_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-207-put-spread-collar-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Real licensed NIFTY NSE source-listed same-expiry future/options, authentic original-time quotes/IV/Greeks/bid-ask depth, official master, authenticated true existing long broker future holdings and entry basis",
+    "Actual brokerage/exchange/statutory India charges, short call/put initial and stress margin, futures variation margin, partial-fill ledger, basis, counterparty/position/settlement and forced-liquidation constraints",
+    "Independent original-first-known historical options+futures original-quote out-of-sample/walk-forward hedging results including premium, downside below short put, upside sacrifice, gaps, funding and after-cost actual realized strategy PnL",
+    "Verified PAPER multi-leg and futures broker-sim order-cancel-exit/expiry ledger and Flutter UI, separately accepted LIVE futures/options broker permissions, fresh cash/pledged margin, portfolio caps and kill switches"
+   ],
+   "note": "RESEARCH-ONLY NIFTY long-futures + long higher OTM put / short lower OTM put / short OTM call hypothetical matched expiry. A put-spread collar leaves substantial downside below lower put and caps upside above short call; premium and conditional expiry payoff are NOT realized PnL or margin proof. All order flags false, DATA_BLOCKED.",
    "id": "strategy.STR-207",
    "kind": "STRATEGY",
    "name": "Put Spread Collar",
@@ -6317,21 +7070,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently verified research permissions: actual broker-confirmed matched existing NIFTY put debit vertical, original as-of NIFTY index and 35+ completed closes, authentic listed option quotes, original put delta/IV Greeks and official NSE option instrument master",
+    "Exactly equal verified long-high-PE and short-low-PE original broker lots, correct matched existing expiry, broker positive original spread debit and original broker first-known position evidence",
+    "Separately listed and sourced later-expiry higher-strike long-PE and lower-strike short-PE, matching original official NIFTY lot, source-original first-known per-leg bid/ask/negative delta/IV/open interest and order-book depth for all four exact bid/ask close/open sides",
+    "Deterministic source-observed historical downside regime, hypothetical 4-leg close-and-open signed cash flow with buy/sell slippage and positive fees, new vertical finite theoretical expiry maximum loss/gain, signed roll debit and explicit research cost budget"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_DEFINED_RISK_SPREAD_ROLL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-208-defined-risk-spread-roll-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Real licensed NSE NIFTY original-time spot and 35+ complete index closes; live/historical official old/new option chain and source first-known bid/ask/delta/IV/actual directional depth, authentic official expiry and lot source and documented provider rights",
+    "Actual reconciled matched broker existing positive long/high put and negative lower put positions, genuine original cash-flow debit/fills, wallet/collateral/margin and true broker short-option order entitlements",
+    "Original-first-known independently evidenced cross-expiry option exit/entry fill and settlement ledgers, actual four-leg legging/margin/partial fill/cancel/rollback and India costs, after-cost out-of-sample/walk-forward simulated risk under gaps and stop-outs",
+    "Explicit independent PAPER multi-leg ledger and Flutter acceptance and separately authorized LIVE F&O broker write permissions, risk/margin guards, kill switches and monitored execution audit"
+   ],
+   "note": "Source-attested non-executable research of original broker-confirmed existing long NIFTY bear put debit spread to later expiry long bear put debit spread. Four-leg hypothetical ask/bid close/open, finite new expiry spread maximum loss and gain; not real fills, lifetime margin proof, realized PnL or paper/live authorization. DATA_BLOCKED.",
    "id": "strategy.STR-208",
    "kind": "STRATEGY",
    "name": "Defined Risk Spread Roll",
@@ -6343,21 +7116,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six original-source research rights: verified broker-complete same-expiry signed NIFTY options positions, licensed 35+ completed NIFTY index closes, real original option chain, authentic original delta/gamma/IV, official NSE instrument master and independently source-verified official last-tradable expiry cutoff",
+    "Complete broker-attested as-of NIFTY one-expiry CE/PE position book and original first-known signed lots with source-listed unique NSE_FO keys, actual official lot/strike/tick/expiry and no missing or duplicate option quotes",
+    "Synchronized originally known same-provider NIFTY spot and each listed option BID/ASK/original delta/gamma/annualized IV/OI/side-specific bid/ask depth adequate to hypothetically close all broker-held lots",
+    "Official source original last trading timestamp bounded by a close-window policy, theoretical full expiry-book bid-sale or ask-buy hypothetical debit with slippage/fees and configured positive debit cap, net original delta/gamma, and honest bounded expiry intrinsic study scenarios with open-ended short-call flag"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_EXPIRY_RISK_NEUTRALIZATION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-209-expiry-risk-neutralization-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actual licensed original-time authentic NIFTY index closes, listed NSE options chain bid/ask/depth, official lot/strike/expiry and independently authenticated expiry last-tradable cutoffs; current fictional JUnit test fixtures do not prove such source access",
+    "Actually reconciled broker complete same-expiry option positions with source-first-known records, order/fill state, cash margin and complete no-hidden-leg book evidence; genuine original provider option delta/gamma/IV data with real rights",
+    "Real broker closing and netting capability, partial fills/cancel rollback/expiry settlement and India statutory fee/slippage/market-impact evidence, original-first-known out-of-sample/walk-forward expiry risk and tail observations",
+    "Independent PAPER close-all lifecycle UI and settlement ledger plus separately verified LIVE F&O broker buy-to-cover and sell-to-close permissions, approved margin/cash risk controls and emergency kill-switch"
+   ],
+   "note": "NON-EXECUTABLE complete-attested-expiry-options-book hypothetical bid/ask close-out before separately verified official expiry cutoff; genuine-source-gated net delta/gamma and conditional expiry intrinsic stress, never actual executed neutralization or no-risk claim. All PAPER/LIVE order flags false; DATA_BLOCKED.",
    "id": "strategy.STR-209",
    "kind": "STRATEGY",
    "name": "Expiry Risk Neutralization",
@@ -6369,21 +7162,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently authenticated research rights: broker-verified current long NSE cash equity holdings, original-first-known NIFTY index and each holding's historically matched equity daily closes, genuine listed NIFTY option chain, authentic original put delta/IV and official NSE option instrument master",
+    "65+ completed historical original-first-known sessions, each with genuine NIFTY index and every held NSE cash-equity close on identical provider/date/exchange close; source-consistent verified current positive brokerage shares and synchronized equity marks",
+    "Two distinct source-listed OTM NIFTY puts with original real bid/ask/negative delta/annualized IV/open interest/ASK-side depth, same official expiry/lot size, actual tick and listing source and original first-known timestamps",
+    "Three distinct largest historically observed matched NIFTY down days with corresponding actual same-session held-stock returns at today's broker-held long-stock weights; hypothetical index shock persistence to option expiry, conditional put intrinsic only, ask-side friction/premium budget/whole-depth constraints, and explicitly unmodeled index-stock basis risk"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PORTFOLIO_PROTECTIVE_OVERLAY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-210-portfolio-protective-overlay-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authenticated genuine source-permitted broker equity holdings/current source marks, original completed NIFTY and all equity closes, official source NSE listed put master/expiry/lot and genuine licensed option delta/IV/ask depth; fictional test fixtures are not market-data evidence",
+    "Source-original corporate actions/adjustments, official NSE holiday/session calendars, multiple truly independent tail clusters, index/equity tracking and concentration/basis shocks, unbiased original-first-known OOS/walk-forward option quote and expiry/exit repricing research, complete after-cost empirical portfolio results",
+    "Actual broker long-put premium/cash settlement and validated India brokerage/exchange/statutory fees, true real fill/slippage/market impact and existing hedge/derivative inventory reconciliation, multi-leg risk/duplicate hedge control",
+    "Approved independent PAPER broker order, exercise/settlement and portfolio ledger with Flutter UI, separately user-authorized LIVE NSE F&O permissions with premium caps, drawdown guardrails, kill switches and auditable broker execution"
+   ],
+   "note": "NON-EXECUTABLE source-gated broker long NSE cash-equity portfolio study of two genuine OTM NIFTY puts across three different historically observed same-day matching index/equity downturns, with hypothetical later-expiry put intrinsic, true quoted ask friction, premium/depth budget; basis risk and price-path unmodeled. Not historical fill or real PnL, order rights or production activation. DATA_BLOCKED.",
    "id": "strategy.STR-210",
    "kind": "STRATEGY",
    "name": "Portfolio Protective Overlay",
@@ -6395,21 +7208,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six source rights: genuine verified complete broker-held NIFTY option book, licensed original completed 35+ NIFTY daily closes, genuine source-listed options chain, source-original option delta/gamma, source-original vega/theta/IV and official NSE NIFTY F&O instrument master",
+    "Broker-verifiable original-first-known complete signed lot options positions and original synchronized market snapshot plus exact matching source-original quote key set for every held and candidate option; genuine listed lot/strike/expiry/tick and broker attestation",
+    "Two authentic source-listed OTM NIFTY option buy-only research candidates, one PUT and one CALL with same listed expiry and official lot; original bid/ask, per-unit delta/gamma/vega/theta with documented Greek units, IV/OI and genuine ASK-side depth",
+    "Historical sourced observed index movement gate; true ASK plus buy-slippage and nonzero fees; integer buy lots constrained by actual depth, premium, absolute residual delta/gamma/vega, maximum negative theta and minimum original absolute delta improvement, with no delta sign reversal"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_GREEKS_EXPOSURE_REBALANCE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-211-greeks-exposure-rebalance-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed genuine NSE NIFTY original completed daily index history, broker source-listed live/historical original option bid/ask/order depth, exact official lot/strike/expiry/tick master and original source Greek delta/gamma/vega/theta/annualized IV with documented true units; fictional JUnit fixtures are not NSE data",
+    "Real reconciled complete NIFTY option inventory at the broker, signed existing long/short holdings, genuine original broker as-of proof and actual cash/premium/margin and short-option liability risk",
+    "Independent original-first-known multi-regime out-of-sample/walk-forward option Greek repricing and actual after-cost option expiry/exit P&L evidence, full gamma/skew/vega/volatility shock/margin stress and slippage models",
+    "Authorized independent PAPER option-buy and unwind lifecycle settlement/F&O ledger and Flutter UI; separately verified user-authorized LIVE broker F&O rights, position premium/cash caps, actual risk guards, kill switches and audit"
+   ],
+   "note": "RESEARCH ONLY broker-confirmed complete NIFTY option book sensitivity: hypothetically buy listed OTM NIFTY PE or CE to reduce absolute original-delta while enforcing gamma/vega/negative theta and premium/depth caps. Not actual trade, broker margin proof, multi-Greek neutralization, realized PnL or option-order rights. Every order flag false; DATA_BLOCKED.",
    "id": "strategy.STR-211",
    "kind": "STRATEGY",
    "name": "Greeks Exposure Rebalance",
@@ -6421,21 +7254,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently evidenced source rights: broker-confirmed original as-of long listed NIFTY future holdings/average entry basis, genuine 35+ original completed NIFTY daily closes, real listed NIFTY options chain, genuine source-original put/call delta and annualized IV, current official NIFTY futures bid/ask and official option/futures instrument master",
+    "Official identical underlying/expiry/lot sourced NIFTY future, long higher OTM NIFTY PE and short lower PE plus independent OTM reference CE; true source-listed strikes and dates, synchronously known real bid/ask, original signed delta/IV/OI and depth for all owned lots on correct buy-ASK/sell-BID sides",
+    "Delta-matched independently verified source-original higher bought put IV versus comparable absolute-delta OTM reference call IV, explicit IV-percent-point put skew research threshold, and strict source-original same-provider first-known timestamps before evaluation",
+    "Worst originally observed completed NIFTY index daily loss replayed as explicit fictional persistent common-expiry stress; genuine ASK/BID slippage, positive one-leg and two-leg fees, signed premium saving and budget gate, conditional put spread protection and severe uncapped downside below sold lower put against actually long NIFTY future"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_SKEW_BASED_HEDGE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-212-skew-based-hedge-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actually licensed NSE NIFTY original-time index, listed future bid/ask and full NIFTY option chain quotes/depth, authentic IV/delta skew by strike and official real expiry/lot/tick master; synthetic JUnit data alone is not market-data evidence",
+    "Original first-known source-reconciled real broker existing LONG NIFTY futures positions, historical actual entry prices, initial/variation margin and genuine cash and broker F&O multi-leg rights",
+    "Auditable out-of-sample full source-verified historical put/call IV/skew/option bid/ask snapshots, observed option fills/exits/expiry, multi-leg short-option margin/legging, actual India fees and extreme-loss stress below sold lower put after costs",
+    "Independently accepted PAPER multi-leg ledger/settlement and Flutter portfolio validation, separately user-consented LIVE NSE futures/options broker order access, collateral/limits and kill switches"
+   ],
+   "note": "Final catalog research-only source-attested NIFTY long future + hypothetical purchased higher OTM put / sold lower put; reference call is a genuine original-IV delta-matched skew reference only, never traded. Lower put caps protective intrinsic so extreme futures downside remains massive. No realized backtest or trade, no real NSE source proven; every order flag false, DATA_BLOCKED.",
    "id": "strategy.STR-212",
    "kind": "STRATEGY",
    "name": "Skew-Based Hedge",
