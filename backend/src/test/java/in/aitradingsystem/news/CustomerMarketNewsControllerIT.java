@@ -105,8 +105,8 @@ class CustomerMarketNewsControllerIT extends AbstractPostgresIT {
             "SELECT id::text FROM news_articles WHERE url = ?", String.class, tcsUrl));
         UUID otherId = UUID.fromString(jdbc.queryForObject(
             "SELECT id::text FROM news_articles WHERE url = ?", String.class, otherUrl));
-        insertAnalysis(tcsId, "[\\"TCS\\"]");
-        insertAnalysis(otherId, "[\\"RELIANCE\\"]");
+        insertAnalysis(tcsId, "[\"TCS\"]");
+        insertAnalysis(otherId, "[\"RELIANCE\"]");
 
         String body = mvc.perform(get("/api/customer/market-intelligence/articles")
                 .with(customer()).param("symbol", "tcs").param("size", "50"))
@@ -115,8 +115,8 @@ class CustomerMarketNewsControllerIT extends AbstractPostgresIT {
 
         JsonNode response = mapper.readTree(body);
         assertThat(response.path("totalItems").asInt()).isEqualTo(1);
-        assertThat(body).contains(tcsUrl, "\\"analysisStatus\\":\\"ANALYZED\\"",
-            "\\"sentiment\\":\\"NEUTRAL\\"", "\\"impactedSymbols\\":[\\"TCS\\"]");
+        assertThat(body).contains(tcsUrl, "\"analysisStatus\":\"ANALYZED\"",
+            "\"sentiment\":\"NEUTRAL\"", "\"impactedSymbols\":[\"TCS\"]");
         assertThat(body).doesNotContain(otherUrl, "providerRequestId", "promptHash",
             "requestFingerprint", "responseFingerprint");
     }
