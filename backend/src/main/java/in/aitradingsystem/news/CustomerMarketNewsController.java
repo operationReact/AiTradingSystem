@@ -34,7 +34,7 @@ public class CustomerMarketNewsController {
         this.news = news;
     }
 
-    /** Returns a bounded publisher-attributed article page without internal analysis metadata. */
+    /** Returns a bounded publisher-attributed page with a small advisory impact projection. */
     @GetMapping("/articles")
     public PageResponse<ArticleSummary> articles(
         @RequestParam(defaultValue = "0") @Min(0) int page,
