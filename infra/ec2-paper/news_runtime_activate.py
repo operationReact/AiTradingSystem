@@ -142,6 +142,7 @@ def safe_health_snapshot(payload):
       "provider":model.get("selectedProvider"),
       "sources":[{"sourceId":x.get("sourceId"),"status":x.get("latestStatus"),
                   "items":x.get("lastFetchedItems"),
+                  "inserted":x.get("lastInsertedItems"),
                   "rights":x.get("rightsState"),
                   "uses":[x.get(k) is True for k in
                     ("canIngest","canRetain","canDisplay","canTransferToModel")]}
@@ -200,9 +201,14 @@ while time.monotonic()<deadline:
         for source in health.get("sources",[]))
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
+    newly_inserted=sum(
+        (source.get("lastInsertedItems") or 0) for source in health.get("sources",[])
+        if source.get("lastFinishedAt") and
+        utc_instant(source["lastFinishedAt"],"SOURCE")>=activated)
+    gemini_floor=activated if newly_inserted>0 else activated-datetime.timedelta(minutes=60)
     gemini_done=bool(attempted_at and
-        utc_instant(attempted_at,"GEMINI")>=activated and
-        outcome.startswith("COMPLETED_WITH_"))
+        utc_instant(attempted_at,"GEMINI")>=gemini_floor and
+        outcome in ("COMPLETED_WITH_REQUEST_ID","COMPLETED_WITHOUT_REQUEST_ID"))
     if source_done and gemini_done:
         print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
         break
