@@ -13,6 +13,10 @@ import gemini_secret_bind as bind
 class GeminiSecretBindTests(unittest.TestCase):
     def test_api_key_shape_is_bounded(self):
         bind.validate_key("AIzaSyExampleSyntheticKey0123456789_-")
+        bind.validate_key("google-key:v2." + "a" * 300)
+        with self.assertRaises(bind.BindError):
+            bind.validate_key("invalid key with whitespace")
+        self.assertEqual(bind.validate_key("  AIzaSyExampleSyntheticKey0123456789_-\n"), "AIzaSyExampleSyntheticKey0123456789_-")
         with self.assertRaises(bind.BindError):
             bind.validate_key("")
         with self.assertRaises(bind.BindError):
@@ -59,6 +63,8 @@ class GeminiSecretBindTests(unittest.TestCase):
         self.assertNotIn(secret, command)
         self.assertIn("runtime.env", command)
         self.assertIn("GEMINI_API_KEY", command)
+        self.assertIn('re.fullmatch(r"[!-~]{1,512}", key)', command)
+        self.assertNotIn('[A-Za-z0-9_-]{20,256}', command)
         self.assertIn("NEWS_ANALYSIS_PROVIDER=GEMINI", command)
 
     def test_invalid_ciphertext_is_rejected(self):
