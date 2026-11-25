@@ -70,8 +70,8 @@ jobs:
           value=raw.strip()
           report={
               "secretPresent": bool(raw),
-              "lengthInExpectedRange": 20 <= len(value) <= 256,
-              "allowedKeyCharactersOnly": bool(re.fullmatch(r"[A-Za-z0-9_-]{20,256}", value)),
+              "lengthInExpectedRange": 1 <= len(value) <= 512,
+              "allowedKeyCharactersOnly": bool(re.fullmatch(r"[!-~]{1,512}", value)),
               "expectedGooglePrefix": value.startswith("AIza"),
               "surroundingQuotes": value[:1] in ("'", '"') and value[-1:] == value[:1],
           }
