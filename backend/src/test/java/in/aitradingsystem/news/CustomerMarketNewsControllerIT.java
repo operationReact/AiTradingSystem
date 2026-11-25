@@ -101,10 +101,10 @@ class CustomerMarketNewsControllerIT extends AbstractPostgresIT {
         NewsSourcePolicyTestSupport.approveFixture(jdbc, source);
         insertFixture(source, tcsUrl);
         insertFixture(source, otherUrl);
-        UUID tcsId = UUID.fromString(jdbc.queryForObject(
-            "SELECT id::text FROM news_articles WHERE url = ?", String.class, tcsUrl));
-        UUID otherId = UUID.fromString(jdbc.queryForObject(
-            "SELECT id::text FROM news_articles WHERE url = ?", String.class, otherUrl));
+        UUID tcsId = UUID.fromString(jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+            .param("url", tcsUrl).query(String.class).single());
+        UUID otherId = UUID.fromString(jdbc.sql("SELECT id::text FROM news_articles WHERE url = :url")
+            .param("url", otherUrl).query(String.class).single());
         insertAnalysis(tcsId, "[\"TCS\"]");
         insertAnalysis(otherId, "[\"RELIANCE\"]");
 
@@ -129,13 +129,14 @@ class CustomerMarketNewsControllerIT extends AbstractPostgresIT {
     }
 
     private void insertAnalysis(UUID articleId, String symbolsJson) {
-        jdbc.update("""
+        jdbc.sql("""
             INSERT INTO news_analyses (
                 id, article_id, provider, model, status, sentiment, category, confidence,
                 impacted_symbols, evidence, risks, latency_ms, created_at)
             VALUES (?, ?, 'GEMINI', 'fixture-model', 'ANALYZED', 'NEUTRAL', 'OTHER',
                     0.750, ?, 'Synthetic evidence only', '[]', 10, CURRENT_TIMESTAMP)
-            """, UUID.randomUUID(), articleId, symbolsJson);
+            """).param(1, UUID.randomUUID()).param(2, articleId)
+            .param(3, symbolsJson).update();
     }
 
 }
