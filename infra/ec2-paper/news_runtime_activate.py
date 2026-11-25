@@ -34,6 +34,7 @@ EXPECTED = {
 
 REMOTE = r"""#!/usr/bin/env bash
 set -euo pipefail
+trap 'code=$?; echo "MINTTICK_NEWS_FAILED_STAGE:${stage:-BOOT}" >&2; exit "$code"' ERR
 test "$(id -u)" = 0
 test "$(uname -m)" = aarch64
 root=/opt/aitradingsystem-paper
@@ -127,6 +128,8 @@ except (KeyError,ValueError):
     raise SystemExit("ACTIVATION_TIMESTAMP_MISSING")
 url="http://127.0.0.1:8080/api/admin/market-intelligence/health"
 deadline=time.monotonic()+1500
+source_done=False
+gemini_done=False
 while time.monotonic()<deadline:
     req=urllib.request.Request(url,headers={"X-API-Key":key})
     try:
@@ -162,7 +165,8 @@ while time.monotonic()<deadline:
         break
     time.sleep(20)
 else:
-    raise SystemExit("SOURCE_OR_GEMINI_RUNTIME_EVIDENCE_TIMEOUT")
+    if not source_done: raise SystemExit("NEWS_SOURCE_EVIDENCE_TIMEOUT")
+if not gemini_done: raise SystemExit("NEWS_GEMINI_EVIDENCE_TIMEOUT")
 print("MINTTICK_NEWS_RUNTIME_FLAGS:READY")
 PY
 echo "MINTTICK_NEWS_ACTIVATION_OK:paper-only"
@@ -215,8 +219,18 @@ def run() -> None:
             return
         if result.get("Status") not in {"Pending", "InProgress", "Delayed"}:
             error = result.get("StandardErrorContent") or ""
-            match = re.search(r"MINTTICK_PAPER_FAILED_STAGE:([A-Z_]+)", error)
-            raise RuntimeError("NEWS_ACTIVATION_FAILED:" + (match.group(1) if match else result.get("Status", "UNKNOWN")))
+            stage_match = re.search(r"MINTTICK_NEWS_FAILED_STAGE:([A-Z_]+)", error)
+            allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT",
+                       "NEWS_RUNTIME_FLAGS_NOT_ACTIVE", "NEWS_GEMINI_NOT_SELECTED",
+                       "NEWS_SOURCE_POLICY_NOT_APPROVED", "APP_KEY_INVALID",
+                       "ACTIVATION_TIMESTAMP_MISSING", "UNSAFE_RUNTIME_FILE",
+                       "DUPLICATE_RUNTIME_KEY", "POLICY_UPDATE_REJECTED",
+                       "POLICY_RECEIPT_INVALID", "POLICY_UPDATE_FAILED"}
+            reason = next((line.strip() for line in error.splitlines()
+                           if line.strip() in allowed), None)
+            stage = stage_match.group(1) if stage_match else "UNKNOWN"
+            raise RuntimeError("NEWS_ACTIVATION_FAILED:" + stage + ":" +
+                               (reason or result.get("Status", "UNKNOWN")))
     raise RuntimeError("NEWS_ACTIVATION_TIMEOUT")
 
 
