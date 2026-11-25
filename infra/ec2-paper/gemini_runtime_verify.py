@@ -152,7 +152,7 @@ def call_gemini(key, model):
                         "risks": {"type": "array", "maxItems": 5, "items": {"type": "string"}}},
                     "required": sorted(FIELDS)}}}
     request = urllib.request.Request(
-        "https://generativelanguage.googleapis.com/v1/interactions",
+        "https://generativelanguage.googleapis.com/v1beta/interactions",
         data=json.dumps(body, separators=(",", ":")).encode(),
         headers={"x-goog-api-key": key, "Content-Type": "application/json", "Accept": "application/json"},
         method="POST")
