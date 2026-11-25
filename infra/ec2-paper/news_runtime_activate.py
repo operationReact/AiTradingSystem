@@ -172,6 +172,7 @@ def utc_instant(value, label):
 deadline=time.monotonic()+1500
 source_done=False
 gemini_done=False
+analysis_triggered=False
 while time.monotonic()<deadline:
     req=urllib.request.Request(url,headers={"X-API-Key":key})
     try:
@@ -203,6 +204,37 @@ while time.monotonic()<deadline:
         and (source_id=="sebi" or
              (source_by_id.get(source_id,{}).get("lastFetchedItems") or 0)>0)
         for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"))
+    # Feed-only batches may be fully deduplicated. In that case, the scheduler has
+    # no unanalyzed row to select, so submit exactly one real, recent article through
+    # the existing rights-gated analyzer and verify its persisted Gemini receipt.
+    if source_done and not analysis_triggered:
+        list_req=urllib.request.Request(
+            "http://127.0.0.1:8080/api/news/articles?page=0&size=50",
+            headers={"X-API-Key":key})
+        try:
+            with urllib.request.urlopen(list_req,timeout=15) as response:
+                page=json.loads(response.read())
+        except (urllib.error.URLError,TimeoutError,ValueError):
+            page={}
+        candidates=[item for item in page.get("items",[])
+            if item.get("source") in ("nse-announcements","moneycontrol","economic-times","sebi")
+            and item.get("publishedAt")
+            and utc_instant(item["publishedAt"],"ARTICLE")>=activated-datetime.timedelta(days=30)]
+        if candidates:
+            article=candidates[0]
+            analysis_triggered=True
+            analyze_req=urllib.request.Request(
+                "http://127.0.0.1:8080/api/news/articles/"+article["id"]+"/analyze?force=true",
+                headers={"X-API-Key":key},method="POST")
+            try:
+                with urllib.request.urlopen(analyze_req,timeout=90) as response:
+                    receipt=json.loads(response.read())
+            except (urllib.error.URLError,TimeoutError,ValueError):
+                raise SystemExit("NEWS_ANALYSIS_TRIGGER_FAILED")
+            if receipt.get("status")!="ANALYZED" or receipt.get("provider")!="GEMINI" \\
+                or not receipt.get("providerRequestId") or not receipt.get("analyzedAt") \\
+                or utc_instant(receipt["analyzedAt"],"ANALYSIS")<activated:
+                raise SystemExit("NEWS_ANALYSIS_RESULT_INVALID")
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
     successful_analyses=model.get("lastSuccessfulAnalysisAtBySource") or {}
@@ -276,7 +308,8 @@ def run() -> None:
             output = result.get("StandardOutputContent") or ""
             diagnostics = error + "\n" + output
             stage_match = re.search(r"MINTTICK_NEWS_FAILED_STAGE:([A-Z_]+)", diagnostics)
-            allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT",
+            allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT", "NEWS_ANALYSIS_TRIGGER_FAILED",
+                       "NEWS_ANALYSIS_RESULT_INVALID",
                        "NEWS_RUNTIME_FLAGS_NOT_ACTIVE", "NEWS_GEMINI_NOT_SELECTED",
                        "NEWS_SOURCE_POLICY_NOT_APPROVED", "NEWS_INVALID_SOURCE_TIMESTAMP",
                        "NEWS_INVALID_GEMINI_TIMESTAMP", "APP_KEY_INVALID",
