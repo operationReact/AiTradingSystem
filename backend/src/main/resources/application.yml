@@ -179,7 +179,7 @@ app:
       interval-ms: ${NEWS_ANALYSIS_SCHEDULER_INTERVAL_MS:900000}
     cors-allowed-origins: ${NEWS_CORS_ALLOWED_ORIGINS:http://localhost:5173}
     provider: ${NEWS_ANALYSIS_PROVIDER:NONE}
-    gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
+    gemini-model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
     claude-model: ${CLAUDE_MODEL:claude-haiku-5.5}
     gemini-api-key: ${GEMINI_API_KEY:}
     claude-api-key: ${ANTHROPIC_API_KEY:}
