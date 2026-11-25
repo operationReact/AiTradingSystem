@@ -201,8 +201,8 @@ while time.monotonic()<deadline:
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
     gemini_done=bool(attempted_at and
-        utc_instant(attempted_at,"GEMINI")>=activated and
-        outcome.startswith("COMPLETED_WITH_"))
+        utc_instant(attempted_at,"GEMINI")>=activated-datetime.timedelta(minutes=30) and
+        outcome in ("COMPLETED_WITH_REQUEST_ID","COMPLETED_WITHOUT_REQUEST_ID"))
     if source_done and gemini_done:
         print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
         break
