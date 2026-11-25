@@ -41,7 +41,7 @@ public final class MindOrbWalkForwardService {
     private static final int REQUIRED_FOLDS = 3;
     private static final int REQUIRED_OOS_TRADES = 20;
     private static final BigDecimal MIN_COVERAGE = new BigDecimal("95");
-    private static final String STRATEGY = MovingAverageReclaimStrategy.NAME;
+    private static final String STRATEGY = OpeningRangeBreakoutStrategy.NAME;
 
     private final ResearchScanRepository scans;
     private final MarketDataRepository candles;
