@@ -1,0 +1,68 @@
+name: MintTick Gemini credential smoke (single synthetic call)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-gemini-api-smoke.yml'
+      - 'scripts/gemini_api_smoke.py'
+      - 'scripts/tests/test_gemini_api_smoke.py'
+      - 'infra/ec2-paper/requests/gemini-api-smoke.json'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/gemini-api-smoke.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-gemini-api-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test bounded, sanitized credential smoke logic
+        run: python3 -m unittest discover -s scripts/tests -p test_gemini_api_smoke.py -v
+
+  smoke:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file synthetic request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/gemini-api-smoke.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected = {
+              "kind": "minttick-gemini-api-smoke-v1",
+              "provider": "GEMINI",
+              "calls": 1,
+              "synthetic_only": True,
+              "store": False,
+              "secret_export": False,
+              "orders": False,
+          }
+          path = Path("infra/ec2-paper/requests/gemini-api-smoke.json")
+          assert path.is_file() and not path.is_symlink() and path.stat().st_size < 1000
+          assert json.loads(path.read_text()) == expected
+          PY
+      - name: Make one fixed synthetic Gemini API call
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python3 scripts/gemini_api_smoke.py
