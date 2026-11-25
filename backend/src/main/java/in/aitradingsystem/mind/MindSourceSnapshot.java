@@ -14,10 +14,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Canonical, exact 21-bar scanner input at capture time.
- * A matching SHA-256 shows the DB rows are unchanged since this service
- * captured them. It is not an exchange signature or an independently
- * authenticated proof of original source availability.
+ * Canonical scanner input captured at evaluation time. MA_RECLAIM retains its
+ * original 21-bar digest contract; ORB uses a separate 64-bar contract.
+ * A matching SHA-256 shows the DB rows are unchanged since capture. It is not
+ * an exchange signature or independent proof of original source availability.
  */
 public record MindSourceSnapshot(
     String canonicalInput, String digest,
@@ -45,7 +45,7 @@ public record MindSourceSnapshot(
             String symbol, String interval, Instant finalCandleAt, Instant capturedAt) {
         if (candles == null || candles.size() != OPENING_RANGE_BARS || instrumentId < 1 ||
                 exchange == null || symbol == null ||
-                !Set.of("ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE").contains(interval) ||
+                (interval == null || !Set.of("ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE").contains(interval)) ||
                 finalCandleAt == null || capturedAt == null) {
             throw new IllegalArgumentException("Incomplete opening-range source capture");
         }
