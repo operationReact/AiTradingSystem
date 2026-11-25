@@ -517,7 +517,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         _newsError = switch (error.statusCode) {
           401 => 'Your session needs to be refreshed before news can load.',
           403 => 'This account is not authorized to view customer news.',
-          _ => 'The news service is unavailable. Check the connection and retry.',
+          final status? => _newsHttpFailureMessage(status, error.correlationId),
+          _ => 'Could not reach the news API. Check the connection and retry.',
         };
         _newsLoaded = true;
         _newsLoading = false;
@@ -532,6 +533,13 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         _newsLoadingMore = false;
       });
     }
+  }
+
+  String _newsHttpFailureMessage(int status, String? correlationId) {
+    final reference = correlationId == null || correlationId.trim().isEmpty
+        ? ''
+        : ' Reference: ${correlationId.trim()}.';
+    return 'News API returned HTTP $status.$reference Retry in a moment.';
   }
 
   void _openDataReadiness() {
