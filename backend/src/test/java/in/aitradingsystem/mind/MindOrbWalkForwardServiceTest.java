@@ -64,7 +64,7 @@ class MindOrbWalkForwardServiceTest {
                 frozen.digest(), frozen.canonicalInput(), NOW.minusSeconds(240),
                 NOW.minusSeconds(600), frozen.maxFetchedAt(), CATALOGUE)));
         when(market.recentCandlesAsOf(
-            42L, "FIVE_MINUTE", NOW.minusSeconds(600), 21))
+            42L, "FIVE_MINUTE", NOW.minusSeconds(600), MindSourceSnapshot.OPENING_RANGE_BARS))
             .thenReturn(referenceBars());
         when(calendar.expectedSlots(any(LocalDate.class), eq(HistoricalCandleInterval.FIVE_MINUTE)))
             .thenAnswer(invocation -> slots(invocation.getArgument(0)));
