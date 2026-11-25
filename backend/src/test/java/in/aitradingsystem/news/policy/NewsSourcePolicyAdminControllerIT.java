@@ -15,7 +15,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** PostgreSQL and ADMIN RBAC contract for recording explicit publisher policy decisions. */
+/** PostgreSQL and audited ADMIN/host-operator RBAC contract for publisher policy decisions. */
 class NewsSourcePolicyAdminControllerIT extends AbstractPostgresIT {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
@@ -38,7 +38,7 @@ class NewsSourcePolicyAdminControllerIT extends AbstractPostgresIT {
     }
 
     @Test
-    void onlyAdminCanRecordSupportedPublisherPolicyAndEveryChangeIsAudited() throws Exception {
+    void operatorAndAdminCanRecordSupportedPublisherPolicyAndEveryChangeIsAudited() throws Exception {
         String path = "/api/admin/market-intelligence/sources/sebi/policy";
         String body = """
             {"licenseState":"APPROVED",
@@ -53,7 +53,7 @@ class NewsSourcePolicyAdminControllerIT extends AbstractPostgresIT {
             .andExpect(status().isUnauthorized());
         mvc.perform(put(path).header("X-API-Key", API_KEY)
                 .contentType("application/json").content(body))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk());
         mvc.perform(put(path).with(role("CUSTOMER"))
                 .contentType("application/json").content(body))
             .andExpect(status().isForbidden());
