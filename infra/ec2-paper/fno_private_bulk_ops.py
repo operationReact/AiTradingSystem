@@ -63,7 +63,7 @@ SAFE_SMOKE_FAILURES=frozenset({
     "INVALID_FNO_STATE", "INVALID_FNO_RECEIPT", "INVALID_RATE_LIMIT",
     "ORIGINAL_HTTP_RECEIPT_SINK_REQUIRED",
     "SMOKE_NO_VALID_ROWS", "SMOKE_UNEXPECTED_OUTCOME", "SMOKE_OUTPUT_INVALID",
-    "SMOKE_OUTPUT_MISSING",
+    "SMOKE_OUTPUT_MISSING", "SMOKE_COUNTERS_INVALID",
     "WORKER_DEPENDENCY_UNAVAILABLE", "WORKER_IMPORT_FAILED",
     "WORKER_SOURCE_INCOMPATIBLE", "WORKER_RUNTIME_EXCEPTION",
     "WORKER_TRACEBACK_UNCLASSIFIED", "WORKER_EXCEPTION_GATE_CLOSED",
@@ -299,6 +299,7 @@ def host():
     done,total,rows,calls=map(int,m.groups())
     if not (0<done<=total<=20000 and rows>0 and 0<calls<=12):
         print(receipt("SMOKE_FAILED"),flush=True)
+        print("FNO_BULK_SMOKE_FAILURE:SMOKE_COUNTERS_INVALID",flush=True)
         return 2
     unit=Path(UNIT)
     if unit.is_symlink() or (unit.exists() and not unit.is_file()):
