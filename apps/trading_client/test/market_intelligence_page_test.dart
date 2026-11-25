@@ -47,7 +47,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Market intelligence'), findsOneWidget);
-    expect(find.text('Publisher-attributed headlines'), findsOneWidget);
+    expect(find.text('Latest publisher-attributed headlines'), findsOneWidget);
     expect(find.text('Synthetic corporate filing headline'), findsOneWidget);
     expect(find.textContaining('TEST PUBLISHER'), findsOneWidget);
     expect(find.textContaining('BUY'), findsNothing);
