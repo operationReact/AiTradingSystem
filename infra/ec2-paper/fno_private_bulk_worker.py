@@ -378,13 +378,22 @@ def run(start_limit=0, max_requests=MAX_REQUESTS_PER_RUN, wait_for_more=False):
         cleanup_expired_cache(sink)
         data=persist_summary(queue,sink,"PAUSED" if start_limit else "RUNNING")
         return {
+            # Keep cumulative cache counters separate from work performed here.
             "completed":data["completedJobs"],
             "total":data["totalJobs"],
+            "newlyCompleted":completed,
             "rows":data["candleRows"],
             "requests":requests,
-            "outcome":"FIRST_BATCH_COMPLETE" if start_limit and data["candleRows"]>0
-                       else "BULK_SESSION_STARTED" if not start_limit
-                       else "NO_VALID_ROWS",
+            "outcome":(
+                "CACHE_ALREADY_COMPLETE"
+                if start_limit and completed==0
+                    and data["completedJobs"]>0 and data["candleRows"]>0
+                else "FIRST_BATCH_COMPLETE"
+                if start_limit and completed>0
+                    and data["candleRows"]>0 and requests>0
+                else "BULK_SESSION_STARTED" if not start_limit
+                else "NO_VALID_ROWS"
+            ),
         }
     finally:
         sink.close()
