@@ -144,3 +144,5 @@ jobs:
 # Only fixed read operations on the existing host; no broker secrets, candle payloads,
 # service restarts, infrastructure lifecycle changes, order APIs or redistribution.
 # Owner-requested read-only status probe; inspect exact existing private worker only.
+
+# Read-only owner-private backfill status verification request.
