@@ -12,9 +12,11 @@ import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.mind.MindCapabilityProgressService.EventType;
 import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
 import in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy;
+import in.aitradingsystem.scanner.MovingAverageReclaimStrategy;
 import in.aitradingsystem.scanner.ScanCandidate;
 import in.aitradingsystem.scanner.ScanContext;
 import in.aitradingsystem.scanner.VwapMomentumStrategy;
+import in.aitradingsystem.scanner.ScannerStrategy;
 import in.aitradingsystem.strategy.StrategyEvaluation;
 import in.aitradingsystem.strategy.StrategyService;
 import in.aitradingsystem.strategy.StrategySignal;
@@ -70,6 +72,7 @@ public class MindPaperCycleService {
     public static final String STRATEGY_CODE = "SMA_TREND_VOLUME_V1";
     public static final String ORB_STRATEGY_CODE = OpeningRangeBreakoutStrategy.NAME;
     public static final String VWAP_STRATEGY_CODE = VwapMomentumStrategy.NAME;
+    public static final String MA_RECLAIM_STRATEGY_CODE = MovingAverageReclaimStrategy.NAME;
     private static final String ORB_STRATEGY_CAPABILITY = "strategy.STR-024";
     /** Catalog entry "SMA Cross" (STR-001) maps to SMA_TREND_VOLUME_V1. */
     static final String STRATEGY_CAPABILITY = "strategy.STR-001";
@@ -126,6 +129,7 @@ public class MindPaperCycleService {
     private final MarketDataQualityService dataQuality;
     private final OpeningRangeBreakoutStrategy orb;
     private final VwapMomentumStrategy vwap;
+    private final MovingAverageReclaimStrategy maReclaim;
 
     public MindPaperCycleService(JdbcClient jdbc, InstrumentMasterService instruments,
             StrategyService strategies, CustomerPaperOrderService orders,
@@ -149,7 +153,6 @@ public class MindPaperCycleService {
             liveFeed, permittedSources, marketData, dataQuality, orb, null);
     }
 
-    @Autowired
     public MindPaperCycleService(JdbcClient jdbc, InstrumentMasterService instruments,
             StrategyService strategies, CustomerPaperOrderService orders,
             CustomerPaperWalletService wallets, MarketLastTickStore ticks,
@@ -158,6 +161,20 @@ public class MindPaperCycleService {
             @Value("${app.mind.paper.permitted-candle-sources:ANGEL_ONE_SMARTAPI}") String permittedSources,
             MarketDataRepository marketData, MarketDataQualityService dataQuality,
             OpeningRangeBreakoutStrategy orb, VwapMomentumStrategy vwap) {
+        this(jdbc, instruments, strategies, orders, wallets, ticks, calendar, progress, clock,
+            liveFeed, permittedSources, marketData, dataQuality, orb, vwap, null);
+    }
+
+    @Autowired
+    public MindPaperCycleService(JdbcClient jdbc, InstrumentMasterService instruments,
+            StrategyService strategies, CustomerPaperOrderService orders,
+            CustomerPaperWalletService wallets, MarketLastTickStore ticks,
+            MarketSessionCalendar calendar, MindCapabilityProgressService progress, Clock clock,
+            AppAngelOneMarketFeedService liveFeed,
+            @Value("${app.mind.paper.permitted-candle-sources:ANGEL_ONE_SMARTAPI}") String permittedSources,
+            MarketDataRepository marketData, MarketDataQualityService dataQuality,
+            OpeningRangeBreakoutStrategy orb, VwapMomentumStrategy vwap,
+            MovingAverageReclaimStrategy maReclaim) {
         this.liveFeed = liveFeed;
         this.jdbc = jdbc;
         this.instruments = instruments;
@@ -174,6 +191,7 @@ public class MindPaperCycleService {
         this.dataQuality = dataQuality;
         this.orb = orb;
         this.vwap = vwap;
+        this.maReclaim = maReclaim;
     }
 
     public CycleResult run(UUID owner, UUID roomId, String requestKey, long instrumentId,
@@ -189,7 +207,7 @@ public class MindPaperCycleService {
                 || !requestKey.matches("[A-Za-z0-9_-]{8,64}") || instrumentId <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Mind PAPER cycle request");
         }
-        if (!Set.of(STRATEGY_CODE, ORB_STRATEGY_CODE, VWAP_STRATEGY_CODE).contains(strategyCode)) {
+        if (!Set.of(STRATEGY_CODE, ORB_STRATEGY_CODE, VWAP_STRATEGY_CODE, MA_RECLAIM_STRATEGY_CODE).contains(strategyCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported Mind PAPER strategy");
         }
         if (interval == null || !INTERVALS.contains(interval)) {
@@ -244,7 +262,8 @@ public class MindPaperCycleService {
         } else {
             boolean isOrb = ORB_STRATEGY_CODE.equals(strategyCode);
             OrbEvaluation evaluation = isOrb ? evaluateOrb(instrument, interval, now)
-                : evaluateVwap(instrument, interval, now);
+                : evaluateIntraday(instrument, interval, now,
+                    VWAP_STRATEGY_CODE.equals(strategyCode) ? vwap : maReclaim, strategyCode);
             d.source = evaluation.source();
             d.candleTime = evaluation.latestCandleAt();
             if (evaluation.blockingReason() != null) {
@@ -257,7 +276,8 @@ public class MindPaperCycleService {
                 // from persisted protection levels using the fresh quote gate.
                 strategyExitOnly = true;
                 d.stage("DATA_GATE", "EXIT_ONLY", evaluation.blockingReason());
-                d.reasons.add(isOrb ? "ORB_ENTRY_DATA_BLOCKED" : "VWAP_ENTRY_DATA_BLOCKED");
+                d.reasons.add(isOrb ? "ORB_ENTRY_DATA_BLOCKED"
+                    : VWAP_STRATEGY_CODE.equals(strategyCode) ? "VWAP_ENTRY_DATA_BLOCKED" : "MA_RECLAIM_ENTRY_DATA_BLOCKED");
                 signal = new CycleSignal((isOrb ? "ORB_EXIT_ONLY_" : "VWAP_EXIT_ONLY_")
                     + hash(instrumentId + "|" + interval + "|" + d.candleTime).substring(0, 32),
                     "HOLD", evaluation.latestClose(), null, null, d.candleTime, d.source, List.of());
@@ -266,8 +286,11 @@ public class MindPaperCycleService {
             }
             if (signal == null && held == null) {
                 d.stage("DATA_GATE", "PASSED", d.source + " " + interval + " @" + d.candleTime);
-                d.stage("STRATEGY", "NO_SIGNAL", "No " + (isOrb ? "opening-range breakout" : "VWAP momentum") + " candidate");
-                d.reasons.add(isOrb ? "NO_ORB_CANDIDATE" : "NO_VWAP_CANDIDATE");
+                String setupName = isOrb ? "opening-range breakout"
+                    : VWAP_STRATEGY_CODE.equals(strategyCode) ? "VWAP momentum" : "moving-average reclaim";
+                d.stage("STRATEGY", "NO_SIGNAL", "No " + setupName + " candidate");
+                d.reasons.add(isOrb ? "NO_ORB_CANDIDATE"
+                    : VWAP_STRATEGY_CODE.equals(strategyCode) ? "NO_VWAP_CANDIDATE" : "NO_MA_RECLAIM_CANDIDATE");
                 d.evaluated = true;
                 return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
             }
@@ -275,7 +298,8 @@ public class MindPaperCycleService {
                 signal = new CycleSignal((isOrb ? "ORB_HOLD_" : "VWAP_HOLD_")
                     + hash(instrumentId + "|" + interval + "|" + d.candleTime).substring(0, 32),
                     "HOLD", evaluation.latestClose(), null, null, d.candleTime, d.source, List.of());
-                d.reasons.add(isOrb ? "NO_NEW_ORB_ENTRY_SIGNAL" : "NO_NEW_VWAP_ENTRY_SIGNAL");
+                d.reasons.add(isOrb ? "NO_NEW_ORB_ENTRY_SIGNAL"
+                    : VWAP_STRATEGY_CODE.equals(strategyCode) ? "NO_NEW_VWAP_ENTRY_SIGNAL" : "NO_NEW_MA_RECLAIM_ENTRY_SIGNAL");
             }
         }
         d.signalId = signal.id();
@@ -719,19 +743,21 @@ public class MindPaperCycleService {
         return new OrbEvaluation(signal, null, source, latest.candleTime(), latest.close());
     }
 
-    private OrbEvaluation evaluateVwap(Instrument instrument, HistoricalCandleInterval interval, Instant now) {
-        if (marketData == null || vwap == null) {
-            return new OrbEvaluation(null, "VWAP_PAPER_EVALUATOR_UNAVAILABLE", null, null, null);
+    private OrbEvaluation evaluateIntraday(Instrument instrument, HistoricalCandleInterval interval, Instant now,
+                                             ScannerStrategy evaluator, String strategyCode) {
+        String label = VWAP_STRATEGY_CODE.equals(strategyCode) ? "VWAP" : "MA_RECLAIM";
+        if (marketData == null || evaluator == null) {
+            return new OrbEvaluation(null, label + "_PAPER_EVALUATOR_UNAVAILABLE", null, null, null);
         }
         if (!(interval == HistoricalCandleInterval.ONE_MINUTE || interval == HistoricalCandleInterval.THREE_MINUTE
                 || interval == HistoricalCandleInterval.FIVE_MINUTE)) {
-            return new OrbEvaluation(null, "VWAP_INTERVAL_NOT_SUPPORTED", null, null, null);
+            return new OrbEvaluation(null, label + "_INTERVAL_NOT_SUPPORTED", null, null, null);
         }
         List<MarketCandle> stored = marketData.recentCandles(instrument.id(), interval.name(), 64);
         Duration step = candleStep(interval);
         List<MarketCandle> completed = stored.stream()
             .filter(c -> c.candleTime() != null && !c.candleTime().plus(step).isAfter(now)).toList();
-        if (completed.size() < vwap.minimumCandles()) {
+        if (completed.size() < evaluator.minimumCandles()) {
             return new OrbEvaluation(null, "INSUFFICIENT_COMPLETED_CANDLES", null,
                 completed.isEmpty() ? null : completed.getLast().candleTime(), null);
         }
@@ -750,7 +776,7 @@ public class MindPaperCycleService {
             && c.low().compareTo(c.open()) <= 0 && c.low().compareTo(c.close()) <= 0
             && c.high().compareTo(c.low()) >= 0 && c.volume() > 0);
         if (!identityValid || source == null || !permittedSources.contains(source)) {
-            return new OrbEvaluation(null, "VWAP_CANDLE_IDENTITY_OR_SOURCE_NOT_PERMITTED", source,
+            return new OrbEvaluation(null, label + "_CANDLE_IDENTITY_OR_SOURCE_NOT_PERMITTED", source,
                 latest.candleTime(), latest.close());
         }
         var validation = CandleSeriesValidator.validate(completed, now, maxCandleAge(interval));
@@ -761,12 +787,12 @@ public class MindPaperCycleService {
                 dataQuality.evaluateBars(instrument.id(), interval, completed))) {
             return new OrbEvaluation(null, "DATA_QUALITY_NOT_ELIGIBLE", source, latest.candleTime(), latest.close());
         }
-        ScanCandidate candidate = vwap.evaluate(new ScanContext(instrument.id(), instrument.tradingSymbol(),
+        ScanCandidate candidate = evaluator.evaluate(new ScanContext(instrument.id(), instrument.tradingSymbol(),
             instrument.exchange(), interval.name(), now, completed)).orElse(null);
         if (candidate == null) {
             return new OrbEvaluation(null, null, source, latest.candleTime(), latest.close());
         }
-        String signalId = "VWAP_" + hash(instrument.id() + "|" + interval.name() + "|"
+        String signalId = label + "_" + hash(instrument.id() + "|" + interval.name() + "|"
             + candidate.candleTime() + "|" + candidate.referencePrice()).substring(0, 32);
         CycleSignal signal = new CycleSignal(signalId, "BUY", candidate.referencePrice(), candidate.suggestedStop(),
             candidate.suggestedTarget(), candidate.candleTime(), source, candidate.reasons());
