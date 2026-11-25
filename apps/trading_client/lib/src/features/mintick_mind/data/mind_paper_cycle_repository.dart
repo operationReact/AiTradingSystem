@@ -184,7 +184,9 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository {
         ? const ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'] : intervals;
     if (!allowedIntervals.contains(interval) ||
         !const ['SMA_TREND_VOLUME_V1', 'OPENING_RANGE_BREAKOUT_V1'].contains(strategyCode) ||
-        instrumentId < 1) throw ArgumentError('Invalid PAPER cycle request');
+        instrumentId < 1) {
+      throw ArgumentError('Invalid PAPER cycle request');
+    }
     final key = 'mindcycle-${List.generate(20, (_) => _random.nextInt(36).toRadixString(36)).join()}';
     return MindPaperCycleResult.parse(await api.postJson('/api/customer/trading-rooms/$roomId/mind/paper-cycles',
         headers: {'Idempotency-Key': key},
