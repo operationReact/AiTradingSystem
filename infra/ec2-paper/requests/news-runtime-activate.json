@@ -5,8 +5,18 @@
   "instance_id": "i-09c01b470fb39b85a",
   "environment": "PAPER",
   "operation": "activate",
-  "source_ids": ["nse-announcements", "moneycontrol", "economic-times", "sebi"],
-  "permitted_uses": ["INGEST", "RETAIN", "DISPLAY", "NLP_TRANSFER"],
+  "source_ids": [
+    "nse-announcements",
+    "moneycontrol",
+    "economic-times",
+    "sebi"
+  ],
+  "permitted_uses": [
+    "INGEST",
+    "RETAIN",
+    "DISPLAY",
+    "NLP_TRANSFER"
+  ],
   "reviewer_ref": "owner-attestation:2026-11-25",
   "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
   "content_ttl_days": 30
