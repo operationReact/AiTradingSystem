@@ -29,6 +29,8 @@ class GeminiRuntimeVerifyTest(unittest.TestCase):
         raw = json.dumps({"status": "completed", "id": "private-provider-id", "steps": [
             {"type": "model_output", "content": [{"type": "text", "text": json.dumps(value)}]}]})
         self.assertEqual((True, True), check.summarize_response(raw))
+        without_id = raw.replace('"id": "private-provider-id", ', "")
+        self.assertEqual((True, False), check.summarize_response(without_id))
         self.assertEqual((False, True), check.summarize_response(raw.replace(check.CHALLENGE, "wrong")))
         self.assertEqual((False, False), check.summarize_response('{"status":"failed"}'))
         self.assertEqual((False, False), check.summarize_response("x" * 65537))
@@ -52,11 +54,11 @@ class GeminiRuntimeVerifyTest(unittest.TestCase):
             "providerResponseCompleted": True, "challengeValidated": True,
             "requestIdPresent": True, "latencyMs": 1200, "httpStatus": None}
         self.assertTrue(check.valid_receipt(receipt))
+        self.assertTrue(check.valid_receipt(dict(receipt, requestIdPresent=False)))
         self.assertFalse(check.valid_receipt(dict(receipt, status=[])))
         for field, invalid in (
                 ("providerResponseCompleted", "true"),
                 ("challengeValidated", 1),
-                ("requestIdPresent", False),
                 ("latencyMs", -1),
                 ("deployedSha", None),
                 ("model", None)):
