@@ -52,6 +52,14 @@ class BulkTest(unittest.TestCase):
                          p.safe_failure_reason(TypeError("secret token")))
         self.assertEqual("WORKER_EXCEPTION_ATTRIBUTE_ERROR",
                          p.safe_failure_reason(AttributeError("secret token")))
+        class ProviderRuntimeError(RuntimeError):
+            pass
+        class ProviderSchemaError(TypeError):
+            pass
+        self.assertEqual("WORKER_EXCEPTION_RUNTIME_ERROR",
+                         p.safe_failure_reason(ProviderRuntimeError("private payload")))
+        self.assertEqual("WORKER_EXCEPTION_TYPE_ERROR",
+                         p.safe_failure_reason(ProviderSchemaError("private payload")))
 
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
