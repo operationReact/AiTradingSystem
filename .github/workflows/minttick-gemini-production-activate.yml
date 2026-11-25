@@ -60,6 +60,23 @@ jobs:
           role-session-name: minttick-gemini-prod-${{ github.run_id }}
           role-duration-seconds: 900
           allowed-account-ids: '098859530205'
+      - name: Check only Gemini secret format metadata
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          raw=os.environ.get("GEMINI_API_KEY", "")
+          value=raw.strip()
+          report={
+              "secretPresent": bool(raw),
+              "lengthInExpectedRange": 20 <= len(value) <= 256,
+              "allowedKeyCharactersOnly": bool(re.fullmatch(r"[A-Za-z0-9_-]{20,256}", value)),
+              "expectedGooglePrefix": value.startswith("AIza"),
+              "surroundingQuotes": len(value) >= 2 and value[0] == value[-1] and value[0] in "\\"'",
+          }
+          print(json.dumps(report, sort_keys=True))
+          PY
       - name: Bind secret through host-generated RSA-OAEP envelope
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
