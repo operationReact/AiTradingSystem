@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-owner-private-bulk-start.json'
+          test "$(git diff --name-only HEAD^1 HEAD)" = 'infra/ec2-paper/requests/fno-owner-private-bulk-start.json'
           python3 - <<'PY'
           import sys,json
           from pathlib import Path
