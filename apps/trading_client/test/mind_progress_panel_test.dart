@@ -42,7 +42,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MindProgressStrip(repository: _Repo(snapshot(), fail: true)))));
     await tester.pumpAndSettle();
     expect(find.textContaining('Not verified'), findsWidgets);
-    expect(find.textContaining('0/43'), findsNothing);
+    expect(find.textContaining('0/44'), findsNothing);
     expect(find.textContaining('nothing is shown as verified'), findsOneWidget);
     expect(find.byKey(const ValueKey('mind-status-RUNTIME_VERIFIED')), findsNothing);
   });
@@ -50,7 +50,7 @@ void main() {
   testWidgets('overview strip reports server ratios and PAPER stage', (tester) async {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MindProgressStrip(repository: _Repo(snapshot())))));
     await tester.pumpAndSettle();
-    expect(find.textContaining('0/43'), findsOneWidget);
+    expect(find.textContaining('0/44'), findsOneWidget);
     expect(find.textContaining('0/2'), findsOneWidget);
     expect(find.textContaining('PAPER stage: X'), findsOneWidget);
   });

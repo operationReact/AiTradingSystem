@@ -7,7 +7,7 @@
   "#924"
  ],
  "denominators": {
-  "SCREEN": 43,
+  "SCREEN": 44,
   "STRATEGY": 232,
   "MODEL": 18
  },
@@ -313,6 +313,35 @@
    "kind": "SCREEN",
    "name": "Daily Market Verdict",
    "status": "DATA_BLOCKED"
+  },
+  {
+   "parentId": null,
+   "group": "AGENTS",
+   "owner": "Claude",
+   "blockerCode": null,
+   "requiredInputs": [],
+   "dependsOn": [],
+   "implementation": null,
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/market-intelligence/articles"
+    }
+   ],
+   "missing": [
+    "Customer-visible source health and ingestion event stream",
+    "Full-universe source coverage evidence",
+    "Flutter web/Android/iOS runtime evidence"
+   ],
+   "note": "Customer-authorized publisher articles and stored analysis fields use the authenticated read-only news API. Internal ingestion diagnostics remain admin-only; the surface is research-only.",
+   "id": "screen.news-analyzer",
+   "kind": "SCREEN",
+   "name": "News Analyzer",
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,

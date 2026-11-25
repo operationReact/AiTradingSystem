@@ -82,7 +82,7 @@ void main() {
     expect(strategies.map((i) => i['name']).toList(), MindFixtures.strategies.map((s) => s.name).toList());
     expect(strategies.map((i) => i['group']).toList(), MindFixtures.strategies.map((s) => s.family).toList());
     expect(models.map((i) => i['name']).toList(), MindFixtures.models.map((m) => m.name).toList());
-    expect(manifest['denominators'], {'SCREEN': 43, 'STRATEGY': 232, 'MODEL': 18});
+    expect(manifest['denominators'], {'SCREEN': 44, 'STRATEGY': 232, 'MODEL': 18});
     for (final i in items) {
       expect(const {'RUNTIME_VERIFIED', 'DEPLOYED', 'FAILED'}.contains(i['status']), isFalse, reason: '${i['id']}');
     }
