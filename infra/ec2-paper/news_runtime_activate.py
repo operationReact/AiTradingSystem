@@ -158,7 +158,7 @@ def utc_instant(value, label):
     if not isinstance(value,str):
         raise SystemExit("NEWS_INVALID_"+label+"_TIMESTAMP")
     match=re.fullmatch(
-      r"(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d+))?(Z|[+-]\\d{2}:\\d{2})?",
+      r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?",
       value.strip())
     if not match:
         raise SystemExit("NEWS_INVALID_"+label+"_TIMESTAMP")
