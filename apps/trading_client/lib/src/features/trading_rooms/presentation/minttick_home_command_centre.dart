@@ -282,7 +282,7 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
                 Text(pnl == null ? (paper ? 'P&L unavailable · marks not verified' : 'Open portfolio for broker values')
                     : '${pnl >= 0 ? '+' : ''}${_cash(pnl)} total P&L · ${p!.staleOrMissingMarks == 0 ? 'marks current' : '${p.staleOrMissingMarks} stale / missing marks'}',
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: pnlColor ?? Theme.of(context).colorScheme.onSurfaceVariant))),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: pnlColor ?? Theme.of(context).colorScheme.onSurfaceVariant)),
               ])),
               Text(p?.equityPaise == null ? '—' : _cash(p!.equityPaise!),
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800)),
