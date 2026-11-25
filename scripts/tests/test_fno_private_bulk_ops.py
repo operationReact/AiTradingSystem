@@ -43,6 +43,7 @@ class BootstrapContractTest(unittest.TestCase):
             "FNO_BULK_SMOKE_FAILURE:/private/token\n"))
         self.assertEqual("SMOKE_NO_VALID_ROWS",ops.smoke_failure(
             "FNO_BULK_SMOKE:NO_VALID_ROWS;complete=0;total=0;rows=0;calls=7\n"))
+        self.assertEqual("SMOKE_OUTPUT_MISSING",ops.smoke_failure("", ""))
         self.assertEqual("WORKER_DEPENDENCY_UNAVAILABLE",ops.smoke_failure(
             "", "Traceback (most recent call last):\nModuleNotFoundError: /private/path/token"))
         self.assertEqual("WORKER_SOURCE_INCOMPATIBLE",ops.smoke_failure(
