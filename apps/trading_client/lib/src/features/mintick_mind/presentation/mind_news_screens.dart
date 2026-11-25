@@ -448,7 +448,7 @@ extension _MindNewsScreens on _MindWorkspaceState {
                 const Spacer(),
                 Text(item.status=='Analyzed'?'ANALYZED':'PENDING',style:TextStyle(color:item.status=='Analyzed'?MindPalette.mint:MindPalette.yellow,fontSize:9,fontWeight:FontWeight.w700)),
               ]),
-            ]),
+            ],
           ])),
       ),
   ]);
