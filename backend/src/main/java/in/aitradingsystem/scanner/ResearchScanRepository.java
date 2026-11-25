@@ -162,6 +162,23 @@ public class ResearchScanRepository {
             snapshot.candleCount() != MindSourceSnapshot.BARS) {
             throw new IllegalArgumentException("Invalid frozen Mind source");
         }
+        persistMindInputCustody(runId, candidate, strategyVersion, snapshot);
+    }
+
+    /** Append the exact 64-bar ORB scanner input for deterministic Mind replay. */
+    public void recordOpeningRangeMindInputCustody(UUID runId, ScanCandidate candidate,
+                                                    String strategyVersion, MindSourceSnapshot snapshot) {
+        if (runId == null || candidate == null || snapshot == null ||
+            !"OPENING_RANGE_BREAKOUT_V1".equals(candidate.strategy()) ||
+            !candidate.candleTime().equals(snapshot.lastCandleAt()) ||
+            snapshot.candleCount() != MindSourceSnapshot.OPENING_RANGE_BARS) {
+            throw new IllegalArgumentException("Invalid frozen opening-range Mind source");
+        }
+        persistMindInputCustody(runId, candidate, strategyVersion, snapshot);
+    }
+
+    private void persistMindInputCustody(UUID runId, ScanCandidate candidate,
+                                         String strategyVersion, MindSourceSnapshot snapshot) {
         String fingerprint = CandidateFingerprint.of(
             candidate.instrumentId(), candidate.interval(), candidate.strategy(),
             strategyVersion, candidate.candleTime(), candidate.referencePrice(),
