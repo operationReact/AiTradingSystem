@@ -1,0 +1,49 @@
+name: Flutter client foundation and first slice
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/flutter-client.yml'
+      - 'docs/flutter-delivery-gate.json'
+  workflow_dispatch:
+
+concurrency:
+  group: flutter-client-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Development feedback must stay cheap and fast. Native Android/iOS acceptance
+# is intentionally manual-only in flutter-connected-runtime.yml on this private
+# repository and should run only for truly native-sensitive changes, the final
+# phase head, release candidates, or explicit investigation.
+jobs:
+  analyze-test-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: Run Flutter tests with diagnostics
+        run: flutter test --file-reporter json:test-results.json
+      - name: Upload Flutter test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-diagnostics
+          path: apps/trading_client/test-results.json
+          if-no-files-found: ignore
+          retention-days: 3
+      - run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/

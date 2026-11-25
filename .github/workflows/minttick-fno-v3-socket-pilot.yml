@@ -1,0 +1,79 @@
+name: MintTick F&O - one-shot real V3 socket proof
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-v3-socket-pilot.yml'
+      - 'infra/ec2-paper/fno_v3_socket_pilot.py'
+      - 'scripts/tests/test_fno_v3_socket_pilot.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-v3-socket-pilot.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate fixed private subscribe/status/stop and safety tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_v3_socket_pilot.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_v3_socket_pilot.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/fno_v3_socket_pilot.py').read_text()
+          assert 6000 < len(s) < 11500
+          assert 'V3_PRIVATE_STOP:CONFIRMED' in s
+          assert 'NoRedirect' in s
+          assert 'SOURCE_OR_EXPIRY_REJECTED' in s
+          assert 'time.sleep(12)' in s
+          PY
+
+  proof:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Validate exact approved one-file single-use source proof
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-v3-socket-pilot.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"infra/ec2-paper")
+          from fno_v3_socket_pilot import EXACT
+          p=Path("infra/ec2-paper/requests/fno-v3-socket-pilot.json")
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1300
+          assert json.loads(p.read_text())==EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: fno-v3-bounded-private-socket
+      - name: Run one 12-second broker V3 connection and always stop it
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_v3_socket_pilot.py runner

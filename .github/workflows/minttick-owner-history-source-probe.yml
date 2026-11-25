@@ -1,0 +1,156 @@
+name: MintTick - private owner historical source readiness (one sample, no writes)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/OwnerHistorySourceProbeController.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/OwnerHistorySourceProbeControllerTest.java'
+      - 'infra/ec2-paper/probe_owner_history_source.py'
+      - '.github/workflows/minttick-owner-history-source-probe.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/probe-owner-history-source.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate read-only private SSM probe
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/probe_owner_history_source.py
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('infra/ec2-paper/probe_owner_history_source.py').read_text()
+          assert len(code.encode()) < 5500
+          assert '/api/market-data/candles/owner-source-probe' in code
+          assert 'hmac.compare_digest' in code
+          for forbidden in ('--with-decryption', 'placeOrder', 'print(result)', 'print(raw)', 'print(a)', 'print(b)'):
+              assert forbidden not in code
+          PY
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file source readiness request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/probe-owner-history-source.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          request=json.loads(Path('infra/ec2-paper/requests/probe-owner-history-source.json').read_text())
+          assert request == {
+              'application':'MintTick',
+              'environment':'paper',
+              'aws_account':'098859530205',
+              'region':'ap-south-1',
+              'instance_id':'i-09c01b470fb39b85a',
+              'operation':'probe-private-owner-historical-api',
+              'purpose':'one-completed-session-read-only-no-persistence',
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-owner-history-readiness-${{ github.run_id }}
+      - name: Verify exact running existing PAPER host
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Probe one owner session without storing candles or exposing broker data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=Path('infra/ec2-paper/probe_owner_history_source.py').read_bytes()
+          assert 100 < len(raw) < 5500
+          cmd="printf '%s' '"+base64.b64encode(raw).decode()+"' | base64 -d | python3 -"
+          out=Path(os.environ['RUNNER_TEMP'])/'owner-history-command.json'
+          out.write_text(json.dumps({'commands':[cmd]}))
+          out.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds 100 \
+            --parameters "file://$RUNNER_TEMP/owner-history-command.json" \
+            --comment 'MintTick one symbol historical API readiness, no storage or orders' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/owner-history-command.json"
+          for attempt in $(seq 1 25); do
+            aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --output json \
+              > "$RUNNER_TEMP/owner-history-out.json" 2>/dev/null || true
+            status="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              data=json.loads((Path(os.environ['RUNNER_TEMP'])/'owner-history-out.json').read_text())
+          except (OSError,ValueError):
+              print('PENDING')
+              raise SystemExit
+          state=data.get('Status','Pending')
+          text=data.get('StandardOutputContent','')
+          if not isinstance(text,str): text=''
+          match=re.search(r'(?m)^OWNER_HISTORY_SOURCE: ([A-Z_]+)$',text)
+          bars=re.search(r'(?m)^OWNER_HISTORY_VALIDATED_ROWS: ([0-9]{1,3})$',text)
+          allowed={'VALID_CANDLES','COOLDOWN','OWNER_FEED_UNAVAILABLE',
+                   'SAMPLE_INSTRUMENT_MISSING','NO_COMPLETED_SESSION',
+                   'INVALID_PROVIDER_RESPONSE','NO_PROVIDER_CANDLES',
+                   'PROVIDER_RATE_LIMITED','PROVIDER_REJECTED','PROVIDER_UNAVAILABLE',
+                   'HOST_UNAVAILABLE','OPERATOR_UNAVAILABLE','HTTP_UNAVAILABLE','INVALID_RESPONSE'}
+          code=match.group(1) if match and match.group(1) in allowed else 'UNAVAILABLE'
+          if state=='Success' and code=='VALID_CANDLES' and bars and 1 <= int(bars.group(1)) <= 100:
+              print('VERIFIED_ONE_SESSION_BARS_'+bars.group(1))
+          elif state in ('Success','Failed','TimedOut','Cancelled'):
+              print('BLOCKED_'+code)
+          else: print('PENDING')
+          PY
+          )"
+            case "$status" in
+              VERIFIED_ONE_SESSION_BARS_*)
+                echo 'PASS: owner historical API supplied verified private five-minute candles; no data stored'
+                exit 0;;
+              BLOCKED_*)
+                echo "BLOCKED: private historical source readiness $status" >&2
+                exit 2;;
+            esac
+            sleep 5
+          done
+          echo 'BLOCKED: historical source probe timed out' >&2
+          exit 2
+
+# Technical success does not grant redistribution rights or enable bulk
+# historical ingestion. OWNER_HISTORY_BACKFILL_ENABLED remains off by default.

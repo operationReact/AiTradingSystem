@@ -1,0 +1,254 @@
+package in.aitradingsystem.security;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+class AccountApiOnlyFilterTest {
+    private final AccountApiOnlyFilter filter = new AccountApiOnlyFilter();
+
+    @Test
+    void onlyRequiredIdentityAndReadinessRoutesAreReachable() throws Exception {
+        for (String path : List.of("/api/auth/cognito/me", "/api/auth/cognito/provision",
+                "/actuator/health", "/actuator/health/readiness", "/actuator/health/liveness")) {
+            String method = path.endsWith("provision") ? "POST" : "GET";
+            assertPasses(method, path);
+        }
+        assertPasses("OPTIONS", "/api/auth/cognito/me");
+        assertPasses("OPTIONS", "/api/auth/cognito/provision");
+        assertPasses("GET", "/api/customer/market-data/instruments");
+        assertPasses("GET", "/api/customer/market-data/instruments/status");
+        assertPasses("GET", "/api/customer/market-data/quotes");
+        assertPasses("GET", "/api/customer/market-data/snapshot");
+        assertBlocked("POST", "/api/customer/market-data/snapshot");
+        assertPasses("GET", "/api/customer/market-data/candles");
+        assertBlocked("POST", "/api/customer/market-data/candles");
+        assertPasses("GET", "/api/customer/market-data/quotes/detail");
+        assertBlocked("POST", "/api/customer/market-data/quotes/detail");
+        assertPasses("GET", "/api/customer/market-data/overview");
+        assertBlocked("POST", "/api/customer/market-data/overview");
+        assertPasses("GET", "/api/customer/watchlist");
+        assertPasses("POST", "/api/customer/watchlist");
+        assertPasses("OPTIONS", "/api/customer/watchlist");
+        assertPasses("DELETE", "/api/customer/watchlist/items/42");
+        assertPasses("OPTIONS", "/api/customer/watchlist/items/42");
+        assertBlocked("PUT", "/api/customer/watchlist");
+        assertBlocked("DELETE", "/api/customer/watchlist");
+        assertBlocked("GET", "/api/customer/watchlist/items/42");
+        assertBlocked("DELETE", "/api/customer/watchlist/items/abc");
+        assertBlocked("DELETE", "/api/customer/watchlist/items/1234567890123456789");
+        assertPasses("GET", "/api/customer/trading-rooms");
+        assertPasses("POST", "/api/customer/trading-rooms");
+        assertPasses("GET", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
+        assertPasses("DELETE", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
+        assertPasses("POST", "/api/customer/brokers/angel-one/connect");
+        assertPasses("POST", "/api/customer/brokers/angel-one/disconnect");
+        assertPasses("POST", "/api/customer/brokers/upstox/start");
+        assertPasses("POST", "/api/customer/brokers/upstox/disconnect");
+        assertPasses("GET", "/api/customer/brokers/upstox/callback");
+        for (String route : List.of("status", "funds", "holdings", "positions",
+                "orders", "registered-ips")) {
+            assertPasses("GET", "/api/customer/brokers/upstox/" + route);
+        }
+        String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
+        assertPasses("POST", roomId + "activate");
+        assertPasses("GET", roomId + "account");
+        assertPasses("GET", roomId + "ledger");
+        assertPasses("OPTIONS", roomId + "activate");
+        String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
+        assertPasses("GET", resource + "execution/readiness");
+        assertPasses("POST", resource + "orders/preflight");
+        assertPasses("POST", resource + "orders/intents");
+        assertPasses("GET", resource + "orders/intents");
+        assertPasses("OPTIONS", resource + "orders/intents");
+        assertPasses("OPTIONS", resource + "orders/preflight");
+        for (String suffix : List.of("status", "funds", "holdings", "positions", "orders")) {
+            assertPasses("GET", "/api/customer/brokers/angel-one/" + suffix);
+        }
+    }
+
+    @Test
+    void blocksTradingAdminDocsAndLegacyAuthentication() throws Exception {
+        for (String path : List.of("/api/paper/orders", "/api/admin/users",
+                "/api/health", "/swagger-ui.html", "/v3/api-docs",
+                "/api/auth/session", "/actuator/prometheus", "/api/auth/cognito/me/")) {
+            assertBlocked("GET", path);
+        }
+        assertBlocked("POST", "/api/auth/cognito/me");
+        assertBlocked("GET", "/api/auth/cognito/provision");
+        assertBlocked("DELETE", "/api/auth/cognito/provision");
+        assertBlocked("OPTIONS", "/api/paper/orders");
+        assertBlocked("POST", "/api/customer/brokers/angel-one/orders");
+        assertBlocked("POST", "/api/customer/brokers/upstox/orders");
+        assertBlocked("POST", "/api/customer/brokers/upstox/registered-ips");
+        assertBlocked("GET", "/api/customer/brokers/upstox/start");
+        assertBlocked("POST", "/api/customer/brokers/upstox/callback");
+        assertBlocked("GET", "/api/customer/brokers/upstox/connect");
+        assertBlocked("GET", "/api/customer/brokers/upstox/execute");
+        String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
+        assertPasses("POST", roomId + "orders");
+        assertPasses("GET", roomId + "orders");
+        assertPasses("GET", roomId + "positions");
+        assertPasses("POST", roomId + "resume");
+        assertPasses("POST", roomId + "pause");
+        assertBlocked("GET", roomId + "resume");
+        assertBlocked("POST", roomId + "positions");
+        String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
+        assertBlocked("POST", resource + "orders/place");
+        assertBlocked("PUT", resource + "orders/intents");
+        assertBlocked("DELETE", resource + "orders/intents");
+        assertBlocked("POST", resource + "orders/intents/execute");
+        assertBlocked("POST", resource + "execution/readiness");
+        assertBlocked("GET", resource + "orders/preflight");
+        assertBlocked("DELETE", resource + "orders/preflight");
+        assertBlocked("GET", roomId + "activate");
+        assertBlocked("POST", roomId + "account");
+        assertBlocked("PUT", roomId + "ledger");
+        assertBlocked("GET", "/api/customer/trading-rooms/not-a-uuid/paper/account");
+        assertBlocked("POST", "/api/customer/brokers/angel-one/funds");
+        assertBlocked("GET", "/api/customer/brokers/angel-one/connect");
+        assertBlocked("GET", "/api/customer/trading-rooms/anything/else");
+        assertBlocked("PATCH", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
+    }
+
+    @Test
+    void mindProgressIsReadOnlyExceptOwnerNotes() throws Exception {
+        String progress = "/api/customer/mind/v1/progress";
+        assertPasses("GET", progress);
+        assertPasses("OPTIONS", progress);
+        assertBlocked("POST", progress);
+        assertBlocked("PUT", progress);
+        assertPasses("GET", progress + "/items/strategy.STR-001");
+        assertPasses("GET", progress + "/items/paper.vertical-slice");
+        assertBlocked("POST", progress + "/items/strategy.STR-001");
+        assertBlocked("PUT", progress + "/items/strategy.STR-001");
+        assertPasses("POST", progress + "/items/screen.coverage/notes");
+        assertBlocked("GET", progress + "/items/screen.coverage/notes");
+        assertBlocked("POST", progress + "/items/screen.coverage/status");
+        assertBlocked("GET", progress + "/items/../../admin");
+        assertPasses("GET", "/api/customer/mind/v1/paper-portfolio");
+        assertBlocked("POST", "/api/customer/mind/v1/paper-portfolio");
+        assertPasses("GET", "/api/customer/mind/v1/paper-journal");
+        assertPasses("POST", "/api/customer/mind/v1/assistant/query");
+        assertPasses("GET", "/api/customer/mind/v1/fno-evaluation");
+        String mindLiveProposal="/api/customer/trading-rooms/"
+            +"12345678-1234-1234-1234-123456789012/mind/fno/live-proposal";
+        assertPasses("GET", mindLiveProposal);
+        assertPasses("OPTIONS", mindLiveProposal);
+        assertBlocked("POST", mindLiveProposal);
+        assertBlocked("PUT", mindLiveProposal);
+        assertBlocked("DELETE", mindLiveProposal);
+        assertBlocked("POST", mindLiveProposal+"/orders");
+        assertBlocked("GET", "/api/customer/trading-rooms/not-a-room/mind/fno/live-proposal");
+        String mindFnoCycle = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-cycles";
+        assertPasses("POST", mindFnoCycle);
+        String autoBase="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-automation";
+        assertPasses("GET",autoBase);
+        assertPasses("GET",autoBase+"/history");
+        assertPasses("POST",autoBase+"/control");
+        assertBlocked("POST",autoBase);
+        assertBlocked("GET",autoBase+"/control");
+        assertBlocked("POST",autoBase+"/history");
+        assertBlocked("POST",autoBase+"/live");
+        assertBlocked("GET","/api/customer/trading-rooms/not-an-id/mind/fno/paper-automation");
+        assertBlocked("GET", mindFnoCycle);
+        assertBlocked("PUT", mindFnoCycle);
+        assertBlocked("POST", mindFnoCycle + "/live");
+        assertBlocked("POST", "/api/customer/trading-rooms/not-a-room/mind/fno/paper-cycles");
+        assertBlocked("POST", "/api/customer/mind/v1/fno-evaluation");
+        assertBlocked("GET", "/api/customer/mind/v1/fno-evaluation/orders");
+        assertPasses("GET", "/api/customer/mind/v1/research-engines");
+        assertBlocked("POST", "/api/customer/mind/v1/research-engines");
+        assertBlocked("GET", "/api/customer/mind/v1/assistant/query");
+        assertBlocked("POST", "/api/customer/mind/v1/assistant/query/execute");
+        for (String research : List.of("overview", "evidence", "strategy-replay", "ma-walkforward",
+                "prospective-cohort", "prospective-signals", "prospective-outcomes",
+                "prospective-evidence-completeness")) {
+            assertPasses("GET", "/api/customer/mind/v1/" + research);
+            assertBlocked("POST", "/api/customer/mind/v1/" + research);
+        }
+        assertPasses("GET", "/api/customer/mind/v1/verified-news-evidence");
+        assertPasses("OPTIONS", "/api/customer/mind/v1/verified-news-evidence");
+        assertBlocked("POST", "/api/customer/mind/v1/verified-news-evidence");
+        assertBlocked("DELETE", "/api/customer/mind/v1/verified-news-evidence");
+        assertBlocked("GET", "/api/customer/mind/v1/verified-news-evidence/raw");
+        assertBlocked("GET", "/api/customer/mind/v1/prospective-entry-causality");
+        assertBlocked("DELETE", "/api/customer/mind/v1/paper-journal");
+        String cycles = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/paper-cycles";
+        assertPasses("POST", cycles);
+        assertPasses("GET", cycles);
+        assertBlocked("PUT", cycles);
+        assertBlocked("DELETE", cycles);
+        assertBlocked("POST", cycles + "/live");
+        assertBlocked("POST", "/api/customer/trading-rooms/not-a-room/mind/paper-cycles");
+    }
+
+    @Test
+    void onlyOwnerScopedUpstoxLiveFnoOperationsReachBrokerController() throws Exception {
+        String root="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/live/fno/";
+        for (String suffix : List.of("capability","expiries","market","orders")) {
+            assertPasses("GET",root+suffix);
+            assertPasses("OPTIONS",root+suffix);
+        }
+        assertPasses("POST",root+"orders");
+        String reconciliation=root+"orders/12345678-1234-1234-1234-123456789011/reconcile";
+        assertPasses("POST",reconciliation);
+        assertPasses("OPTIONS",reconciliation);
+        assertBlocked("GET",reconciliation);
+        assertBlocked("POST",root+"market");
+        assertBlocked("POST",root+"capability");
+        assertBlocked("POST",root+"expiries");
+        assertBlocked("PUT",root+"orders");
+        assertBlocked("DELETE",root+"orders");
+        assertBlocked("POST",root+"orders/execute");
+        assertBlocked("POST",root+"orders/12345678-1234-1234-1234-123456789011");
+        assertBlocked("POST","/api/customer/trading-rooms/wrong/live/fno/orders");
+        assertBlocked("POST",root+"live");
+    }
+
+    @Test
+    void onlyPaperOptionsOrdersAndReadbackMayCrossCustomerAccountBoundary() throws Exception {
+        String root="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/";
+        assertPasses("POST",root+"orders");
+        assertPasses("GET",root+"orders");
+        assertPasses("GET",root+"positions");
+        assertPasses("GET",root+"market");
+        assertPasses("GET",root+"expiries");
+        assertBlocked("POST",root+"expiries");
+        assertBlocked("PUT",root+"expiries");
+        assertPasses("OPTIONS",root+"market");
+        assertPasses("OPTIONS",root+"orders");
+        assertPasses("OPTIONS",root+"positions");
+        assertBlocked("POST",root+"positions");
+        assertBlocked("POST",root+"market");
+        assertBlocked("PUT",root+"market");
+        assertBlocked("DELETE",root+"market");
+        assertBlocked("DELETE",root+"orders");
+        assertBlocked("PUT",root+"orders");
+        assertBlocked("GET",root+"execute");
+        assertBlocked("POST",root+"live");
+        assertBlocked("POST","/api/admin/market-data/upstox-analytics/fno/live/start");
+    }
+
+    private void assertPasses(String method, String path) throws Exception {
+        var request = new MockHttpServletRequest(method, path);
+        var response = new MockHttpServletResponse();
+        var chain = new MockFilterChain();
+        filter.doFilter(request, response, chain);
+        assertThat(chain.getRequest()).isNotNull();
+    }
+
+    private void assertBlocked(String method, String path) throws Exception {
+        var request = new MockHttpServletRequest(method, path);
+        var response = new MockHttpServletResponse();
+        var chain = new MockFilterChain();
+        filter.doFilter(request, response, chain);
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(chain.getRequest()).isNull();
+    }
+}

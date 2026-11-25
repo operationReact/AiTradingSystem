@@ -1,0 +1,218 @@
+name: MintTick F&O - independent NSE December dual-candle spotcheck
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-dec-nse-one-day-spotcheck.yml'
+      - 'infra/ec2-paper/fno_dec_2025_nse_spotcheck.py'
+      - 'scripts/tests/test_fno_dec_2025_nse_spotcheck.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-dec-nse-one-day-spotcheck.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Offline PR validation must not be cancelled by unrelated EC2 deployments.
+  # The protected dev push retains the original shared EC2 lifecycle lock.
+  group: ${{ github.event_name == 'pull_request' && format('fno-dec-nse-audit-pr-{0}', github.event.pull_request.number) || 'aitrading-paper-ec2-manual-lifecycle' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline December 15 independent dual-candle integrity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_dec_2025_nse_spotcheck.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_dec_2025_nse_spotcheck.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_dec_2025_nse_spotcheck.py').read_text()
+          for item in ('MAX_CONTRACTS=23','MAX_ARCHIVE_BYTES=8*1024*1024',
+                       'DAY=date(2025,12,15)','from fno_private_partial_gaps import read_only',
+                       'backtestingApproved','dataRightsVerified','MAX_ROWS=180000'):
+              assert item in src, item
+          for prohibited in ('placeOrder','submitOrder','DELETE FROM',
+                             'INSERT INTO','UPDATE fno_','put-parameter',
+                             'with-decryption','start-instances'):
+              assert prohibited not in src, prohibited
+          PY
+
+  check:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact owner-only one-day, two-metadata-GET request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-dec-nse-one-day-spotcheck.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('infra/ec2-paper/requests/fno-dec-nse-one-day-spotcheck.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())=={
+              "kind":"minttick-owner-private-dec-one-day-nse-eod-spotcheck-v1",
+              "operation":"independent-nse-dec15-2025-dual-candle-comparison",
+              "account":"098859530205",
+              "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "owner_permission_expires":"2026-11-28",
+              "date":"2025-12-15",
+              "max_metadata_gets":2,
+              "max_nse_archive_gets":1,
+              "max_selected_contracts":23,
+              "no_orders":True,
+              "no_auth_bypass":True,
+              "no_redistribution":True,
+              "no_persistence":True,
+              "private_cache_read_only":True,
+              "no_market_price_export":True
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-dec-nse-one-day
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Exact-head owner-private NSE and provider duplicate-price spotcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_private_bulk_ops import _aws,INSTANCE
+          from verify_ssm_release import verify_aws
+          verify_aws()
+          names=['fno_dec_2025_nse_spotcheck.py','fno_private_partial_gaps.py']
+          for name in names:
+              source=Path('infra/ec2-paper',name).read_bytes()
+              assert 3500<len(source)<18000
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch(r'[0-9a-f]{40}',commit)
+          cmds=[
+              'set -eu',
+              'umask 077',
+              'tmp=$(mktemp -d /tmp/minttick-dec-nse-eod.XXXXXX)',
+              "trap 'rm -rf \"$tmp\"' EXIT",
+          ]
+          for name in names:
+              source=Path('infra/ec2-paper',name).read_bytes()
+              digest=hashlib.sha256(source).hexdigest()
+              url=('https://raw.githubusercontent.com/operationReact/AiTradingSystem/'
+                   +commit+'/infra/ec2-paper/'+name)
+              cmds.append('curl --fail --silent --show-error --max-time 30 --proto "=https" --tlsv1.2 -o "$tmp/'+name+'" "'+url+'"')
+              cmds.append('echo "'+digest+'  $tmp/'+name+'" | sha256sum -c - >/dev/null')
+          cmds.append('PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$tmp" /usr/bin/python3 "$tmp/fno_dec_2025_nse_spotcheck.py"')
+          command="\n".join(cmds)+"\n"
+          sent=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                    '--instance-ids',INSTANCE,'--timeout-seconds','170',
+                    '--comment','MintTick independent December 15 F&O EOD spotcheck',
+                    '--parameters',json.dumps({'commands':[command]}))
+          cid=(sent.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_DEC_NSE_COMMAND_INVALID')
+          for _ in range(48):
+              time.sleep(4)
+              response=_aws('ssm','get-command-invocation','--command-id',cid,'--instance-id',INSTANCE)
+              state=response.get('Status')
+              if state in ('Success','Failed','TimedOut','Cancelled'):
+                  if state!='Success':
+                      raise SystemExit('FNO_DEC_NSE_ON_HOST_FAILED')
+                  stdout=response.get('StandardOutputContent') or ''
+                  marker='MINTTICK_FNO_DEC_NSE_ONE_DAY_V1:'
+                  lines=[x[len(marker):] for x in stdout.splitlines() if x.startswith(marker)]
+                  if len(lines)!=1 or len(lines[0])>1600:
+                      raise SystemExit('FNO_DEC_NSE_RECEIPT_INVALID')
+                  v=json.loads(lines[0])
+                  base={'state','metadataGets','archivesFetched','backtestingApproved','dataRightsVerified'}
+                  counters={'sampleDays','selectedContracts','savedBars','duplicatePairs',
+                            'conflictingPairs','identicalPairs','matchedNseIdentities',
+                            'noNseContractRow','singleCandidate','midnightExactAllSix',
+                            'openingExactAllSix','bothExact','midnightOnlyExact',
+                            'openingOnlyExact','neitherExact'}
+                  counters.update(label+'Exact'+field
+                                  for label in ('midnight','opening')
+                                  for field in ('O','H','L','C','V','OI'))
+                  unit_fields={label+suffix
+                               for label in ('midnight','opening')
+                               for suffix in ('LotMetadataChecked',
+                                              'NseVolumeTimesLotMatches',
+                                              'UnscaledVolumeMatches',
+                                              'InverseLotMatches')}
+                  counters.update(unit_fields)
+                  if (set(v)!=base|counters or v['state']!='COMPARED'
+                      or v['metadataGets']!=2 or v['archivesFetched']!=1
+                      or v['sampleDays']!=1 or v['selectedContracts']!=23
+                      or v['backtestingApproved'] is not False
+                      or v['dataRightsVerified'] is not False
+                      or any(type(v[name]) is not int or not 0<=v[name]<=46
+                             for name in counters)
+                      or v['savedBars']<23 or v['savedBars']>46
+                      or v['duplicatePairs']+v['selectedContracts']!=v['savedBars']
+                      or v['conflictingPairs']+v['identicalPairs']!=v['duplicatePairs']
+                      or v['matchedNseIdentities']+v['noNseContractRow']!=23):
+                      raise SystemExit('FNO_DEC_NSE_RECEIPT_INVALID')
+                  print('FNO DEC NSE ONE-DAY REAL EOD: '
+                        'originalCandidates='+str(v['savedBars'])+
+                        '; duplicatePairs='+str(v['duplicatePairs'])+
+                        '; conflictingPairs='+str(v['conflictingPairs'])+
+                        '; nseIdentities='+str(v['matchedNseIdentities'])+
+                        '; NSEmissing='+str(v['noNseContractRow'])+
+                        '; midnightAllSixMatch='+str(v['midnightExactAllSix'])+
+                        '; openingAllSixMatch='+str(v['openingExactAllSix'])+
+                        '; midnightOnly='+str(v['midnightOnlyExact'])+
+                        '; openingOnly='+str(v['openingOnlyExact'])+
+                        '; neither='+str(v['neitherExact'])+
+                        '; both='+str(v['bothExact'])+
+                        '; midnightPriceC='+str(v['midnightExactC'])+
+                        '; openingPriceC='+str(v['openingExactC'])+
+                        '; noRawDataExport=true; monthReconciled=false; backtestingApproved=false',
+                        flush=True)
+                  print('FNO DEC NSE FIELD MATCH COUNTS: '+
+                        '; '.join(label+'Exact'+field+'='+str(v[label+'Exact'+field])
+                                  for label in ('midnight','opening')
+                                  for field in ('O','H','L','C','V','OI'))+
+                        '; valuesOrKeysPublished=false; cacheMutated=false',
+                        flush=True)
+                  print('FNO DEC NSE VOLUME UNIT COUNTS: '+
+                        '; '.join(label+suffix+'='+str(v[label+suffix])
+                                  for label in ('midnight','opening')
+                                  for suffix in ('LotMetadataChecked',
+                                                 'NseVolumeTimesLotMatches',
+                                                 'UnscaledVolumeMatches',
+                                                 'InverseLotMatches'))+
+                        '; lotSizeFromAuthenticatedProvider=true; noRawVolumeExport=true',
+                        flush=True)
+                  break
+              if state not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_DEC_NSE_SSM_UNEXPECTED')
+          else:
+              raise SystemExit('FNO_DEC_NSE_SSM_TIMEOUT')
+          PY
+
+# No canonical price selection; 2025-12 remains quarantined.
+# No private price, OHLC, contract key or individual NSE record is printed.

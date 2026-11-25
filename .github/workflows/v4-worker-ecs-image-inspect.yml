@@ -1,0 +1,101 @@
+name: Inspect V75 worker ECS image (read-only; NOT model readiness)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: v75-worker-image-inspect
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Verify worker ECS running image digest; never deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AWS_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT: '816344830716'
+      ECS_CLUSTER: ai-trading-system
+      WORKER_SERVICE: ai-trading-system-research-worker
+      WORKER_REPOSITORY: ai-trading-system-research-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require exact dev GitHub OIDC role
+        env:
+          WORKER_ROLE: ${{ vars.AWS_WORKER_READONLY_ROLE_ARN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/dev' || exit 1
+          test "$AWS_REGION" = 'us-east-1'
+          test "$EXPECTED_AWS_ACCOUNT" = '816344830716'
+          test -n "$WORKER_ROLE" || {
+            echo "::error::Configure separate read-only AWS_WORKER_READONLY_ROLE_ARN"; exit 1;
+          }
+
+      - name: Assume bounded worker inspection identity
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_WORKER_READONLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '816344830716'
+          role-session-name: github-v75-worker-readonly-${{ github.run_id }}
+          action-timeout-s: 120
+
+      - name: Inspect only metadata in ephemeral runner files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          temp="$(mktemp -d)"
+          chmod 700 "$temp"
+          trap 'rm -rf "$temp"' EXIT
+
+          aws sts get-caller-identity > "$temp/identity.json"
+          aws ecs describe-clusters --clusters "$ECS_CLUSTER" > "$temp/clusters.json"
+          aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$WORKER_SERVICE" > "$temp/services.json"
+          aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$WORKER_SERVICE" --desired-status RUNNING > "$temp/task-ids.json" ||
+            printf '%s\n' '{}' > "$temp/task-ids.json"
+
+          # Never print an ARN, task definition, environment or secret reference.
+          task_ref="$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); a=x.get("taskArns",[]); print(a[0] if len(a)==1 and not x.get("nextToken") else "")' "$temp/task-ids.json")"
+          def_ref="$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); a=x.get("services",[]); print(a[0].get("taskDefinition","") if len(a)==1 else "")' "$temp/services.json")"
+
+          if [[ -n "$task_ref" ]]; then
+            aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$task_ref" > "$temp/tasks.json" ||
+              printf '%s\n' '{}' > "$temp/tasks.json"
+          else
+            printf '%s\n' '{}' > "$temp/tasks.json"
+          fi
+          if [[ -n "$def_ref" ]]; then
+            aws ecs describe-task-definition --task-definition "$def_ref" > "$temp/definition.json" ||
+              printf '%s\n' '{}' > "$temp/definition.json"
+          else
+            printf '%s\n' '{}' > "$temp/definition.json"
+          fi
+          aws ecr describe-images --repository-name "$WORKER_REPOSITORY" --image-ids "imageTag=$GITHUB_SHA" > "$temp/images.json" 2>/dev/null ||
+            printf '%s\n' '{}' > "$temp/images.json"
+
+          python3 scripts/v4_worker_ecs_digest.py \
+            --identity "$temp/identity.json" --clusters "$temp/clusters.json" \
+            --services "$temp/services.json" --task-ids "$temp/task-ids.json" \
+            --tasks "$temp/tasks.json" --definition "$temp/definition.json" \
+            --images "$temp/images.json" --expected-sha "$GITHUB_SHA" \
+            --output "$GITHUB_WORKSPACE/v75-worker-image-evidence.json"
+
+      - name: Retain sanitized metadata verdict only (14 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v75-worker-image-readonly-evidence
+          path: v75-worker-image-evidence.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+# Does not call worker HTTP, fetch model artifacts, read token values, deploy
+# images or permit PAPER/SHADOW dispatch, LIVE execution, or broker access.

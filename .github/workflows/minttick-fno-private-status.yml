@@ -1,0 +1,148 @@
+name: MintTick F&O private history - read-only checkpoint status
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-status.yml'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-status.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check read-only status probe contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/minttick-fno-private-status.yml')
+          src = p.read_text()
+          assert len(src) < 12000
+          for required in ('MINTTICK_FNO_STATUS_V1:', 'verify_aws()', 'systemctl',
+                           'fno_private_bulk_worker.py', 'get-command-invocation',
+                           'ALREADY_COMPLETE', 'INTERVENTION_REQUIRED'):
+              assert required in src, required
+          for forbidden in ('--with-decryption', 'placeOrder', 'submitOrder',
+                            'put-parameter', 'start-instances', 'stop-instances'):
+              assert forbidden not in src.split('  status:\n', 1)[1], forbidden
+          PY
+
+  status:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exactly one reviewed status workflow file
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = '.github/workflows/minttick-fno-private-status.yml'
+      - name: Assume existing exact-host AWS SSM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-private-status
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Read only systemd state and private SQLite checkpoint counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re, sys, time
+          sys.path.insert(0, 'infra/ec2-paper')
+          from verify_ssm_release import verify_aws
+          from fno_private_bulk_ops import _aws, INSTANCE
+          verify_aws()
+          remote = """set -eu
+          /usr/bin/python3 - <<'PYHOST'
+          import re, subprocess
+          service=subprocess.run(['systemctl','is-active','--','minttick-fno-private-backfill.service'],
+                                 capture_output=True,text=True,timeout=10,check=False)
+          unit=service.stdout.strip().upper()
+          if unit not in ('ACTIVE','INACTIVE','FAILED','ACTIVATING','DEACTIVATING'):
+              unit='UNKNOWN'
+          snapshot=subprocess.run(['/usr/bin/python3',
+              '/opt/aitradingsystem-paper/infra/ec2-paper/fno_private_bulk_worker.py',
+              'status'],capture_output=True,text=True,timeout=10,check=False)
+          match=re.fullmatch(r'FNO_BULK_STATUS:jobs=(\d+);complete=(\d+);rows=(\d+)',
+                             snapshot.stdout.strip()) if snapshot.returncode==0 else None
+          if match:
+              total,done,rows=map(int,match.groups())
+              if 0<=done<=total<=20000 and 0<=rows<=10000000:
+                  print(f'MINTTICK_FNO_STATUS_V1:{unit}|{done}|{total}|{rows}')
+              else:
+                  print('MINTTICK_FNO_STATUS_V1:INVALID|0|0|0')
+          else:
+              print('MINTTICK_FNO_STATUS_V1:UNAVAILABLE|0|0|0')
+          PYHOST"""
+          command=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                       '--instance-ids',INSTANCE,'--timeout-seconds','120',
+                       '--comment','MintTick private FNO read-only checkpoint receipt',
+                       '--parameters',json.dumps({'commands':[remote]}))
+          command_id=(command.get('Command') or {}).get('CommandId')
+          if not isinstance(command_id,str) or not re.fullmatch(r'[0-9a-f-]{36}',command_id):
+              raise SystemExit('FNO_STATUS_COMMAND_INVALID')
+          for attempt in range(24):
+              time.sleep(5)
+              try:
+                  result=_aws('ssm','get-command-invocation','--command-id',command_id,
+                              '--instance-id',INSTANCE)
+              except SystemExit:
+                  if attempt<3: continue
+                  raise
+              status=result.get('Status')
+              if status=='Success':
+                  raw=result.get('StandardOutputContent') or ''
+                  matches=re.findall(r'^MINTTICK_FNO_STATUS_V1:(ACTIVE|INACTIVE|FAILED|ACTIVATING|DEACTIVATING|UNKNOWN|UNAVAILABLE|INVALID)\|(\d{1,8})\|(\d{1,8})\|(\d{1,9})$',raw,re.M)
+                  if len(matches)!=1:
+                      raise SystemExit('FNO_STATUS_RECEIPT_INVALID')
+                  unit,done,total,rows=matches[0]
+                  done,total,rows=int(done),int(total),int(rows)
+                  if not (0<=done<=total<=20000 and 0<=rows<=10000000):
+                      raise SystemExit('FNO_STATUS_COUNTS_INVALID')
+                  phase=('ALREADY_COMPLETE' if total>0 and done==total
+                         else 'RUNNING' if unit=='ACTIVE'
+                         else 'INTERVENTION_REQUIRED')
+                  print(f'FNO PRIVATE HISTORY: phase={phase}; service={unit}; '
+                        f'completed={done}; total={total}; storedCandles={rows}; '
+                        'redistribution=false; noOrders=true')
+                  if unit in ('UNAVAILABLE','INVALID'):
+                      raise SystemExit('FNO_STATUS_NOT_AVAILABLE')
+                  break
+              if status in ('Failed','Cancelled','TimedOut'):
+                  raise SystemExit('FNO_STATUS_SSM_FAILED')
+          else:
+              raise SystemExit('FNO_STATUS_SSM_TIMEOUT')
+          PY
+
+# Read-only checkpoint re-run on 25 Nov 2026.
+# Only fixed read operations on the existing host; no broker secrets, candle payloads,
+# service restarts, infrastructure lifecycle changes, order APIs or redistribution.
+# Owner-requested read-only status probe; inspect exact existing private worker only.
+
+# Read-only owner-private backfill status verification request.

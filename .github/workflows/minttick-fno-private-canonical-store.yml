@@ -1,0 +1,195 @@
+name: MintTick F&O owner-private canonical daily research cache
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-canonical-store.yml'
+      - 'infra/ec2-paper/fno_private_canonical_store.py'
+      - 'infra/ec2-paper/fno_personal_canonical_runner.py'
+      - 'infra/ec2-paper/fno_personal_nse_december_compare.py'
+      - 'scripts/tests/test_fno_private_canonical_store.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-private-canonical-store.json'
+
+permissions:
+  contents: read
+
+# Offline pull-request validation must not compete with frequent host SSM
+# jobs for the single pending slot of the shared AWS lifecycle mutex.
+# The same lock still serializes ONLY the real host-persist job.
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate 3,929 unique owner-private historical candles and expiry controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            infra/ec2-paper/fno_private_canonical_store.py \
+            infra/ec2-paper/fno_personal_canonical_runner.py \
+            infra/ec2-paper/fno_personal_nse_december_compare.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_canonical_store.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_personal_nse_december_compare.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/fno_private_canonical_store.py').read_text()
+          main=Path('infra/ec2-paper/fno_personal_nse_december_compare.py').read_text()
+          for word in ('fno_history_receipts','mode=ro','PRAGMA query_only=ON',
+                       'END_IST','source TEXT','CANONICAL_OWNER_SCOPE_EXPIRED'):
+              assert word in s, word
+          assert 'def run(on_canonical=None):' in main
+          for forbidden in ('placeOrder','submitOrder','put-parameter','start-instances',
+                            'cloudfront','public-read'):
+              assert forbidden not in s
+          PY
+
+  persist:
+    needs: validate
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Authorize only the exact personal canonical materialization request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-private-canonical-store.json'
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('infra/ec2-paper/requests/fno-private-canonical-store.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())=={
+            "kind":"minttick-owner-private-fno-canonical-cache-v1",
+            "operation":"persist-canonical-daily-research-to-expiring-private-sqlite",
+            "region":"ap-south-1",
+            "account":"098859530205",
+            "instance_id":"i-09c01b470fb39b85a",
+            "scope":"12-month-23-selected-nifty-contracts-daily",
+            "canonical_rows":3929,
+            "private_cache_expires_no_later":"2026-11-28",
+            "no_orders":True,
+            "no_market_data_export":True,
+            "no_auth_bypass":True,
+            "no_new_aws_resources":True,
+            "not_customer_facing":True
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-private-canonical
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Stage SHA-256 pinned reviewed scripts, persist verified rows, install hourly expiry purge
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from verify_ssm_release import verify_aws
+          from fno_private_bulk_ops import _aws,INSTANCE
+          verify_aws()
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch(r'[0-9a-f]{40}',commit)
+          names=[
+              'fno_private_canonical_store.py',
+              'fno_personal_nse_december_compare.py',
+              'fno_personal_canonical_runner.py'
+          ]
+          commands=[
+              'set -eu','umask 077',
+              "root='/opt/aitradingsystem-paper/infra/ec2-paper'",
+              'test -d "$root"',
+              'test ! -L "$root"',
+              'work=$(mktemp -d /tmp/minttick-private-canonical.XXXXXX)',
+              "trap 'rm -rf \"$work\"' EXIT",
+          ]
+          for name in names:
+              f=Path('infra/ec2-paper')/name
+              data=f.read_bytes()
+              assert 500<len(data)<25000
+              digest=hashlib.sha256(data).hexdigest()
+              url=('https://raw.githubusercontent.com/operationReact/AiTradingSystem/'
+                   +commit+'/infra/ec2-paper/'+name)
+              commands.append("curl --fail --silent --show-error --max-time 25 --proto '=https' --tlsv1.2 -o \"$work/"+name+"\" '"+url+"'")
+              commands.append("printf '%s  %s\\n' '"+digest+"' \"$work/"+name+"\" | sha256sum -c - >/dev/null")
+          commands += [
+              # Only the purge utility is staged at the fixed path; the
+              # provider-bearing research runner always stays temporary.
+              'test ! -L "$root/fno_private_canonical_store.py"',
+              'install -m 0600 "$work/fno_private_canonical_store.py" "$root/fno_private_canonical_store.py"',
+              "cat > /etc/systemd/system/minttick-fno-personal-canonical-purge.service <<'UNIT'\n[Unit]\nDescription=MintTick owner-private canonical cache expiry purge\n[Service]\nType=oneshot\nExecStart=/usr/bin/python3 /opt/aitradingsystem-paper/infra/ec2-paper/fno_private_canonical_store.py purge\nNoNewPrivileges=true\nPrivateTmp=true\nUNIT",
+              "cat > /etc/systemd/system/minttick-fno-personal-canonical-purge.timer <<'TIMER'\n[Unit]\nDescription=Hourly expiry check for owner-private F&O canonical cache\n[Timer]\nOnCalendar=hourly\nPersistent=true\nUnit=minttick-fno-personal-canonical-purge.service\n[Install]\nWantedBy=timers.target\nTIMER",
+              'systemctl daemon-reload',
+              'systemctl enable --now minttick-fno-personal-canonical-purge.timer >/dev/null',
+              'systemctl is-enabled --quiet minttick-fno-personal-canonical-purge.timer',
+              'PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 "$work/fno_personal_canonical_runner.py" persist',
+          ]
+          command='\n'.join(commands)+'\n'
+          sent=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                    '--instance-ids',INSTANCE,'--timeout-seconds','560',
+                    '--comment','MintTick owner private canonical daily research cache and TTL purge',
+                    '--parameters',json.dumps({'commands':[command]}))
+          cid=(sent.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch(r'[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_CANONICAL_INVALID_SSM_ID')
+          for attempt in range(115):
+              time.sleep(5)
+              r=_aws('ssm','get-command-invocation','--command-id',cid,
+                     '--instance-id',INSTANCE)
+              status=r.get('Status')
+              if status in ('Success','Failed','TimedOut','Cancelled'):
+                  if status!='Success':
+                      raise SystemExit('FNO_CANONICAL_HOST_FAILED')
+                  output=r.get('StandardOutputContent') or ''
+                  if len(output)>5000:
+                      raise SystemExit('FNO_CANONICAL_OUTPUT_LIMIT')
+                  marker='MINTTICK_FNO_CANONICAL_STORE_V1:'
+                  matches=[x[len(marker):] for x in output.splitlines()
+                           if x.startswith(marker)]
+                  if len(matches)!=1 or len(matches[0])>400:
+                      raise SystemExit('FNO_CANONICAL_NO_VERIFIED_RECEIPT')
+                  value=json.loads(matches[0])
+                  if (set(value)!={'status','total','upstox','nse','expiresEpoch',
+                                   'backtestingApproved','customerApiEnabled'}
+                      or value['status']!='PRIVATE_CANONICAL_STORED'
+                      or value['total']!=3929 or value['upstox']!=3608 or value['nse']!=321
+                      or value['backtestingApproved'] is not False
+                      or value['customerApiEnabled'] is not False
+                      or type(value['expiresEpoch']) is not int
+                      or not 1795219200<value['expiresEpoch']<1795900000):
+                      raise SystemExit('FNO_CANONICAL_UNSAFE_RECEIPT')
+                  print('FNO CANONICAL PRIVATE STORE: state=STORED; rows=3929; '
+                        'upstox=3608; nse=321; duplicateKeys=0; '
+                        'expiresEpoch='+str(value['expiresEpoch'])+
+                        '; hourlyPurgeInstalled=true; customerApiEnabled=false; orders=false')
+                  break
+              if status not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_CANONICAL_BAD_SSM_STATE')
+          else:
+              raise SystemExit('FNO_CANONICAL_SSM_TIMEOUT')
+          PY
+
+# This intentionally does not mount the private SQLite into public backend
+# or enable strategy/PAPER/LIVE consumption; that is a separately tested task.

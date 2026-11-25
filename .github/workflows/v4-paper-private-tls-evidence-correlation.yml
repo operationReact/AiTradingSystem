@@ -1,0 +1,87 @@
+name: Correlate V87 PAPER backend and dormant HTTPS inspection evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_run_id:
+        description: "Completed V73 PAPER backend read-only Actions run ID (dev only)"
+        required: true
+        type: string
+      network_run_id:
+        description: "Completed V86 private HTTPS read-only Actions run ID (dev only)"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: v87-paper-dormant-network-evidence
+  cancel-in-progress: false
+
+jobs:
+  correlate:
+    name: Require two recent exact-dev trusted Actions runs without AWS access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      BACKEND_RUN_ID: ${{ inputs.backend_run_id }}
+      NETWORK_RUN_ID: ${{ inputs.network_run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out exact dev Git commit
+        uses: actions/checkout@v4
+
+      - name: Enforce exact repository/branch and bounded decimal run IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/dev' || exit 1
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem' || exit 1
+          [[ "$BACKEND_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]] || exit 1
+          [[ "$NETWORK_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]] || exit 1
+          test "$BACKEND_RUN_ID" != "$NETWORK_RUN_ID" || exit 1
+
+      - name: Fetch GitHub-run metadata and both pre-existing SANITIZED artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          temp="$(mktemp -d)"
+          chmod 700 "$temp"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir -m 700 "$temp/backend" "$temp/network"
+
+          # GitHub API is the identity authority for these exact manual runs.
+          # No AWS credentials, OIDC token, ECS task access or secret values.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BACKEND_RUN_ID" \
+            > "$temp/backend-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NETWORK_RUN_ID" \
+            > "$temp/network-run.json"
+
+          # Only the fixed, already-sanitized V73/V86 artifact names are read.
+          gh run download "$BACKEND_RUN_ID" -R "$GITHUB_REPOSITORY" \
+            --name v4-paper-runtime-posture-readonly -D "$temp/backend" >/dev/null
+          gh run download "$NETWORK_RUN_ID" -R "$GITHUB_REPOSITORY" \
+            --name v86-private-worker-tls-readonly -D "$temp/network" >/dev/null
+
+          python3 scripts/v4_operator_evidence_correlation.py \
+            --backend "$temp/backend/v4-paper-runtime-posture.json" \
+            --network "$temp/network/v86-private-worker-tls-posture.json" \
+            --backend-run "$temp/backend-run.json" \
+            --network-run "$temp/network-run.json" \
+            --expected-sha "$GITHUB_SHA" \
+            --output "$GITHUB_WORKSPACE/v87-paper-dormant-tls-correlation.json"
+
+      - name: Retain only sanitized bounded PAPER/HTTPS correlation codes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v87-paper-dormant-tls-correlation
+          path: v87-paper-dormant-tls-correlation.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+# This workflow has no AWS privileges, private worker token, model artifact,
+# market data, deployment, task activation, trading or capital permissions.

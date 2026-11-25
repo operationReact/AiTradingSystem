@@ -1,0 +1,47 @@
+name: Validate isolated PAPER EC2 manual-role recovery (no AWS changes)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/bootstrap/manual-lifecycle-iam-only.yml'
+      - 'infra/ec2-paper/bootstrap/RESTORE_MANUAL_ROLE.md'
+      - '.github/workflows/validate-paper-manual-role-recovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-single-role:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require standalone resource and prevent destructive bootstrap replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          content = Path('infra/ec2-paper/bootstrap/manual-lifecycle-iam-only.yml').read_text()
+          assert content.count('Type: AWS::IAM::Role') == 1
+          assert content.count('    Type: AWS::IAM::Role') == 1
+          assert content.count('DeletionPolicy: Retain') == 1
+          assert content.count('UpdateReplacePolicy: Retain') == 1
+          assert 'RoleName: aitrading-paper-ec2-manual-control' in content
+          assert 'i-09c01b470fb39b85a' in content
+          assert 'refs/heads/main' in content
+          assert 'refs/heads/dev' not in content
+          assert 'ec2:RunInstances' in content
+          assert 'ec2:TerminateInstances' in content
+          assert 'ec2:RebootInstances' in content
+          assert 'minttick-paper-manual-control-iam' in content
+          # A standalone IAM-only template MUST NOT own VPC/EC2/S3/Cognito.
+          for disallowed in ('Type: AWS::EC2::', 'Type: AWS::S3::',
+                             'Type: AWS::Cognito::', 'Type: AWS::CloudFormation::'):
+              assert disallowed not in content
+          instructions = Path('infra/ec2-paper/bootstrap/RESTORE_MANUAL_ROLE.md').read_text()
+          assert 'CREATE ONLY' in instructions
+          assert 'zero replacements or deletions' in instructions
+          print('Validated isolated one-role, create-only recovery; no AWS writes')
+          PY

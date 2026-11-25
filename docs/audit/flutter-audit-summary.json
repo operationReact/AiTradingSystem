@@ -1,0 +1,21 @@
+{
+  "snapshotCommit": "0a6283af38da7fa9a44692174b372994889068f6",
+  "phaseCount": 22,
+  "plannedPrEntries": 132,
+  "allocatedWorkItemIds": 157,
+  "historicalPrCount": 135,
+  "merged": 123,
+  "closedUnmerged": 12,
+  "mergedOnDev": 120,
+  "legacyFrontendPrs": 35,
+  "flutterPrs": 0,
+  "canonicalHeadsInspected": 78,
+  "canonicalHeadsWithReturnedRuns": 77,
+  "headsWithoutReturnedCi": [
+    80
+  ],
+  "figmaPhaseSectionsPresent": 22,
+  "figmaVariantIdsPresent": 176,
+  "flutterRuntimeEvidence": "NONE",
+  "auditLimit": "All planned PR entries and returned historical PR metadata/paths are indexed; not a fresh line-by-line revalidation of every implementation or physical-device test."
+}

@@ -1,0 +1,92 @@
+name: Upstox sandbox F&O current-BOD lifecycle retry (one-shot)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-fno-sandbox-bod-lifecycle-retry-20261125.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: minttick-upstox-sandbox-bod-retry-20261125
+  cancel-in-progress: false
+
+jobs:
+  non-funded-lifecycle:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require one newly added isolated sandbox workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-fno-sandbox-bod-lifecycle-retry-20261125.yml
+          test "$(git diff-tree --no-commit-id --diff-filter=A --name-only -r HEAD)" = "$p"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$p"
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$GITHUB_EVENT_NAME" = "push"
+          echo 'SANDBOX_ONE_SHOT_ADDED_FILE:VERIFIED'
+      - name: Run existing zero-network lifecycle and SSM safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py scripts/upstox_fno_sandbox_ssm.py
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
+      - name: Assume exact sandbox-only SSM reader
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox-bod-retry
+          role-duration-seconds: 900
+      - name: Execute one order lifecycle against Upstox sandbox only
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import json
+          import sys
+          sys.path.insert(0, "scripts")
+          import upstox_fno_sandbox_lifecycle as probe
+          import upstox_fno_sandbox_ssm as ssm
+
+          if probe.SANDBOX != "https://api-sandbox.upstox.com":
+              raise RuntimeError("SANDBOX_HOST_NOT_FIXED")
+          if probe.SANDBOX_USER_AGENT != "MintTick-Upstox-Sandbox/1.0":
+              raise RuntimeError("SANDBOX_UA_NOT_FIXED")
+          # Current Upstox NSE BOD: NSE_FO|47821 is NIFTY 25650 CE,
+          # expiry 2026-12-01, lot 65, tick 5 paise. This key's quote and
+          # option chain were verified today; the sandbox token cannot trade live.
+          instrument, quantity, price, tick = "NSE_FO|47821", 65, "100.05", "0.05"
+          print("SANDBOX_TARGET:UPSTOX_ONLY")
+          print("SANDBOX_INSTRUMENT:CURRENT_BOD_NIFTY_OPTION")
+          print("SANDBOX_QUANTITY_UNITS:65")
+          token = None
+          try:
+              token = ssm.load_sandbox_token()
+              result = probe.run_cycle(probe.sandbox_transport(token),
+                                       instrument, quantity, price, tick)
+          except (ssm.SandboxBootstrapError, probe.SandboxError) as exc:
+              print("SANDBOX_LIFECYCLE_RESULT:BLOCKED:" + str(exc))
+              raise SystemExit(1)
+          finally:
+              token = None
+          print("SANDBOX_LIFECYCLE_RESULT:" + json.dumps(result, sort_keys=True))
+          if not all(result.get(k) is True for k in ("placed", "modified", "cancelled")):
+              raise RuntimeError("SANDBOX_LIFECYCLE_UNVERIFIED")
+          print("SANDBOX_LIFECYCLE:PLACE_MODIFY_CANCEL_VERIFIED")
+          print("REAL_MONEY_ORDERS:ZERO")
+          PY
+
+# This uses only the sandbox app token and sandbox API host. No live OAuth,
+# live order endpoint, persistence, trading-mode change, EC2 lifecycle, or retry.

@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Local physical-device acceptance reaches the developer backend only through
+         adb reverse. Release builds keep Android's default cleartext prohibition. -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

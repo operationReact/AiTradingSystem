@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  One-time MintTick public DNS bootstrap. Creates a retained minttick.com Route 53
+  hosted zone and a tightly scoped GitHub dev OIDC role for ACM DNS validation.
+  No EC2, networking, application deployment or Hostinger changes.
+
+Resources:
+  MintTickPublicHostedZone:
+    Type: AWS::Route53::HostedZone
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: minttick.com.
+      HostedZoneTags:
+        - Key: Application
+          Value: MintTick
+        - Key: Environment
+          Value: dev
+        - Key: ManagedBy
+          Value: cloudformation-minttick-domain
+
+  MintTickDomainGithubRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: minttick-domain-github-deploy
+      Description: Dev-only, exact GitHub repository, MintTick ACM CNAME validation in its single hosted zone
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+                'token.actions.githubusercontent.com:sub': 'repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev'
+      Policies:
+        - PolicyName: minttick-domain-acm-validation-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InspectHostedZoneInventory
+                Effect: Allow
+                Action:
+                  - route53:ListHostedZonesByName
+                Resource: '*'
+              - Sid: ReadExactMintTickHostedZone
+                Effect: Allow
+                Action:
+                  - route53:GetHostedZone
+                  - route53:ListResourceRecordSets
+                Resource: !Sub 'arn:aws:route53:::hostedzone/${MintTickPublicHostedZone}'
+              - Sid: WriteOnlyMintTickValidationCNAMEs
+                Effect: Allow
+                Action: route53:ChangeResourceRecordSets
+                Resource: !Sub 'arn:aws:route53:::hostedzone/${MintTickPublicHostedZone}'
+                Condition:
+                  ForAllValues:StringLike:
+                    route53:ChangeResourceRecordSetsNormalizedRecordNames:
+                      - '_*.minttick.com'
+                  ForAllValues:StringEquals:
+                    route53:ChangeResourceRecordSetsRecordTypes: [CNAME]
+                    route53:ChangeResourceRecordSetsActions: [UPSERT]
+              - Sid: ReadDnsChangePropagation
+                Effect: Allow
+                Action: route53:GetChange
+                Resource: 'arn:aws:route53:::change/*'
+              - Sid: ListVirginiaCertificates
+                Effect: Allow
+                Action: acm:ListCertificates
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: us-east-1
+              - Sid: DescribeVirginiaCertificates
+                Effect: Allow
+                Action: acm:DescribeCertificate
+                Resource: 'arn:aws:acm:us-east-1:098859530205:certificate/*'
+              - Sid: RequestOnlyMintTickDnsCertificateInVirginia
+                Effect: Allow
+                Action: acm:RequestCertificate
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: us-east-1
+                    acm:ValidationMethod: DNS
+                  ForAllValues:StringEquals:
+                    acm:DomainNames:
+                      - minttick.com
+                      - www.minttick.com
+                      - api.minttick.com
+
+Outputs:
+  PublicHostedZoneId:
+    Description: Public Route 53 hosted zone ID (not an NS value)
+    Value: !Ref MintTickPublicHostedZone
+  PublicNameServers:
+    Description: Enter all four nameservers into Hostinger once, replacing existing nameservers
+    Value: !Join [', ', !GetAtt MintTickPublicHostedZone.NameServers]
+  DomainDeployRoleArn:
+    Description: Read-only inventory plus ACM and exact-zone validation-CNAME writes from approved dev branch
+    Value: !GetAtt MintTickDomainGithubRole.Arn

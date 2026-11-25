@@ -1,0 +1,13 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "create-one-isolated-paper-verification-room",
+  "account_scope": "dedicated-verification-customer",
+  "name": "Mind PAPER verification",
+  "focus": "INTRADAY",
+  "plannedBudgetInr": 100000,
+  "riskPreference": "CAUTIOUS",
+  "mode": "PAPER",
+  "marketScope": "EQUITY",
+  "authorization": "USER_APPROVED_PAPER_VERIFICATION_ROOM_2026-11-17"
+}

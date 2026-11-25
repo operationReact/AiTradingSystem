@@ -1,0 +1,11 @@
+{
+  "application": "MintTick",
+  "operation": "activate-private-owner-5m-1h-ingestion",
+  "environment": "paper",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "private_owner_only": true,
+  "trading_permission_change": false,
+  "authorization": "USER_APPROVED_INTRADAY_INGESTION_2026-11-20"
+}

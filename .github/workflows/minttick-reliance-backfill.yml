@@ -1,0 +1,163 @@
+name: MintTick PAPER - bounded RELIANCE-EQ candle backfill (one-shot)
+
+# One reviewed backfill per request commit: RELIANCE-EQ (417378), FIVE_MINUTE and ONE_DAY, 2026-11-03..2026-11-17.
+# It runs the existing authorized operator endpoint on localhost via SSM, with the host-local key.
+# No scheduler, no retries, no broker order path, no key or provider text is printed.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/backfill_reliance_candles.sh'
+      - '.github/workflows/minttick-reliance-backfill.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/reliance-candle-backfill.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate the on-host backfill script contract
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/backfill_reliance_candles.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path("infra/ec2-paper/backfill_reliance_candles.sh").read_text()
+          assert "INSTRUMENT_ID=417378" in text and 'SYMBOL="RELIANCE-EQ"' in text
+          assert 'FROM="2026-11-03"' in text and 'TO="2026-11-17"' in text
+          assert 'INTERVALS=("FIVE_MINUTE","ONE_DAY")' in text
+          assert "X-API-Key" in text and "runtime.env" in text
+          assert "APP_API_KEY" not in [l.split("=")[0] for l in text.splitlines() if l.startswith("print")]
+          assert "print(" in text and "print(key" not in text and "print(run" not in text
+          assert "time.sleep" in text and "range(40)" in text
+          assert "scheduler" not in text.lower() or "No scheduler" in text
+          print("PASS: bounded backfill script contract")
+          PY
+
+  backfill:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file, owner-approved backfill request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/reliance-candle-backfill.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/ec2-paper/requests/reliance-candle-backfill.json").read_text())
+          assert actual=={
+              "application":"MintTick", "environment":"paper",
+              "aws_account":"098859530205", "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "operation":"bounded-reliance-candle-backfill",
+              "instrument_id":417378, "symbol":"RELIANCE-EQ", "exchange":"NSE",
+              "intervals":["FIVE_MINUTE","ONE_DAY"],
+              "from_date":"2026-11-03", "to_date":"2026-11-17", "attempt":7,
+              "authorization":"USER_APPROVED_RELIANCE_CANDLE_BACKFILL_2026-11-18",
+          }, "Unapproved backfill request"
+          print("PASS: exact owner-approved bounded backfill request")
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-reliance-backfill-${{ github.run_id }}
+      - name: Verify exact running EC2, identity and nightly stop before SSM
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"infra/ec2-paper")
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Run the bounded backfill through the protected localhost operator API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          code=Path("infra/ec2-paper/backfill_reliance_candles.sh").read_bytes()
+          assert 100 < len(code) < 6000 and len(base64.b64encode(code)) < 8192
+          command="printf '%s' '"+base64.b64encode(code).decode()+"' | base64 -d | bash"
+          target=Path(os.environ["RUNNER_TEMP"])/"backfill-ssm.json"
+          target.write_text(json.dumps({"commands":[command]}))
+          target.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/backfill-ssm.json" \
+            --comment 'MintTick bounded RELIANCE-EQ candle backfill, localhost only' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/backfill-ssm.json"
+          for attempt in $(seq 1 330); do
+            aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/backfill-result.json" 2>/dev/null || true
+            state="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              result=json.loads((Path(os.environ["RUNNER_TEMP"])/"backfill-result.json").read_text())
+          except (ValueError,OSError):
+              print("Pending");raise SystemExit
+          status=result.get("Status","Pending")
+          output=result.get("StandardOutputContent","")
+          if not isinstance(output,str): output=""
+          if status=="Success" and re.search(r"(?m)^MINTTICK_BACKFILL_RESULT: SUCCEEDED$",output):
+              print("VERIFIED")
+          elif status in ("Success","Failed","TimedOut","Cancelled"):
+              print("Failed_"+status)
+          else:
+              print(status)
+          PY
+          )"
+            if [[ "$state" == VERIFIED ]]; then
+              echo 'PASS: bounded RELIANCE-EQ backfill completed'
+              break
+            fi
+            case "$state" in Failed*|TimedOut|Cancelled)
+              echo "BLOCKED: backfill not verified; state $state" >&2
+              break;;
+            esac
+            sleep 6
+          done
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              result=json.loads((Path(os.environ["RUNNER_TEMP"])/"backfill-result.json").read_text())
+          except (ValueError,OSError):
+              raise SystemExit("no result")
+          output=result.get("StandardOutputContent","") if isinstance(result.get("StandardOutputContent",""),str) else ""
+          for line in output.splitlines():
+              if re.match(r"^MINTTICK_BACKFILL_[A-Z_]+: [A-Za-z0-9 ._:-]{0,120}$", line):
+                  print(line)
+          PY
+          test "$(python3 -c "import json,os;from pathlib import Path;print(json.loads((Path(os.environ['RUNNER_TEMP'])/'backfill-result.json').read_text()).get('Status'))")" = Success

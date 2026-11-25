@@ -1,0 +1,188 @@
+name: MintTick PAPER - activate customer Upstox OAuth from SSM (read-only)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-upstox-oauth-activate.yml'
+      - 'infra/ec2-paper/upstox_oauth_activate.sh'
+      - 'infra/ec2-paper/requests/upstox-oauth-activate.json'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-oauth-activate.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify read-only host script syntax and fail-closed workflow design
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/upstox_oauth_activate.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('infra/ec2-paper/upstox_oauth_activate.sh').read_text()
+          workflow=Path('.github/workflows/ec2-paper-upstox-oauth-activate.yml').read_text()
+          assert 0 < len(script.encode()) < 9000
+          assert 'MINTTICK_UPSTOX_OAUTH_RESULT:HOST_ACTIVATED_READ_ONLY' in script
+          assert 'ssm' in workflow and 'github.ref == ' in workflow
+          assert 'MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true' in script
+          assert 'restart backend' in script
+          assert 'http://127.0.0.1:8080/api/health' in script
+          assert 'backend-restart.log' in script
+          assert "'get-parameters'" in script
+          assert '/v3/order/place' not in script
+          print('Static read-only protected activation validation passed')
+          PY
+
+  activate:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate exact one-file activation and deployed release ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=infra/ec2-paper/requests/upstox-oauth-activate.json
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$request"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          bash -n infra/ec2-paper/upstox_oauth_activate.sh
+          python3 - <<'PY'
+          import json, pathlib, re, subprocess
+          request = json.loads(pathlib.Path('infra/ec2-paper/requests/upstox-oauth-activate.json').read_text())
+          assert set(request) == {'kind','action','account','region','instance_id','trading_mode','confirmation','expected_release_sha'}
+          assert all(request[k]==v for k,v in {
+              'kind':'minttick-upstox-customer-oauth-activation-v1',
+              'action':'enable-readonly-oauth-ssm',
+              'account':'098859530205',
+              'region':'ap-south-1',
+              'instance_id':'i-09c01b470fb39b85a',
+              'trading_mode':'PAPER',
+              'confirmation':'AUTHORIZE_PRIVATE_UPSTOX_OAUTH_READONLY'}.items())
+          sha = request['expected_release_sha']
+          assert re.fullmatch('[0-9a-f]{40}',sha)
+          # The existing PAPER release must contain the merged direct SSM bridge.
+          subprocess.run(['git','merge-base','--is-ancestor',
+                          'a3615bd58caeaa58fc76f98b7d39943d4a003138',sha], check=True)
+          subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'], check=True)
+          assert pathlib.Path('infra/ec2-paper/upstox_oauth_activate.sh').stat().st_size < 9000
+          print('Exact protected read-only OAuth activation request validated')
+          PY
+
+      - name: Assume existing dev-only PAPER SSM OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-upstox-oauth-readonly
+          role-duration-seconds: 3000
+
+      - name: Check exact existing host and run secret-free activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, pathlib, re, shlex, subprocess, sys, time
+          sys.path.insert(0, 'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          request=json.loads(pathlib.Path('infra/ec2-paper/requests/upstox-oauth-activate.json').read_text())
+          expected=request['expected_release_sha']
+          script=pathlib.Path('infra/ec2-paper/upstox_oauth_activate.sh').read_bytes()
+          compressed=gzip.compress(script,compresslevel=9,mtime=0)
+          assert gzip.decompress(compressed)==script
+          payload=base64.b64encode(compressed).decode('ascii')
+          assert len(payload)<6000
+          digest=hashlib.sha256(script).hexdigest()
+          remote=(
+              'import base64,gzip,hashlib,subprocess,sys;'
+              'p=gzip.decompress(base64.b64decode(sys.argv[1],validate=True));'
+              'assert hashlib.sha256(p).hexdigest()==sys.argv[2];'
+              'print("MINTTICK_UPSTOX_OAUTH_TRANSPORT:VERIFIED",flush=True);'
+              'r=subprocess.run(["bash","-s","--",sys.argv[3]],input=p,check=False);'
+              'sys.exit(r.returncode)')
+          command=("set -eu\n"
+              "printf 'MINTTICK_UPSTOX_OAUTH_TRANSPORT:START\\n'\n"
+              "python3 -c "+shlex.quote(remote)+" "+shlex.quote(payload)+" "+
+                  shlex.quote(digest)+" "+shlex.quote(expected)+"\n"
+              "printf 'MINTTICK_UPSTOX_OAUTH_TRANSPORT:FINISHED\\n'\n")
+          def aws(*args):
+              r=subprocess.run(['aws',*args,'--region','ap-south-1',
+                       '--no-cli-pager','--output','json'],capture_output=True,
+                       text=True,timeout=45)
+              if r.returncode: raise RuntimeError('PROTECTED_SSM_ACTION_UNAVAILABLE')
+              return json.loads(r.stdout)
+          sent=aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                 '--instance-ids','i-09c01b470fb39b85a','--timeout-seconds','2000',
+                 '--comment','Read-only Upstox OAuth SSM protected activation',
+                 '--parameters',json.dumps({'commands':[command]}))
+          cid=sent.get('Command',{}).get('CommandId','')
+          if not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise RuntimeError('SSM_COMMAND_NOT_CREATED')
+          known={'BAD_RELEASE_SHA','HOST_MISMATCH','RUNTIME_ENV_UNSAFE',
+                 'DEPLOYED_SHA_MISMATCH','IMAGE_NOT_FOUND','BRIDGE_NOT_DEPLOYED',
+                 'NOT_PAPER','SSM_PARAMETERS_UNAVAILABLE',
+                 'RESTART_FAILED_ROLLED_BACK','RESTART_FAILED_ROLLBACK_UNVERIFIED',
+                 'FLAG_NOT_ACTIVE_ROLLED_BACK','FLAG_NOT_ACTIVE_ROLLBACK_UNVERIFIED'}
+          for i in range(245):
+              time.sleep(8)
+              try:
+                  result=aws('ssm','get-command-invocation','--command-id',cid,
+                             '--instance-id','i-09c01b470fb39b85a')
+              except RuntimeError:
+                  if i < 5:
+                      continue
+                  raise
+              status=result.get('Status')
+              output=str(result.get('StandardOutputContent') or '')+'\n'+str(result.get('StandardErrorContent') or '')
+              markers=re.findall(r'MINTTICK_UPSTOX_OAUTH_RESULT:([A-Z_]+)',output)
+              if status in ('Success','Failed','Cancelled','TimedOut'):
+                  # Redacted structural diagnostics only: no raw stdout, stderr,
+                  # token, PIN, TOTP, owner subject, parameter value or account data.
+                  accepted={'HOST_ACTIVATED_READ_ONLY','HOST_ALREADY_ACTIVE_READ_ONLY'}
+                  labels=[x if x in known or x in accepted else 'OTHER'
+                          for x in markers[:4]]
+                  transport=''.join('1' if 'MINTTICK_UPSTOX_OAUTH_TRANSPORT:'+x in output
+                                    else '0' for x in ('START','VERIFIED','FINISHED'))
+                  print('UPSTOX_OAUTH_PROOF:status='+status+
+                        ';transport='+transport+';markers='+str(min(len(markers),5))+
+                        ';classes='+','.join(labels),flush=True)
+              if status == 'Success':
+                  if not all('MINTTICK_UPSTOX_OAUTH_TRANSPORT:'+s in output
+                             for s in ('START','VERIFIED','FINISHED')):
+                      raise RuntimeError('UPSTOX_OAUTH_TRANSPORT_NOT_VERIFIED')
+                  if markers!=['HOST_ACTIVATED_READ_ONLY']:
+                      raise RuntimeError('UPSTOX_OAUTH_HOST_ACTIVATION_NOT_VERIFIED')
+                  print('UPSTOX CUSTOMER OAUTH HOST ACTIVATED (READ ONLY); customer login still required; zero orders')
+                  break
+              if status in ('Failed','Cancelled','TimedOut','Cancelling'):
+                  reason=next((m for m in markers if m in known),'HOST_UNAVAILABLE')
+                  raise RuntimeError('UPSTOX_OAUTH_ACTIVATION_BLOCKED:'+reason)
+              if status not in ('Pending','InProgress','Delayed'):
+                  raise RuntimeError('UPSTOX_OAUTH_UNEXPECTED_SSM_STATE')
+          else:
+              raise RuntimeError('UPSTOX_OAUTH_SSM_ACCEPTANCE_TIMEOUT')
+          PY

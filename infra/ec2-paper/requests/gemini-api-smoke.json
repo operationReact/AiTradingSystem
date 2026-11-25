@@ -1,0 +1,9 @@
+{
+  "provider": "GEMINI",
+  "kind": "minttick-gemini-api-smoke-v1",
+  "calls": 1,
+  "synthetic_only": true,
+  "store": false,
+  "secret_export": false,
+  "orders": false
+}

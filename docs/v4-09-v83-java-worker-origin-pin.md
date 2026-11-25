@@ -1,0 +1,11 @@
+# V4-09/V83 — Pin the Java research worker HTTPS DNS origin
+
+V81/V82 added an optional internal ACM HTTPS edge for Python, but Java's V72 readiness and V66 inference adapters previously accepted any syntactically valid `https://...` origin from `AI_RESEARCH_WORKER_URL`. Valid TLS to the wrong service is **not** a trusted worker identity and could send the private `X-Research-Worker-Token` to an unintended TLS host if URL configuration were altered.
+
+V83 adds an independently configured `AI_RESEARCH_WORKER_TRUSTED_HOST` and verifies the exact expected host **before** any token-bearing HTTP request, for BOTH Java readiness and scoring. A wrong/missing pin, different hostname, alternate non-443 port, non-HTTPS remote destination or wildcard pin fails closed with sanitized errors. Existing localhost/loopback HTTP is permitted **only** for controlled synthetic tests. Java HttpClient retains normal CA-chain/SNI and hostname verification, no redirects, strict timeout and no retry.
+
+When `research_worker_tls_enabled=true` the existing Terraform Java backend task definition now independently sets `AI_RESEARCH_WORKER_TRUSTED_HOST=research-worker.<domain_name>` from the same V81 private ACM FQDN, regardless of the separately opt-in V82 [PR #435](https://github.com/operationReact/AiTradingSystem/pull/435) worker-token preparation. Configuring `AI_RESEARCH_WORKER_URL` to another host will **not** change this independent pin. When TLS is disabled the pin remains absent, and remote HTTPS calls are disabled at the client; loopback synthetic integration tests still run.
+
+No new model download, AWS apply, worker task scale, Secrets Manager mutation, private DNS or ALB change, LIVE trading, broker call or order permission. Existing Java research enable flags remain FALSE in Terraform, V76 worker stays at `desired_count=0`, and real V73/V75 AWS inspections, licensed-model custody and V72 original Java enrollment checks remain pending. TLS is still terminated at the ALB; its target hop remains private HTTP and is not mTLS.
+
+Do not independently enable the Java client or readiness flags until the operator has verified AWS certificate issuance, the actual private hostname, worker secret consistency, model file digests and authentic ADMIN PAPER roster evidence.

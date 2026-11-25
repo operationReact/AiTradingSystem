@@ -1,0 +1,182 @@
+name: MintTick - verify one genuine Angel One WebSocket NSE tick
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-owner-live-tick-verify.yml'
+      - 'infra/ec2-paper/probe_owner_angelone_live_socket.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/owner-angelone-live-tick.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and validate read-only live tick probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/probe_owner_angelone_auth.py infra/ec2-paper/probe_owner_angelone_live_socket.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          source=Path("infra/ec2-paper/probe_owner_angelone_live_socket.py").read_text()
+          assert "NSE_TOKEN = \"2885\"" in source
+          assert "BROKER_WS_LIVE_TICK: VERIFIED" in source
+          assert "BROKER_WS_TEST: READ_ONLY_NO_ORDERS" in source
+          assert 'MAX_WAIT_SECONDS = 40' in source
+          assert "3.108.130.17" in Path("infra/ec2-paper/probe_owner_angelone_auth.py").read_text()
+          for forbidden in ("placeOrder", "modifyOrder", "cancelOrder", "X-ClientPublicIP: 0.0.0.0"):
+              assert forbidden not in source
+          msg=json.dumps({"correlationID":"minttickEipTick", "action":1,
+              "params":{"mode":1,"tokenList":[{"exchangeType":1,"tokens":["2885"]}]}},
+              separators=(",",":")).encode()
+          assert len(msg)<=125
+          print("PASS: read-only single NSE token WebSocket proof, no order operation")
+          PY
+
+  observe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Exact one-file request authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/ec2-paper/requests/owner-angelone-live-tick.json"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          d=json.loads(Path("infra/ec2-paper/requests/owner-angelone-live-tick.json").read_text())
+          assert d == {
+            "application":"MintTick",
+            "aws_account":"098859530205",
+            "region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "registered_static_ip":"3.108.130.17",
+            "operation":"read-only-owner-angelone-single-live-tick-probe",
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-single-live-tick
+      - name: Verify one actual read-only NSE tick over private EC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "098859530205"
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,json,os,zlib
+          sources={}
+          for item in ("probe_owner_angelone_auth.py","probe_owner_angelone_live_socket.py"):
+              raw=(Path("infra/ec2-paper")/item).read_bytes()
+              sources[item]=base64.b64encode(zlib.compress(raw,9)).decode()
+          loader="""import base64,zlib,types,sys
+          auth=types.ModuleType("probe_owner_angelone_auth")
+          sys.modules[auth.__name__]=auth
+          exec(compile(zlib.decompress(base64.b64decode(__AUTH__)),
+            "probe_owner_angelone_auth.py","exec"),auth.__dict__)
+          tick=types.ModuleType("__main__")
+          exec(compile(zlib.decompress(base64.b64decode(__TICK__)),
+            "probe_owner_angelone_live_socket.py","exec"),tick.__dict__)
+          """
+          loader="\n".join(line.lstrip() for line in loader.splitlines())
+          loader=loader.replace("__AUTH__",repr(sources["probe_owner_angelone_auth.py"]))
+          loader=loader.replace("__TICK__",repr(sources["probe_owner_angelone_live_socket.py"]))
+          command="python3 - <<'PY'\n"+loader+"\nPY"
+          destination=Path(os.environ["RUNNER_TEMP"])/"minttick-single-tick.json"
+          destination.write_text(json.dumps({"commands":[command]}))
+          destination.chmod(0o600)
+          print("Broker script prepared without plaintext secrets")
+          PY
+          cid="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/minttick-single-tick.json" \
+            --comment 'MintTick owner-only read-only one verified NSE WS V2 tick' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/minttick-single-tick.json"
+          for attempt in $(seq 1 38); do
+            aws ssm get-command-invocation \
+              --command-id "$cid" --instance-id "$INSTANCE_ID" \
+              --output json > "$RUNNER_TEMP/minttick-single-tick-result.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          try:
+              d=json.loads((Path(os.environ["RUNNER_TEMP"])/"minttick-single-tick-result.json").read_text())
+          except (OSError,ValueError):
+              print("PENDING");raise SystemExit(0)
+          whitelist={
+             "EC2_EGRESS":{"MATCH_REGISTERED_EIP","MISMATCH","UNAVAILABLE"},
+             "BROKER_NETWORK_HEADERS":{"VERIFIED"},
+             "OWNER_SSM_ACCESS":{"READY","UNAVAILABLE","INVALID_RESPONSE","INCOMPLETE","INVALID_PARAMETERS","TOTP_INVALID"},
+             "BROKER_LOGIN":{"VERIFIED_WITH_FEED_TOKEN","MISSING_FEED_TOKEN","PROFILE_MISMATCH"},
+             "BROKER_WS_HANDSHAKE":{"VERIFIED","REJECTED","INVALID_ACCEPT"},
+             "BROKER_WS_SUBSCRIPTION":{"SENT","REJECTED","INVALID"},
+             "BROKER_WS_LIVE_TICK":{"VERIFIED","NOT_OBSERVED"},
+             "BROKER_WS_TEST":{"READ_ONLY_NO_ORDERS","INTERNAL_FAILURE"},
+             "BROKER_WS_CONNECTION":{"CLOSED","SERVER_CLOSED","UNAVAILABLE"},
+             "BROKER_WS_FRAME":{"INVALID","OVERSIZED"},
+             "ANGEL_ONE_AUTH":{"REJECTED_OR_IP_RESTRICTED","UNAVAILABLE","RATE_LIMITED","NETWORK_UNAVAILABLE","INVALID_RESPONSE","TOKEN_OR_FEED_MISSING","PROFILE_MISMATCH"}
+          }
+          found=[]
+          for raw in d.get("StandardOutputContent","").splitlines():
+              if ": " not in raw: continue
+              k,v=raw.split(": ",1)
+              if v in whitelist.get(k,set()): found.append(k+": "+v)
+          for x in found: print(x)
+          success=all(x in found for x in (
+              "EC2_EGRESS: MATCH_REGISTERED_EIP",
+              "BROKER_LOGIN: VERIFIED_WITH_FEED_TOKEN",
+              "BROKER_WS_HANDSHAKE: VERIFIED",
+              "BROKER_WS_SUBSCRIPTION: SENT",
+              "BROKER_WS_LIVE_TICK: VERIFIED",
+              "BROKER_WS_TEST: READ_ONLY_NO_ORDERS",
+          ))
+          state=d.get("Status")
+          print("PASS" if success and state=="Success" else
+                "FAILED" if state in ("Success","Failed","Cancelled","TimedOut") else "PENDING")
+          PY
+            )"
+            if [[ "$result" == *$'\nPASS' ]]; then
+              printf '%s\n' "$result"
+              echo "One timestamp-valid actual Angel One NSE LTP tick confirmed; no orders placed"
+              exit 0
+            fi
+            if [[ "$result" == *$'\nFAILED' ]]; then
+              printf '%s\n' "$result"
+              exit 2
+            fi
+            sleep 3
+          done
+          echo "Read-only live-tick observation timed out"
+          exit 2

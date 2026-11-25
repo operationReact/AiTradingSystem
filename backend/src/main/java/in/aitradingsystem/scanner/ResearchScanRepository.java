@@ -1,0 +1,375 @@
+package in.aitradingsystem.scanner;
+
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.mind.MindSourceSnapshot;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class ResearchScanRepository {
+    private final JdbcTemplate jdbc;
+
+    private final RowMapper<Instrument> instrumentMapper = (rs, row) -> new Instrument(
+            rs.getLong("instrument_id"), rs.getString("exchange_segment"), rs.getString("exchange"),
+            rs.getString("symbol_token"), rs.getString("trading_symbol"), rs.getString("instrument_name"),
+            rs.getString("instrument_type"), rs.getObject("expiry", java.time.LocalDate.class),
+            rs.getBigDecimal("strike"), rs.getInt("lot_size"), rs.getBigDecimal("tick_size"),
+            rs.getObject("catalogue_version", UUID.class));
+
+    public ResearchScanRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /**
+     * Prioritise the actual NSE stocks displayed on MintTick Home before
+     * allocating the three private 1000-token WebSocket subscription shards.
+     * This is deliberately separate from the research scan universe order.
+     */
+    public List<Instrument> marketFeedPriorityUniverse(int limit) {
+        if (limit < 1 || limit > 3000) throw new IllegalArgumentException("market feed limit must be 1..3000");
+        return jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.active = TRUE
+                   AND i.exchange IN ('NSE', 'BSE')
+                   AND i.exchange_segment IN ('NSE_CM','BSE_CM')
+                   AND (upper(coalesce(i.instrument_type, '')) = 'EQ'
+                        OR (coalesce(i.instrument_type, '') = ''
+                            AND i.trading_symbol LIKE '%-EQ'))
+                 ORDER BY CASE
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'RELIANCE-EQ' THEN 0
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'TCS-EQ' THEN 1
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'INFY-EQ' THEN 2
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'HDFCBANK-EQ' THEN 3
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'ICICIBANK-EQ' THEN 4
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'SBIN-EQ' THEN 5
+                     ELSE 100 END,
+                     i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
+                 LIMIT ?
+                """, instrumentMapper, limit);
+    }
+
+    /**
+     * REST FULL quote warmer universe. Unlike the 3,000-WebSocket-token priority list,
+     * this can cover both verified cash exchanges without reserving WebSocket shards.
+     * Interleaved exchange ranks prevent thousands of BSE listings from starving NSE
+     * (or vice versa). The caller groups each exchange into <=50-token REST batches.
+     */
+    public List<Instrument> postCloseFullQuoteUniverse(int limit) {
+        if (limit < 1 || limit > 10_000) {
+            throw new IllegalArgumentException("Post-close cash universe limit must be 1..10000");
+        }
+        return jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
+                """ + in.aitradingsystem.instrument.InstrumentMasterRepository.CASH_EQUITY_PREDICATE + """
+                 ORDER BY ROW_NUMBER() OVER (PARTITION BY i.exchange ORDER BY
+                     CASE WHEN i.exchange = 'NSE' AND i.trading_symbol = 'RELIANCE-EQ' THEN 0
+                          WHEN i.exchange = 'NSE' AND i.trading_symbol = 'TCS-EQ' THEN 1
+                          WHEN i.exchange = 'NSE' AND i.trading_symbol = 'INFY-EQ' THEN 2
+                          ELSE 100 END,
+                     i.trading_symbol, i.symbol_token),
+                     CASE WHEN i.exchange = 'NSE' THEN 0 ELSE 1 END,
+                     i.trading_symbol, i.symbol_token
+                 LIMIT ?
+                """, instrumentMapper, limit);
+    }
+
+    public void createRun(UUID id, String interval, int requestedLimit, String strategySet) {
+        jdbc.update("""
+                INSERT INTO research_scan_run (id, interval, status, requested_limit, strategy_set)
+                VALUES (?, ?, 'RUNNING', ?, ?)
+                """, id, interval, requestedLimit, strategySet);
+    }
+
+    /** Bounded active cash-equity universe only; excludes derivatives and inactive catalogue rows. */
+    public List<Instrument> activeCashEquityUniverse(int limit) {
+        return jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.active = TRUE
+                   AND i.exchange IN ('NSE', 'BSE')
+                   AND i.exchange_segment IN ('NSE_CM','BSE_CM')
+                   AND (upper(coalesce(i.instrument_type, '')) = 'EQ'
+                        OR (coalesce(i.instrument_type, '') = ''
+                            AND i.trading_symbol LIKE '%-EQ'))
+                 ORDER BY i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
+                 LIMIT ?
+                """, instrumentMapper, limit);
+    }
+
+    public boolean saveCandidate(UUID runId, ScanCandidate c, String strategyVersion,
+                                 Integer strategyConfigVersion, UUID catalogueVersion, Instant dataCutoffAt) {
+        String fingerprint = CandidateFingerprint.of(c.instrumentId(), c.interval(), c.strategy(), strategyVersion,
+                c.candleTime(), c.referencePrice(), c.suggestedStop(), c.suggestedTarget());
+        int inserted = jdbc.update("""
+                INSERT INTO research_scan_candidate
+                    (scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
+                     entry_price, stop_price, target_price, signal_candle_time, reasons,
+                     candidate_fingerprint, strategy_config_version, catalogue_version, data_cutoff_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (scan_run_id, candidate_fingerprint) WHERE candidate_fingerprint IS NOT NULL DO NOTHING
+                """, runId, c.instrumentId(), c.tradingSymbol(), c.exchange(), c.interval(), c.strategy(),
+                c.score(), c.referencePrice(), c.suggestedStop(), c.suggestedTarget(), offset(c.candleTime()),
+                String.join("|", c.reasons()), fingerprint, strategyConfigVersion, catalogueVersion,
+                dataCutoffAt == null ? null : offset(dataCutoffAt));
+        return inserted == 1;
+    }
+
+    /**
+     * Attach the as-of news context to an already-saved candidate. Write-once: an existing context
+     * is never overwritten, so a later re-scan cannot rewrite what was known at the original scan.
+     */
+    public void recordNewsContext(UUID runId, long instrumentId, String strategy, Instant candleTime,
+                                  String contextJson) {
+        jdbc.update("""
+                UPDATE research_scan_candidate
+                   SET news_context = ?::jsonb, news_context_contract = 'news.context.v1'
+                 WHERE scan_run_id = ? AND instrument_id = ? AND strategy = ?
+                   AND signal_candle_time = ? AND news_context IS NULL
+                """, contextJson, runId, instrumentId, strategy, offset(candleTime));
+    }
+
+    /**
+     * Append the exact MA_RECLAIM input bundle once. A duplicate never edits
+     * earlier custody. This is intentionally not backfilled for old runs.
+     */
+    public void recordMindInputCustody(UUID runId, ScanCandidate candidate,
+                                       String strategyVersion, MindSourceSnapshot snapshot) {
+        if (runId == null || candidate == null || snapshot == null ||
+            !"MA_RECLAIM_V1".equals(candidate.strategy()) ||
+            !candidate.candleTime().equals(snapshot.lastCandleAt()) ||
+            snapshot.candleCount() != MindSourceSnapshot.BARS) {
+            throw new IllegalArgumentException("Invalid frozen Mind source");
+        }
+        persistMindInputCustody(runId, candidate, strategyVersion, snapshot);
+    }
+
+    /** Append the exact 64-bar ORB scanner input for deterministic Mind replay. */
+    public void recordOpeningRangeMindInputCustody(UUID runId, ScanCandidate candidate,
+                                                    String strategyVersion, MindSourceSnapshot snapshot) {
+        if (runId == null || candidate == null || snapshot == null ||
+            !"OPENING_RANGE_BREAKOUT_V1".equals(candidate.strategy()) ||
+            !candidate.candleTime().equals(snapshot.lastCandleAt()) ||
+            snapshot.candleCount() != MindSourceSnapshot.OPENING_RANGE_BARS) {
+            throw new IllegalArgumentException("Invalid frozen opening-range Mind source");
+        }
+        persistMindInputCustody(runId, candidate, strategyVersion, snapshot);
+    }
+
+    private void persistMindInputCustody(UUID runId, ScanCandidate candidate,
+                                         String strategyVersion, MindSourceSnapshot snapshot) {
+        String fingerprint = CandidateFingerprint.of(
+            candidate.instrumentId(), candidate.interval(), candidate.strategy(),
+            strategyVersion, candidate.candleTime(), candidate.referencePrice(),
+            candidate.suggestedStop(), candidate.suggestedTarget());
+        int count = jdbc.update("""
+                INSERT INTO mind_research_input_custody
+                    (scan_run_id, candidate_fingerprint, strategy_code, instrument_id,
+                     catalogue_version, candle_count, input_first_at, input_last_at,
+                     max_fetched_at, source_digest, canonical_input)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+                """, runId, fingerprint, candidate.strategy(), candidate.instrumentId(),
+                snapshot.catalogueVersion(), snapshot.candleCount(),
+                offset(snapshot.firstCandleAt()), offset(snapshot.lastCandleAt()),
+                offset(snapshot.maxFetchedAt()), snapshot.digest(), snapshot.canonicalInput());
+        if (count != 1) throw new IllegalStateException("Duplicate Mind source custody");
+    }
+
+    public record MindInputCustody(String sourceDigest, String canonicalInput,
+                                   Instant capturedAt, Instant inputLastAt,
+                                   Instant maxFetchedAt, UUID catalogueVersion) {}
+
+    public java.util.Optional<MindInputCustody> findMindInputCustody(UUID scanRunId,
+                                                                    String candidateFingerprint) {
+        if (scanRunId == null || candidateFingerprint == null ||
+            !candidateFingerprint.matches("[a-f0-9]{64}")) return java.util.Optional.empty();
+        return jdbc.query("""
+                SELECT source_digest, canonical_input, captured_at, input_last_at,
+                       max_fetched_at, catalogue_version
+                  FROM mind_research_input_custody
+                 WHERE scan_run_id = ? AND candidate_fingerprint = ?
+                """, (rs, row) -> new MindInputCustody(
+                rs.getString("source_digest").trim(), rs.getString("canonical_input"),
+                instant(rs.getObject("captured_at", OffsetDateTime.class)),
+                instant(rs.getObject("input_last_at", OffsetDateTime.class)),
+                instant(rs.getObject("max_fetched_at", OffsetDateTime.class)),
+                rs.getObject("catalogue_version", UUID.class)),
+                scanRunId, candidateFingerprint).stream().findFirst();
+    }
+
+    /** Legacy fixture signature; production code must provide explicit provenance. */
+    @Deprecated
+    public void saveCandidate(UUID runId, ScanCandidate c) {
+        throw new UnsupportedOperationException("candidate provenance is required");
+    }
+
+    public void saveDiagnostic(UUID runId, Long instrumentId, String strategy, String severity, String code, String message) {
+        jdbc.update("""
+                INSERT INTO research_scan_diagnostic
+                    (scan_run_id, instrument_id, strategy, severity, code, message)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, runId, instrumentId, bounded(strategy, 80), bounded(severity, 12), bounded(code, 80), bounded(message, 300));
+    }
+
+    /** Bounded diagnostic read for the read-only Mind evidence ledger. */
+    public List<ResearchScanDiagnostic> recentDiagnostics(UUID runId, int limit) {
+        if (limit < 1 || limit > 30) throw new IllegalArgumentException("limit must be 1..30");
+        return jdbc.query("""
+                SELECT id, scan_run_id, instrument_id, strategy, severity, code, message, created_at
+                  FROM research_scan_diagnostic
+                 WHERE scan_run_id = ?
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?
+                """, (rs, row) -> new ResearchScanDiagnostic(
+                    rs.getLong("id"), rs.getObject("scan_run_id", UUID.class),
+                    (Long) rs.getObject("instrument_id"), rs.getString("strategy"),
+                    rs.getString("severity"), rs.getString("code"), rs.getString("message"),
+                    instant(rs.getObject("created_at", OffsetDateTime.class))), runId, limit);
+    }
+
+    public List<ResearchScanDiagnostic> diagnostics(UUID runId) {
+        requireRun(runId);
+        return jdbc.query("""
+                SELECT id, scan_run_id, instrument_id, strategy, severity, code, message, created_at
+                  FROM research_scan_diagnostic
+                 WHERE scan_run_id = ?
+                 ORDER BY created_at ASC, id ASC
+                """, (rs, row) -> new ResearchScanDiagnostic(
+                rs.getLong("id"), rs.getObject("scan_run_id", UUID.class), (Long) rs.getObject("instrument_id"),
+                rs.getString("strategy"), rs.getString("severity"), rs.getString("code"), rs.getString("message"),
+                instant(rs.getObject("created_at", OffsetDateTime.class))), runId);
+    }
+
+    public List<ResearchScanCandidateView> rankedCandidates(UUID runId, int limit) {
+        requireRun(runId);
+        if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
+        return jdbc.query("""
+                SELECT id, scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
+                       entry_price, stop_price, target_price, signal_candle_time, reasons,
+                       candidate_fingerprint, strategy_config_version, catalogue_version, data_cutoff_at
+                  FROM research_scan_candidate
+                 WHERE scan_run_id = ?
+                 ORDER BY score DESC, trading_symbol ASC, strategy ASC, signal_candle_time DESC
+                 LIMIT ?
+                """, (rs, row) -> new ResearchScanCandidateView(
+                rs.getObject("scan_run_id", UUID.class), rs.getLong("instrument_id"), rs.getString("trading_symbol"),
+                rs.getString("exchange"), rs.getString("interval"), rs.getString("strategy"), rs.getDouble("score"),
+                rs.getBigDecimal("entry_price"), rs.getBigDecimal("stop_price"), rs.getBigDecimal("target_price"),
+                instant(rs.getObject("signal_candle_time", OffsetDateTime.class)), splitReasons(rs.getString("reasons")),
+                rs.getString("candidate_fingerprint"), (Integer) rs.getObject("strategy_config_version"),
+                rs.getObject("catalogue_version", UUID.class),
+                instant(rs.getObject("data_cutoff_at", OffsetDateTime.class)), rs.getLong("id")), runId, limit);
+    }
+
+    /**
+     * Records one strategy outcome for one instrument in one run. Idempotent for a repeated
+     * key; the table is append-only, so an existing outcome is never rewritten.
+     */
+    public void saveOutcome(UUID runId, long instrumentId, String strategy, String outcome,
+                            String reasonCode, Instant dataCutoffAt) {
+        jdbc.update("""
+                INSERT INTO research_scan_outcome(scan_run_id, instrument_id, strategy, outcome, reason_code,
+                    data_cutoff_at, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, now())
+                ON CONFLICT (scan_run_id, instrument_id, strategy) DO NOTHING
+                """, runId, instrumentId, strategy, outcome, reasonCode,
+                dataCutoffAt == null ? null : java.sql.Timestamp.from(dataCutoffAt));
+    }
+
+    public void finishRun(UUID id, int scannedCount, int candidateCount) {
+        completeRun(id, "SUCCEEDED", scannedCount, candidateCount, null, null);
+    }
+
+    public void partialRun(UUID id, int scannedCount, int candidateCount, String code, String message) {
+        completeRun(id, "PARTIAL", scannedCount, candidateCount, code, message);
+    }
+
+    public void failRun(UUID id, int scannedCount, int candidateCount, String code, String message) {
+        completeRun(id, "FAILED", scannedCount, candidateCount, code, message);
+    }
+
+    private void completeRun(UUID id, String status, int scannedCount, int candidateCount, String code, String message) {
+        jdbc.update("""
+                UPDATE research_scan_run
+                   SET status = ?, scanned_count = ?, candidate_count = ?, completed_at = now(),
+                       error_code = ?, error_message = ?
+                 WHERE id = ? AND status = 'RUNNING'
+                """, status, scannedCount, candidateCount, bounded(code, 80), bounded(message, 500), id);
+    }
+
+    /**
+     * Most recent persisted research run, including failures. An older successful
+     * scan must not appear current after a newer partial/failed run.
+     * This read never executes research or exposes instrument/private account data.
+     */
+    public java.util.Optional<ResearchScanSummary> latestCompletedRun() {
+        return jdbc.query("""
+                SELECT id, interval, status, requested_limit, scanned_count, candidate_count,
+                       strategy_set, started_at, completed_at, error_code, error_message
+                  FROM research_scan_run
+                 WHERE completed_at IS NOT NULL AND status IN ('SUCCEEDED', 'PARTIAL', 'FAILED')
+                 ORDER BY completed_at DESC, id DESC
+                 LIMIT 1
+                """, (rs, row) -> new ResearchScanSummary(
+                rs.getObject("id", UUID.class), rs.getString("interval"), rs.getString("status"),
+                rs.getInt("requested_limit"), rs.getInt("scanned_count"),
+                rs.getInt("candidate_count"), rs.getString("strategy_set"),
+                instant(rs.getObject("started_at", OffsetDateTime.class)),
+                instant(rs.getObject("completed_at", OffsetDateTime.class)),
+                rs.getString("error_code"), rs.getString("error_message")))
+                .stream().findFirst();
+    }
+
+    public ResearchScanSummary requireRun(UUID id) {
+        return jdbc.query("SELECT * FROM research_scan_run WHERE id = ?", (rs, row) -> new ResearchScanSummary(
+                rs.getObject("id", UUID.class), rs.getString("interval"), rs.getString("status"),
+                rs.getInt("requested_limit"), rs.getInt("scanned_count"), rs.getInt("candidate_count"),
+                rs.getString("strategy_set"), instant(rs.getObject("started_at", OffsetDateTime.class)),
+                instant(rs.getObject("completed_at", OffsetDateTime.class)), rs.getString("error_code"),
+                rs.getString("error_message")), id).stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Scan run was not found"));
+    }
+
+    private static List<String> splitReasons(String reasons) {
+        if (reasons == null || reasons.isBlank()) return List.of();
+        return Arrays.stream(reasons.split("\\|"))
+                .filter(value -> !value.isBlank())
+                .toList();
+    }
+
+    private static OffsetDateTime offset(Instant value) {
+        return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
+    }
+
+    private static Instant instant(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
+    }
+
+    private static String bounded(String value, int max) {
+        if (value == null) return null;
+        String clean = value.replaceAll("[\\r\\n\\t]", " ").trim();
+        return clean.length() <= max ? clean : clean.substring(0, max);
+    }
+}

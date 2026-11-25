@@ -1,0 +1,18 @@
+{
+  "kind": "minttick-personal-nse-fo-december-crosscheck-v1",
+  "operation": "in-memory-nse-udiff-vs-upstox-private-december-2025",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "period": "2025-12-10_to_2025-12-30",
+  "underlying": "NSE_INDEX|Nifty 50",
+  "max_nse_archive_gets": 15,
+  "max_upstox_metadata_gets": 2,
+  "private_cache_read_only": true,
+  "no_orders": true,
+  "no_persistence": true,
+  "no_data_export": true,
+  "no_auth_bypass": true,
+  "comparison_revision": 5
+}
+

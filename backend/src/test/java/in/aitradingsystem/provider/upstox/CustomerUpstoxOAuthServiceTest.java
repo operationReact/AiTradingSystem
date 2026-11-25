@@ -1,0 +1,323 @@
+package in.aitradingsystem.provider.upstox;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.provider.upstox.UpstoxApiClient.UpstoxProviderException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.Arrays;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+class CustomerUpstoxOAuthServiceTest {
+    private final UpstoxProperties properties = new UpstoxProperties(
+        "platform-app-id", "server-only-secret",
+        "https://account.example.test/api/customer/brokers/upstox/callback");
+    private final UpstoxApiClient api = mock(UpstoxApiClient.class);
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    private CustomerUpstoxOAuthService service() {
+        return new CustomerUpstoxOAuthService(properties, api,
+            Clock.fixed(Instant.parse("2026-11-07T08:00:00Z"), ZoneOffset.UTC));
+    }
+
+    private static String state(String authorizationUrl) {
+        String query = URI.create(authorizationUrl).getRawQuery();
+        return Arrays.stream(query.split("&"))
+            .map(item -> item.split("=", 2))
+            .filter(parts -> "state".equals(parts[0]))
+            .map(parts -> URLDecoder.decode(parts[1], StandardCharsets.UTF_8))
+            .findFirst().orElseThrow();
+    }
+
+    @Test
+    void oauthStateSurvivesFourteenMinutesButExpiresAfterFifteen() throws Exception {
+        AtomicReference<Instant> now = new AtomicReference<>(
+            Instant.parse("2026-11-07T08:00:00Z"));
+        Clock clock = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                if (zone.equals(ZoneOffset.UTC)) return this;
+                throw new UnsupportedOperationException();
+            }
+            @Override public Instant instant() { return now.get(); }
+        };
+        var service = new CustomerUpstoxOAuthService(properties, api, clock);
+        UUID alice = UUID.randomUUID();
+        String first = state(service.start(alice).authorizationUrl());
+        when(api.exchangeCode(properties, "fresh-code"))
+            .thenReturn(mapper.readTree(
+                "{\"access_token\":\"opaque\",\"broker\":\"UPSTOX\","
+                + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        now.set(now.get().plusSeconds(14 * 60));
+        service.complete(first, "fresh-code");
+        assertThat(service.status(alice).connected()).isTrue();
+
+        String expired = state(service.start(alice).authorizationUrl());
+        now.set(now.get().plusSeconds(16 * 60));
+        assertThatThrownBy(() -> service.complete(expired, "stale-code"))
+            .isInstanceOf(UpstoxProviderException.class)
+            .hasMessageContaining("UPSTOX_OAUTH_STATE_INVALID");
+        verify(api, never()).exchangeCode(properties, "stale-code");
+    }
+
+    @Test
+    void oauthCompletesOnlyForStartingCustomerAndNeverExposesBrokerToken() throws Exception {
+        UUID alice = UUID.randomUUID(), bob = UUID.randomUUID();
+        var service = service();
+        var start = service.start(alice);
+        assertThat(start.authorizationUrl()).startsWith(
+            "https://api.upstox.com/v2/login/authorization/dialog?");
+        assertThat(start.authorizationUrl()).contains("response_type=code");
+        assertThat(start.authorizationUrl()).doesNotContain("server-only-secret");
+        when(api.exchangeCode(properties, "one-use-code"))
+            .thenReturn(mapper.readTree("{\"access_token\":\"upstox-bearer-secret\"}"));
+        when(api.profile("upstox-bearer-secret"))
+            .thenReturn(mapper.readTree(
+                "{\"broker\":\"UPSTOX\",\"user_id\":\"AB123456\",\"is_active\":true}"));
+        when(api.funds("upstox-bearer-secret"))
+            .thenReturn(mapper.readTree("{\"equity\":{\"available_margin\":1250}}"));
+
+        service.complete(state(start.authorizationUrl()), "one-use-code");
+        assertThat(service.status(alice).connected()).isTrue();
+        assertThat(service.status(alice).orderExecutionEnabled()).isFalse();
+        assertThat(service.status(alice).accountMasked()).isEqualTo("***456");
+        assertThat(service.status(alice).toString()).doesNotContain("upstox-bearer-secret");
+        assertThat(service.status(bob).connected()).isFalse();
+        assertThatThrownBy(() -> service.funds(bob)).isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.funds(alice).data().path("equity").path("available_margin").asInt())
+            .isEqualTo(1250);
+        assertThat(service.status(alice).expiresAt())
+            .isEqualTo(Instant.parse("2026-11-07T22:00:00Z"));
+
+        // Replayed callback is always rejected; it cannot reset a session.
+        assertThatThrownBy(() -> service.complete(state(start.authorizationUrl()), "one-use-code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        verify(api, times(1)).exchangeCode(properties, "one-use-code");
+
+        service.disconnect(alice);
+        assertThat(service.status(alice).connected()).isFalse();
+    }
+
+    @Test
+    void documentedUpstoxTokenResponseCompletesWithoutExtraProfileCall() throws Exception {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String challenge = state(service.start(customer).authorizationUrl());
+        when(api.exchangeCode(properties, "one-use-code"))
+            .thenReturn(mapper.readTree(
+                "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\","
+                + "\"is_active\":true,\"access_token\":\"upstox-private-token\"}"));
+
+        service.complete(challenge, "one-use-code");
+        var status = service.status(customer);
+        assertThat(status.connected()).isTrue();
+        assertThat(status.accountMasked()).isEqualTo("***456");
+        assertThat(status.orderExecutionEnabled()).isFalse();
+        assertThat(status.lastAuthError()).isNull();
+        verify(api, never()).profile(anyString());
+        assertThat(status.toString()).doesNotContain("upstox-private-token");
+    }
+
+    @Test
+    void tokenOnlyResponseReadsNestedUpstoxProfileData() throws Exception {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String challenge = state(service.start(customer).authorizationUrl());
+        when(api.exchangeCode(properties, "one-use-code"))
+            .thenReturn(mapper.readTree("{\"access_token\":\"session-secret\"}"));
+        when(api.profile("session-secret")).thenReturn(mapper.readTree(
+            "{\"status\":\"success\",\"data\":{\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}}"));
+
+        service.complete(challenge, "one-use-code");
+        assertThat(service.status(customer).connected()).isTrue();
+        assertThat(service.status(customer).accountMasked()).isEqualTo("***456");
+        verify(api, times(1)).profile("session-secret");
+    }
+
+    @Test
+    void inactiveTokenProfileIsRejectedWithoutUnnecessaryProviderRequest() throws Exception {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String challenge = state(service.start(customer).authorizationUrl());
+        when(api.exchangeCode(properties, "one-use-code")).thenReturn(mapper.readTree(
+            "{\"access_token\":\"session-secret\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":false}"));
+
+        assertThatThrownBy(() -> service.complete(challenge, "one-use-code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(customer).connected()).isFalse();
+        assertThat(service.status(customer).lastAuthError())
+            .isEqualTo("UPSTOX_PROFILE_REJECTED");
+        verify(api, never()).profile(anyString());
+    }
+
+    @Test
+    void invalidStateCannotExchangeTokenAndDeclinedProfileCannotConnect() throws Exception {
+        var service = service();
+        UUID customer = UUID.randomUUID();
+        assertThatThrownBy(() -> service.complete("tampered", "code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        verifyNoInteractions(api);
+        var start = service.start(customer);
+        when(api.exchangeCode(properties, "code"))
+            .thenReturn(mapper.readTree("{\"access_token\":\"jwt\"}"));
+        when(api.profile("jwt"))
+            .thenReturn(mapper.readTree(
+                "{\"broker\":\"UPSTOX\",\"user_id\":\"A12345\",\"is_active\":false}"));
+        assertThatThrownBy(() -> service.complete(state(start.authorizationUrl()), "code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(customer).connected()).isFalse();
+    }
+
+    @Test
+    void failedOAuthExchangeIsBoundToInitiatingCustomerOnlyAndClearsOnRetry() {
+        var service = service();
+        UUID alice = UUID.randomUUID(), bob = UUID.randomUUID();
+        String state = state(service.start(alice).authorizationUrl());
+        when(api.exchangeCode(properties, "bad-code"))
+            .thenThrow(new UpstoxProviderException("UPSTOX_OAUTH_APP_CREDENTIALS_INVALID"));
+        assertThatThrownBy(() -> service.complete(state, "bad-code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(alice).lastAuthError())
+            .isEqualTo("UPSTOX_OAUTH_APP_CREDENTIALS_INVALID");
+        assertThat(service.status(bob).lastAuthError()).isNull();
+        assertThat(service.status(alice).connected()).isFalse();
+        assertThat(service.status(alice).toString())
+            .doesNotContain("bad-code");
+        assertThatThrownBy(() -> service.complete(state, "bad-code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        verify(api, times(1)).exchangeCode(properties, "bad-code");
+        service.start(alice);
+        assertThat(service.status(alice).lastAuthError()).isNull();
+    }
+
+    @Test
+    void declinedOAuthAndUnknownProviderErrorsAreSafeAndDisconnectClearsFailure() {
+        var service = service();
+        UUID alice = UUID.randomUUID();
+        String state = state(service.start(alice).authorizationUrl());
+        assertThatThrownBy(() -> service.complete(state, null))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(alice).lastAuthError()).isEqualTo("UPSTOX_AUTH_DECLINED");
+        String next = state(service.start(alice).authorizationUrl());
+        when(api.exchangeCode(properties, "unknown"))
+            .thenThrow(new UpstoxProviderException("secret-value-never-returned"));
+        assertThatThrownBy(() -> service.complete(next, "unknown"))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(alice).lastAuthError()).isEqualTo("UPSTOX_AUTH_FAILED");
+        service.disconnect(alice);
+        assertThat(service.status(alice).lastAuthError()).isNull();
+    }
+
+    @Test
+    void tokenExchangeParserDistinguishesOnlyDocumentedCodesWithoutProviderSecrets() {
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100069\",\"message\":\"secret\"}]}"))
+            .isEqualTo("UPSTOX_OAUTH_APP_CREDENTIALS_INVALID");
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure(
+            "{\"errors\":[{\"error_code\":\"UDAPI100070\"}]}"))
+            .isEqualTo("UPSTOX_OAUTH_REDIRECT_REJECTED");
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100057\"}]}"))
+            .isEqualTo("UPSTOX_AUTH_CODE_INVALID");
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100058\"}]}"))
+            .isEqualTo("UPSTOX_ACCOUNT_SEGMENTS_INACTIVE");
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure(
+            "{\"errors\":[{\"errorCode\":\"OTHER\",\"message\":\"broker credential\"}]}"))
+            .isEqualTo("UPSTOX_AUTH_FAILED");
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure("not json"))
+            .isEqualTo("UPSTOX_AUTH_FAILED");
+        assertThat(UpstoxApiClient.classifyOAuthExchangeFailure("x".repeat(4097)))
+            .isEqualTo("UPSTOX_AUTH_FAILED");
+    }
+
+    @Test
+    void unconfiguredPlatformCannotStartOAuthAndInvalidCallbackIsRejected() {
+        var missing = new UpstoxProperties("", "", "");
+        var service = new CustomerUpstoxOAuthService(missing, api,
+            Clock.fixed(Instant.parse("2026-11-07T08:00:00Z"), ZoneOffset.UTC));
+        assertThat(service.status(UUID.randomUUID()).available()).isFalse();
+        assertThatThrownBy(() -> service.start(UUID.randomUUID()))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThatThrownBy(() -> new UpstoxProperties("app", "secret",
+            "http://localhost:8080/api/customer/brokers/upstox/callback"))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void verifiedOwnerProfileReportsOnlyNfoEntitlementNotTradingApproval() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\","
+            + "\"is_active\":true,\"exchanges\":[\"NSE\",\"NFO\"],"
+            + "\"products\":[\"D\",\"I\"],\"order_types\":[\"LIMIT\",\"MARKET\"]}"));
+        var result = service.fnoEntitlement(owner);
+        assertThat(result.supportsLongOptionLimits()).isTrue();
+        assertThat(result.nfoEnabled()).isTrue();
+        assertThat(result.status()).isEqualTo("UPSTOX_NFO_PROFILE_VERIFIED");
+        assertThat(service.status(owner).orderExecutionEnabled()).isFalse();
+        assertThat(result.toString()).doesNotContain("private-token");
+        verify(api, times(1)).profile("private-token");
+    }
+
+    @Test
+    void missingNfoOrMismatchedOwnerCannotClaimSegmentPermission() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\",\"is_active\":true,"
+            + "\"exchanges\":[\"NSE\"],\"products\":[\"D\"],\"order_types\":[\"LIMIT\"]}"));
+        assertThat(service.fnoEntitlement(owner).supportsLongOptionLimits()).isFalse();
+        assertThat(service.fnoEntitlement(owner).status()).isEqualTo("UPSTOX_NFO_NOT_ENABLED");
+        when(api.profile("private-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"OTHER\",\"is_active\":true,"
+            + "\"exchanges\":[\"NFO\"],\"products\":[\"I\"],\"order_types\":[\"LIMIT\"]}"));
+        assertThat(service.fnoEntitlement(owner).status()).isEqualTo("UPSTOX_PROFILE_UNVERIFIED");
+        assertThat(service.fnoEntitlement(UUID.randomUUID()).connected()).isFalse();
+    }
+
+    @Test
+    void expiredBrokerProfileRevokesSessionAndFailCloses() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-token"))
+            .thenThrow(new UpstoxProviderException("UPSTOX_SESSION_EXPIRED"));
+        assertThat(service.fnoEntitlement(owner).supportsLongOptionLimits()).isFalse();
+        assertThat(service.status(owner).connected()).isFalse();
+    }
+
+    @Test
+    void newOAuthAttemptInvalidatesAnOlderPendingState() {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String older = state(service.start(customer).authorizationUrl());
+        String newer = state(service.start(customer).authorizationUrl());
+        assertThat(older).isNotEqualTo(newer);
+        assertThatThrownBy(() -> service.complete(older, "code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(customer).connected()).isFalse();
+        verifyNoInteractions(api);
+    }
+}

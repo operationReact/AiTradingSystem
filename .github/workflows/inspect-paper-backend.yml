@@ -1,0 +1,54 @@
+name: Inspect PAPER backend runtime
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/backend-diagnostics.request'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  inspect:
+    name: Read-only ECS and ALB diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: github-paper-diagnostics-${{ github.run_id }}
+          allowed-account-ids: '816344830716'
+          action-timeout-s: 120
+      - name: Inspect backend service and target health
+        run: |
+          set -euo pipefail
+          echo '=== ECS service ==='
+          aws ecs describe-services \
+            --cluster ai-trading-system \
+            --services ai-trading-system-backend \
+            --query 'services[0].{status:status,desired:desiredCount,running:runningCount,pending:pendingCount,taskDefinition:taskDefinition,deployments:deployments[*].{status:status,rolloutState:rolloutState,desired:desiredCount,running:runningCount,pending:pendingCount,failed:failedTasks,taskDefinition:taskDefinition},events:events[0:12].[createdAt,message]}' \
+            --output json
+          echo '=== Running tasks ==='
+          RUNNING="$(aws ecs list-tasks --cluster ai-trading-system --service-name ai-trading-system-backend --desired-status RUNNING --query 'taskArns' --output text)"
+          if [ -n "$RUNNING" ] && [ "$RUNNING" != "None" ]; then
+            aws ecs describe-tasks --cluster ai-trading-system --tasks $RUNNING --query 'tasks[*].{taskArn:taskArn,lastStatus:lastStatus,healthStatus:healthStatus,taskDefinitionArn:taskDefinitionArn,stoppedReason:stoppedReason,containers:containers[*].{name:name,lastStatus:lastStatus,healthStatus:healthStatus,reason:reason,exitCode:exitCode}}' --output json
+          else
+            echo 'No running backend tasks.'
+          fi
+          echo '=== Recently stopped tasks ==='
+          STOPPED="$(aws ecs list-tasks --cluster ai-trading-system --service-name ai-trading-system-backend --desired-status STOPPED --query 'taskArns[0:5]' --output text)"
+          if [ -n "$STOPPED" ] && [ "$STOPPED" != "None" ]; then
+            aws ecs describe-tasks --cluster ai-trading-system --tasks $STOPPED --query 'tasks[*].{taskArn:taskArn,stoppedAt:stoppedAt,stoppedReason:stoppedReason,stopCode:stopCode,taskDefinitionArn:taskDefinitionArn,containers:containers[*].{name:name,lastStatus:lastStatus,reason:reason,exitCode:exitCode}}' --output json
+          else
+            echo 'No recently stopped backend tasks.'
+          fi
+          echo '=== ALB target health ==='
+          TG_ARN="$(aws elbv2 describe-target-groups --names aitrading-api --query 'TargetGroups[0].TargetGroupArn' --output text)"
+          aws elbv2 describe-target-health --target-group-arn "$TG_ARN" --query 'TargetHealthDescriptions[*].{target:Target.Id,port:Target.Port,state:TargetHealth.State,reason:TargetHealth.Reason,description:TargetHealth.Description}' --output json

@@ -1,0 +1,75 @@
+name: MintTick web publisher OIDC identity read-only diagnostic (one-shot)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-web-publisher-oidc-claim-check-once.yml'
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  compare-exact-identity:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard one-shot file addition
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/minttick-web-publisher-oidc-claim-check-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Classify real GitHub OIDC claims, never print JWT
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+          from urllib.request import Request, urlopen
+
+          request_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL','')
+          request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN','')
+          if not request_url.startswith('https://') or not request_token:
+              raise SystemExit('WEB_OIDC_DIAG:REQUEST_ENV_MISSING')
+          parsed = urlparse(request_url)
+          options = dict(parse_qsl(parsed.query, keep_blank_values=True))
+          options['audience'] = 'sts.amazonaws.com'
+          url = urlunparse(parsed._replace(query=urlencode(options)))
+          req = Request(url, headers={'Authorization':'Bearer '+request_token,
+                                      'Accept':'application/json'})
+          with urlopen(req, timeout=9) as res:
+              body = res.read(20001)
+          if len(body)>20000:
+              raise SystemExit('WEB_OIDC_DIAG:RESPONSE_TOO_LARGE')
+          access = json.loads(body)
+          jwt = access.get('value','')
+          if not isinstance(jwt,str) or len(jwt)>18000:
+              raise SystemExit('WEB_OIDC_DIAG:JWT_SHAPE_INVALID')
+          pieces = jwt.split('.')
+          if len(pieces)!=3:
+              raise SystemExit('WEB_OIDC_DIAG:JWT_SEGMENTS_INVALID')
+          claims = json.loads(base64.urlsafe_b64decode(pieces[1] + '=' * (-len(pieces[1])%4)))
+          # Only classification bits. Do not print the token or claims.
+          actual = claims.get('sub','')
+          cfn_expected = 'repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev'
+          standard = 'repo:operationReact/AiTradingSystem:ref:refs/heads/dev'
+          style = ('CFN_IMMUTABLE_BRANCH' if actual==cfn_expected
+                   else 'STANDARD_NAME_BRANCH' if actual==standard
+                   else 'OTHER_NONMATCHING_SUB')
+          print('WEB_OIDC_CFN_SUB_MATCH:' + str(actual==cfn_expected).upper())
+          print('WEB_OIDC_SUB_STYLE:' + style)
+          print('WEB_OIDC_AUD_MATCH:' + str(claims.get('aud')=='sts.amazonaws.com').upper())
+          print('WEB_OIDC_REPO_MATCH:' + str(claims.get('repository')=='operationReact/AiTradingSystem').upper())
+          print('WEB_OIDC_REPO_ID_MATCH:' + str(str(claims.get('repository_id'))=='1433875172').upper())
+          print('WEB_OIDC_OWNER_ID_MATCH:' + str(str(claims.get('repository_owner_id'))=='215111824').upper())
+          print('WEB_OIDC_REF_MATCH:' + str(claims.get('ref')=='refs/heads/dev').upper())
+          print('WEB_OIDC_AWS_CALLS:ZERO')
+          PY

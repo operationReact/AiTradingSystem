@@ -1,0 +1,106 @@
+name: MintTick PAPER - bounded expired F&O history source probe
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-expired-history-source-probe.yml'
+      - 'infra/ec2-paper/fno_expired_history_probe.py'
+      - 'scripts/tests/test_fno_expired_history_probe.py'
+      - 'infra/ec2-paper/fno_expired_history_receipt.py'
+      - 'scripts/tests/test_fno_expired_history_receipt.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-expired-history-probe.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify read-only source boundary and offline regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_expired_history_probe.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_expired_history_probe.py -v
+          python3 -m py_compile infra/ec2-paper/fno_expired_history_receipt.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_expired_history_receipt.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/fno_expired_history_probe.py').read_text()
+          assert 6000 < len(p) < 18000
+          assert 'https://api.upstox.com/v2/expired-instruments' in p
+          assert '"max_provider_gets": 3' in p
+          assert '"persist": False' in p
+          for forbidden in ('placeOrder', 'submitOrder', 'TRADING_MODE=LIVE',
+                            'UPDATE customer_', 'DELETE FROM', 'print(token)',
+                            'print(result.stdout)', 'put-parameter'):
+              assert forbidden not in p, forbidden
+          PY
+
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact approved single-file history source audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-expired-history-probe.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_expired_history_probe import expected_request
+          p=Path('infra/ec2-paper/requests/fno-expired-history-probe.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-fno-expired-readonly
+          role-duration-seconds: 900
+      - name: Query exact host Upstox Plus historical source without storage
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_expired_history_probe.py runner > "$RUNNER_TEMP/fno-expired-probe-output.txt" 2>&1
+
+      - name: Publish only whitelisted receipt to F&O recovery issue
+        if: ${{ always() && github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_expired_history_receipt.py \
+            "$RUNNER_TEMP/fno-expired-probe-output.txt"
+
+# No trading rights, order execution, market-data storage, Redis, customer
+# market-data routes, EC2 creation or additional paid AWS infrastructure.

@@ -1,0 +1,160 @@
+name: MintTick F&O - private December source replay verification
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-december-source-replay.yml'
+      - 'infra/ec2-paper/fno_dec_2025_private_replay.py'
+      - 'scripts/tests/test_fno_dec_2025_private_replay.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-december-source-replay.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded private source replay behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_dec_2025_private_replay.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_dec_2025_private_replay.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_dec_2025_private_replay.py').read_text()
+          assert 'MAX_CONTRACTS=23' in src
+          assert 'PRAGMA query_only=ON' in src
+          assert 'UpstoxExpiredCandles' in src
+          assert 'time.sleep(2.5)' in src
+          assert 'candidateMatchesProvider' in src
+          for forbidden in ('placeOrder','submitOrder','put-parameter','DELETE FROM',
+                            'UPDATE fno_','INSERT INTO'):
+              assert forbidden not in src, forbidden
+          PY
+
+  replay:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Exact authorized request and fixed research-only scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-december-source-replay.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('infra/ec2-paper/requests/fno-december-source-replay.json')
+          expected={
+            "kind":"minttick-owner-private-fno-dec-replay-v1",
+            "operation":"read-only-provider-source-match",
+            "account":"098859530205",
+            "region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "owner_permission_expires":"2026-11-28",
+            "max_gets":23,
+            "expiry":"2025-12",
+            "no_orders":True,
+            "no_redistribution":True,
+            "cache_read_only":True
+          }
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())==expected
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-december-replay
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Compare private December cache to the live permitted provider response
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from verify_ssm_release import verify_aws
+          from fno_private_bulk_ops import _aws, INSTANCE
+          verify_aws()
+          src=Path('infra/ec2-paper/fno_dec_2025_private_replay.py').read_bytes()
+          assert 4000<len(src)<16000
+          digest=hashlib.sha256(src).hexdigest()
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch('[0-9a-f]{40}',commit)
+          url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+commit+'/infra/ec2-paper/fno_dec_2025_private_replay.py'
+          shell=("set -eu\numask 077\n"
+                 "tmp=$(mktemp /tmp/minttick-fno-private-replay.XXXXXX)\n"
+                 "trap 'rm -f \"$tmp\"' EXIT\n"
+                 "curl --fail --silent --show-error --max-time 25 --proto '=https' "
+                 "--tlsv1.2 -o \"$tmp\" '"+url+"'\n"
+                 "printf '%s  %s\\n' '"+digest+"' \"$tmp\" | sha256sum -c - >/dev/null\n"
+                 "PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 \"$tmp\"\n")
+          sent=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                    '--instance-ids',INSTANCE,'--timeout-seconds','660',
+                    '--comment','MintTick owner-private December source provenance check',
+                    '--parameters',json.dumps({'commands':[shell]}))
+          cid=(sent.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_REPLAY_COMMAND_INVALID')
+          for attempt in range(130):
+              time.sleep(5)
+              result=_aws('ssm','get-command-invocation','--command-id',cid,
+                          '--instance-id',INSTANCE)
+              state=result.get('Status')
+              if state in ('Success','Failed','TimedOut','Cancelled'):
+                  if state!='Success':
+                      raise SystemExit('FNO_REPLAY_ON_HOST_FAILED')
+                  raw=result.get('StandardOutputContent') or ''
+                  lines=[line[len('MINTTICK_FNO_REPLAY_V1:'):] for line in raw.splitlines()
+                         if line.startswith('MINTTICK_FNO_REPLAY_V1:')]
+                  if len(lines)!=1 or len(lines[0])>1500:
+                      raise SystemExit('FNO_REPLAY_INVALID_RECEIPT')
+                  report=json.loads(lines[0])
+                  allowed={
+                    'providerRequests','providerErrors','sourceContractsChecked',
+                    'savedMidnightRows','saved0915Rows','matchedMidnightValues',
+                    'matched0915Values','sourceMultiRowDays','sourceMissingSavedDays',
+                    'providerMidnightOnlyDays','provider0915OnlyDays',
+                    'badSourceRows','badSavedRows','candidateMatchesProvider'
+                  }
+                  if set(report)!=allowed or any(
+                      type(v) is not int or not 0<=v<=10000 for v in report.values()):
+                      raise SystemExit('FNO_REPLAY_NOT_AGGREGATE_ONLY')
+                  print('FNO DECEMBER SOURCE REPLAY: '+'; '.join(
+                      f'{key}={report[key]}' for key in sorted(report)),flush=True)
+                  if report['providerErrors'] or report['sourceContractsChecked']!=23:
+                      raise SystemExit('FNO_REPLAY_SOURCE_UNVERIFIED')
+                  break
+              if state not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_REPLAY_BAD_SSM_STATE')
+          else:
+              raise SystemExit('FNO_REPLAY_SSM_TIMEOUT')
+          PY
+
+# Single-owner approved research only. No trading or market-data export.
+# Provider reads capped at 23 GETs; private cache is opened read-only.

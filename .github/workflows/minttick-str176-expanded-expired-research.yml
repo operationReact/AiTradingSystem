@@ -1,0 +1,89 @@
+name: MintTick STR176 authenticated 90-day expired futures research (NO ORDERS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-expanded-expired-research.yml'
+      - 'infra/ec2-paper/str176_expanded_upstox_research.py'
+      - 'scripts/tests/test_str176_expanded_upstox_research.py'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/str176-expanded-upstox-readonly.json'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test all 49 original-source GET contracts offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/str176_expanded_upstox_research.py
+          python3 -m unittest discover -s scripts/tests \
+            -p 'test_str176_expanded_upstox_research.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/str176_expanded_upstox_research.py').read_text()
+          for x in ('MAX_FUTURES=12','SOURCE_DAYS=90','PER_GET_DAYS=30',
+                    'max_provider_gets','independentHistoricalE2ECertified',
+                    'authenticSourceOriginalFirstPublishedAtVerified',
+                    'no_db_writes','no_orders',
+                    'AUTHENTICATED_RECEIVED_NOW_NOT_HISTORICAL_FIRST_KNOWN',
+                    'COST_BPS'):
+              if x=='COST_BPS': continue
+              assert x in s,x
+          for x in ('placeOrder(', 'submitOrder(', 'put-parameter',
+                    'INSERT INTO', 'DELETE FROM', 'UPDATE fno_',
+                    'start-instances','stop-instances','docker compose down'):
+              assert x not in s,x
+          PY
+  host-proof:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Strict exact one-file request and no-order approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+            'infra/ec2-paper/requests/str176-expanded-upstox-readonly.json'
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,sys
+          sys.path.insert(0,'infra/ec2-paper')
+          from str176_expanded_upstox_research import EXACT
+          p=Path('infra/ec2-paper/requests/str176-expanded-upstox-readonly.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())==EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-str176-90day-personal-readonly
+      - name: Run exact owner-private 90-day futures expanded source research
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/str176_expanded_upstox_research.py runner
+# Maximum 49 authenticated Upstox GETs (1 expiries+12 contracts+36 candles).
+# No host data writes, market payload exports, orders or certification claims.

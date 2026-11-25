@@ -1,0 +1,109 @@
+name: EC2 PAPER Mumbai read-only AWS OIDC + S3 state preflight
+
+on:
+  # Default GitHub branch is main, while dev is the only trusted OIDC subject.
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/read-only-preflight.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-ec2-paper-aws-readonly-preflight
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      AWS_REGION: ap-south-1
+      AWS_ACCOUNT: "098859530205"
+      STATE_BUCKET: aitrading-paper-tfstate-098859530205-ap-south-1
+      STATE_BUCKET_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate exact dev-only audited read request BEFORE OIDC
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$AWS_ACCOUNT" = "098859530205"
+          python3 infra/ec2-paper/verify_preflight_request.py \
+            infra/ec2-paper/requests/read-only-preflight.json
+          echo "Read-only AWS inspection, NO provisioning"
+
+      - name: Validate actual GitHub OIDC claims without printing JWT
+        run: python3 infra/ec2-paper/verify_oidc_claims.py
+
+      - name: Obtain short-lived, read-only dev-branch GitHub OIDC credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-preflight
+          aws-region: ap-south-1
+          role-session-name: paper-ec2-inspect-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Verify exact account and secure Terraform backend
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          # The uploaded CloudFormation template created this S3 bucket in
+          # the STACK region us-east-1, despite its historical ap-south-1 name.
+          # For us-east-1 S3 returns JSON null LocationConstraint.
+          test "$STATE_BUCKET_REGION" = "us-east-1"
+          aws s3api get-bucket-location --bucket "$STATE_BUCKET" \
+            --region "$STATE_BUCKET_REGION" --output json > "$RUNNER_TEMP/paper-bucket-location.json"
+          python3 - "$RUNNER_TEMP/paper-bucket-location.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1], encoding="utf-8") as f:
+              location=json.load(f).get("LocationConstraint")
+          if location is not None:
+              raise SystemExit("State bucket is not in existing us-east-1 stack region")
+          print("Existing state bucket in us-east-1; EC2 target stays ap-south-1")
+          PY
+          test "$(aws s3api get-bucket-versioning --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" --query Status --output text)" = "Enabled"
+          test "$(aws s3api get-bucket-encryption --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" \
+            --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' --output text)" = "AES256"
+          test "$(aws s3api get-bucket-ownership-controls --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" \
+            --query 'OwnershipControls.Rules[0].ObjectOwnership' --output text)" = "BucketOwnerEnforced"
+          aws s3api get-public-access-block --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" \
+            --query PublicAccessBlockConfiguration --output json > "$RUNNER_TEMP/paper-bucket-public-access.json"
+          python3 - "$RUNNER_TEMP/paper-bucket-public-access.json" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as f:
+              block = json.load(f)
+          if not isinstance(block, dict) or any(
+              block.get(name) is not True for name in (
+                  "BlockPublicAcls", "IgnorePublicAcls",
+                  "BlockPublicPolicy", "RestrictPublicBuckets"
+              )
+          ):
+              raise SystemExit("Terraform state public access guard FAILED")
+          print("S3 backend versioning, ownership, encryption and full public block VERIFIED")
+          PY
+
+      - name: Inspect ARM64 type offering and current PAPER host inventory
+        run: |
+          set -euo pipefail
+          available="$(aws ec2 describe-instance-type-offerings \
+            --location-type region \
+            --filters Name=instance-type,Values=t4g.medium Name=location,Values=ap-south-1 \
+            --query 'length(InstanceTypeOfferings)' --output text)"
+          test "$available" != "0" || { echo "::error::t4g.medium not currently offered"; exit 1; }
+          inventory="$(aws ec2 describe-instances \
+            --filters Name=tag:Application,Values=ai-trading-system \
+                      Name=tag:Environment,Values=paper \
+            --query 'length(Reservations)' --output text)"
+          echo "ARM64 t4g.medium offered in Mumbai; existing tagged PAPER reservations: $inventory"
+          echo "No EC2 instance, IAM resource, S3 state object, Scheduler or broker order created"
+
+# No EC2 writes, Terraform apply, IAM writes, SSH keys, or LIVE execution.

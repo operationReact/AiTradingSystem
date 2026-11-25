@@ -1,0 +1,9 @@
+{
+  "kind": "minttick-owner-manual-upstox-fno-live-activation-v1",
+  "operation": "activate-confirmed-one-lot-live-upstox-order-policy",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "expected_backend_release": "1c2bfae773f7ffb10c6c0a0c3406564e6f9962d5",
+  "authorization": "OWNER_EXPLICITLY_REQUESTED_LIVE_EXECUTION_2026_11_25"
+}

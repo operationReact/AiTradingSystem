@@ -1,0 +1,737 @@
+package in.aitradingsystem.provider.upstox;
+
+import jakarta.annotation.PreDestroy;
+import java.io.ByteArrayOutputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Service;
+
+/**
+ * One opt-in, read-only Upstox F&O V3 websocket pilot. Starts only after an
+ * authenticated operator action and never connects during application startup.
+ * No executions, persistence, public prices, training use or user OAuth.
+ */
+@Service
+@ConditionalOnProperty(name = "minttick.upstox-fno.v3-feed-enabled", havingValue = "true")
+public class UpstoxFnoV3LiveFeedService {
+    // Conservative same-connection cap. Provider's standard Full limit is
+    // higher, but account-level quotas must be verified before further scaling.
+    static final int MAX_SUBSCRIPTIONS = 256;
+    static final int MAX_PLUS_FULL_ONLY_PER_SOCKET = 1500;
+    static final int MAX_INITIAL_SUBSCRIPTIONS = 64;
+    static final int MAX_INCREMENTAL_KEYS = 64;
+    static final int MAX_FRAGMENT_BYTES = 1024 * 1024;
+    private static final int MAX_RECONNECTS = 5;
+
+    interface Dialer {
+        CompletableFuture<WebSocket> connect(URI authorizedOneUseUri, WebSocket.Listener listener);
+    }
+
+    public record Status(String state, int subscriptions, int observedInstruments,
+                         long decodedFrames, long discardedFrames,
+                         Instant lastFrameObservedAt, Instant latestExchangeTradeAt,
+                         int reconnectAttempt, boolean providerTradeTimeAvailable,
+                         boolean displayRightsVerified, boolean trainingRightsVerified,
+                         boolean liveTradingEnabled,
+                         int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt) {}
+
+    /** Internal-only snapshot; never a broker-authoritative order quote. */
+    record Observation(UpstoxFnoV3FeedCodec.Tick tick, Instant observedAt) {}
+
+    private final UpstoxAnalyticsSource source;
+    private final int subscriptionLimit;
+    private volatile ObjectProvider<UpstoxFnoPlusMultiSocketPool> supplementaryPoolProvider;
+
+    @Autowired(required = false)
+    public void setSupplementaryPoolProvider(
+            ObjectProvider<UpstoxFnoPlusMultiSocketPool> provider) {
+        this.supplementaryPoolProvider = provider;
+    }
+
+    private UpstoxFnoPlusMultiSocketPool supplementaryPool() {
+        var provider = supplementaryPoolProvider;
+        return provider == null ? null : provider.getIfAvailable();
+    }
+    private final Clock clock;
+    private final Dialer dialer;
+    private final ScheduledExecutorService reconnects;
+    private final Map<String, Observation> latest = new ConcurrentHashMap<>();
+
+    private volatile String state = "STOPPED";
+    private volatile Set<String> subscribed = Set.of();
+    private volatile Set<String> spotSubscribed = Set.of();
+    private volatile WebSocket socket;
+    private volatile long decodedFrames;
+    private volatile long discardedFrames;
+    private volatile Instant lastFrameAt;
+    private volatile Instant lastTradeAt;
+    private volatile int retryCount;
+    private volatile boolean wanted;
+    private volatile boolean destroyed;
+    private volatile boolean retryScheduled;
+    private volatile long connectionAttemptId;
+
+    /** Preserve the legacy private-service constructor for offline operators. */
+    public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source) {
+        this(source, false);
+    }
+
+    @Autowired
+    public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source,
+            @Value("${minttick.upstox-fno.plus-full-capacity-verified:false}")
+            boolean verifiedPlusFullCapacity) {
+        this(source, Clock.systemUTC(),
+                (uri, listener) -> HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .build().newWebSocketBuilder()
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .buildAsync(uri, listener),
+                Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "minttick-upstox-fno-stream-reconnect");
+                    t.setDaemon(true);
+                    return t;
+                }), verifiedPlusFullCapacity);
+    }
+
+    UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source, Clock clock,
+                                Dialer dialer, ScheduledExecutorService reconnects) {
+        this(source, clock, dialer, reconnects, false);
+    }
+
+    UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source, Clock clock,
+            Dialer dialer, ScheduledExecutorService reconnects,
+            boolean verifiedPlusFullCapacity) {
+        this.source = source;
+        this.subscriptionLimit = verifiedPlusFullCapacity
+            ? MAX_PLUS_FULL_ONLY_PER_SOCKET : MAX_SUBSCRIPTIONS;
+        this.clock = clock;
+        this.dialer = dialer;
+        this.reconnects = reconnects;
+    }
+
+    /**
+     * The admin controller must first verify these contract keys against the
+     * provider's active expiry; no arbitrary untrusted instrument is subscribed.
+     */
+    public synchronized Status start(List<String> keys) {
+        return start(keys, List.of());
+    }
+
+    /**
+     * Derivative keys plus optional verified equity spot keys (ISIN form). Spot keys share the same
+     * single socket and the same cap; they are published only while subscribed here.
+     */
+    public synchronized Status start(List<String> keys, List<String> spotKeys) {
+        List<String> spot = spotKeys == null ? List.of() : spotKeys;
+        if (destroyed || !source.enabled()
+                || keys == null || keys.isEmpty()
+                || keys.stream().anyMatch(k -> !UpstoxFnoV3FeedCodec.validKey(k))
+                || spot.stream().anyMatch(k -> !UpstoxFnoV3FeedCodec.validSpotKey(k))
+                || keys.size() + spot.size() > MAX_INITIAL_SUBSCRIPTIONS
+                || java.util.stream.Stream.concat(keys.stream(), spot.stream()).distinct().count()
+                        != keys.size() + spot.size()) {
+            throw new IllegalArgumentException("UPSTOX_FNO_STREAM_INVALID_START");
+        }
+        if (wanted) {
+            // No second connection; force an explicit stop before switching expiry.
+            throw new IllegalStateException("UPSTOX_FNO_STREAM_ALREADY_STARTED");
+        }
+        subscribed = Set.copyOf(java.util.stream.Stream.concat(keys.stream(), spot.stream()).toList());
+        spotSubscribed = Set.copyOf(spot);
+        wanted = true;
+        retryCount = 0;
+        decodedFrames = 0;
+        discardedFrames = 0;
+        lastFrameAt = null;
+        lastTradeAt = null;
+        latest.clear();
+        state = "CONNECTING";
+        retryScheduled = false;
+        connectOnce();
+        return status();
+    }
+
+    /**
+     * Append only provider-listed, caller-verified derivative keys to this
+     * EXISTING socket using Upstox V3's binary "sub" command. This method
+     * does not stop/reconnect, remove existing contracts, authorize a quote,
+     * enable a broker order, or make the new keys fresh until ticks arrive.
+     * The operator MUST verify each input against the fresh Upstox BOD master
+     * before invoking this method. No arbitrary customer key reaches here.
+     */
+    synchronized Status subscribeAdditionalListed(List<String> verifiedKeys) {
+        if (verifiedKeys == null || verifiedKeys.isEmpty()
+                || verifiedKeys.size() > MAX_INCREMENTAL_KEYS
+                || verifiedKeys.stream().anyMatch(
+                    k -> k == null || !k.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}"))
+                || verifiedKeys.stream().distinct().count() != verifiedKeys.size()) {
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_LISTED_SUBSCRIPTIONS");
+        }
+        if (!wanted || destroyed || !"CONNECTED".equals(state) ||
+                socket == null || !regularNseSession(clock.instant())) {
+            throw new IllegalStateException("UPSTOX_FNO_SOCKET_NOT_READY_FOR_ADD");
+        }
+        var newKeys = verifiedKeys.stream()
+            .filter(k -> !subscribed.contains(k)).toList();
+        if (newKeys.isEmpty()) return status();
+        if (subscribed.size() + newKeys.size() > subscriptionLimit) {
+            throw new IllegalStateException("UPSTOX_FNO_SUBSCRIPTION_CAP_REACHED");
+        }
+        WebSocket current = socket;
+        final long attempt = connectionAttemptId;
+        try {
+            // A completed send does not mean exchange-time ticks are present.
+            // Our independent eligibleDisplayQuote() must still prove freshness.
+            current.sendBinary(ByteBuffer.wrap(UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", newKeys)), true)
+                .get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("UPSTOX_FNO_SUBSCRIBE_SEND_UNVERIFIED");
+        } catch (java.util.concurrent.ExecutionException |
+                 java.util.concurrent.TimeoutException failure) {
+            throw new IllegalStateException("UPSTOX_FNO_SUBSCRIBE_SEND_UNVERIFIED");
+        }
+        if (!wanted || destroyed || socket != current ||
+                connectionAttemptId != attempt || !"CONNECTED".equals(state)) {
+            // The old session vanished; don't publish a new active key.
+            throw new IllegalStateException("UPSTOX_FNO_SESSION_CHANGED_DURING_ADD");
+        }
+        var merged = new java.util.HashSet<>(subscribed);
+        merged.addAll(newKeys);
+        subscribed = Set.copyOf(merged);
+        return status();
+    }
+
+    /** Local conservative full-mode quota, never a live account entitlement grant. */
+    int subscriptionLimit() { return subscriptionLimit; }
+
+    private void connectOnce() {
+        if (!wanted || destroyed) return;
+        final long attempt = ++connectionAttemptId;
+        final URI authorized;
+        try {
+            // Always request a FRESH one-use wss URL after every reconnect.
+            authorized = source.authorizeFnoMarketFeedV3();
+        } catch (RuntimeException ignored) {
+            scheduleReconnect(attempt);
+            return;
+        }
+        try {
+            dialer.connect(authorized, new FeedListener(attempt)).whenComplete((ws, error) -> {
+                if (error != null || ws == null) {
+                    scheduleReconnect(attempt);
+                } else if (!wanted || destroyed) {
+                    ws.sendClose(WebSocket.NORMAL_CLOSURE, "stopped");
+                }
+            });
+        } catch (RuntimeException ignored) {
+            // Never include URL/query or provider exception in logs/status.
+            scheduleReconnect(attempt);
+        }
+    }
+
+    private synchronized void scheduleReconnect(long attempt) {
+        if (!wanted || destroyed || attempt != connectionAttemptId || retryScheduled) return;
+        retryScheduled = true;
+        // A new connection must NEVER inherit the old socket's price evidence,
+        // even if the old exchange tick would still fall within the 15s window.
+        latest.clear();
+        lastTradeAt = null;
+        lastFrameAt = null;
+        // Ensure the previous WebSocket cannot survive a reconnect and consume
+        // another of the provider's tightly limited concurrent connections.
+        WebSocket previous = socket;
+        socket = null;
+        if (previous != null) previous.abort();
+        if (retryCount >= MAX_RECONNECTS) {
+            wanted = false;
+            retryScheduled = false;
+            state = "FAILED_RECONNECT_LIMIT";
+            return;
+        }
+        retryCount++;
+        state = "RECONNECTING";
+        long seconds = Math.min(60, 5L << (retryCount - 1));
+        reconnects.schedule(() -> {
+            synchronized (UpstoxFnoV3LiveFeedService.this) {
+                if (!wanted || destroyed || attempt != connectionAttemptId) return;
+                retryScheduled = false;
+                connectOnce();
+            }
+        }, seconds, TimeUnit.SECONDS);
+    }
+
+    public synchronized Status stop() {
+        wanted = false;
+        ++connectionAttemptId;
+        retryScheduled = false;
+        state = "STOPPED";
+        subscribed = Set.of();
+        spotSubscribed = Set.of();
+        latest.clear();
+        lastTradeAt = null;
+        lastFrameAt = null;
+        WebSocket ws = socket;
+        socket = null;
+        if (ws != null) ws.sendClose(WebSocket.NORMAL_CLOSURE, "operator stop");
+        return status();
+    }
+
+    public Status status() {
+        Instant mostRecentTrade = lastTradeAt;
+        // This operational count is neither a source-rights grant nor a PAPER
+        // session/contract acceptance. It only counts ephemeral *currently*
+        // timestamp-valid bid/ask observations on active subscriptions.
+        int freshQuotes = 0;
+        Instant latestFresh = null;
+        if (wanted && !destroyed && "CONNECTED".equals(state)) {
+            for (String key : subscribed) {
+                var candidate = eligiblePaperQuote(key);
+                if (candidate.isEmpty()) continue;
+                freshQuotes++;
+                Instant at = candidate.get().exchangeAt();
+                if (latestFresh == null || at.isAfter(latestFresh)) latestFresh = at;
+            }
+        }
+        return new Status(state, subscribed.size(), latest.size(), decodedFrames,
+                discardedFrames, lastFrameAt, mostRecentTrade, retryCount,
+                mostRecentTrade != null, false, false, false,
+                freshQuotes, latestFresh);
+    }
+
+
+    /**
+     * Bounded, ephemeral option quote evidence for PAPER-only execution.
+     * This does NOT authorize any real-money order or grant feed usage rights.
+     * The operator must separately enable PAPER and confirm permitted-use rights.
+     * A connected socket alone is not price-freshness evidence.
+     */
+    public record PaperQuote(String instrumentKey, java.math.BigDecimal bid,
+                             java.math.BigDecimal ask, Instant exchangeAt,
+                             Instant observedAt) {}
+
+    /** Regular NSE session time guard; exchange holidays require a separate calendar gate. */
+    static boolean regularNseSession(Instant instant) {
+        if (instant == null) return false;
+        var ist = instant.atZone(java.time.ZoneId.of("Asia/Kolkata"));
+        var day = ist.getDayOfWeek();
+        if (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY)
+            return false;
+        var time = ist.toLocalTime();
+        return !time.isBefore(java.time.LocalTime.of(9, 15))
+                && time.isBefore(java.time.LocalTime.of(15, 40));
+    }
+
+    /**
+     * PAPER and order gates: derivative keys only. Equity spot quotes are never returned here,
+     * so no execution or display path can act on an NSE_EQ observation.
+     */
+    public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
+        if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)) {
+            return java.util.Optional.empty();
+        }
+        if (!subscribed.contains(key)) {
+            var pool = supplementaryPool();
+            return pool == null ? java.util.Optional.empty()
+                : pool.eligibleSupplementaryPaperQuote(key);
+        }
+        return freshQuote(key);
+    }
+
+    /**
+     * Research-only spot accessor. Returns a quote for an NSE_EQ key only while that exact key is
+     * explicitly subscribed as a spot leg. Not valid for PAPER fills, orders or customer display.
+     */
+    public java.util.Optional<PaperQuote> eligibleResearchSpotQuote(String key) {
+        if (key == null || !UpstoxFnoV3FeedCodec.validSpotKey(key) || !spotSubscribed.contains(key)) {
+            return java.util.Optional.empty();
+        }
+        return freshQuote(key);
+    }
+
+    private java.util.Optional<PaperQuote> freshQuote(String key) {
+        if (!wanted || destroyed || !"CONNECTED".equals(state)) {
+            return java.util.Optional.empty();
+        }
+        Observation observed = latest.get(key);
+        if (observed == null) return java.util.Optional.empty();
+        var tick = observed.tick();
+        Instant now = clock.instant();
+        if (!regularNseSession(now)) return java.util.Optional.empty();
+        Instant trade = tick.tradedAt();
+        if (trade == null || trade.isAfter(now.plusSeconds(2))
+                || observed.observedAt().isAfter(now.plusSeconds(2))
+                || java.time.Duration.between(trade, now).isNegative()
+                || java.time.Duration.between(trade, now).compareTo(Duration.ofSeconds(15)) > 0
+                || java.time.Duration.between(observed.observedAt(), now).isNegative()
+                || java.time.Duration.between(observed.observedAt(), now)
+                        .compareTo(Duration.ofSeconds(15)) > 0
+                || tick.bid() == null || tick.ask() == null
+                || tick.bid().signum() <= 0 || tick.ask().signum() <= 0
+                || tick.bid().compareTo(tick.ask()) > 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new PaperQuote(
+                key, tick.bid(), tick.ask(), trade, observed.observedAt()));
+    }
+
+    /**
+     * Enriches a FRESH exchange-timed option bid/ask with decoded Upstox V3
+     * LTPC, prior close, open interest and Greeks. This is technical evidence,
+     * NOT customer-facing rights authorization. Calling controllers must verify
+     * explicit display rights and ownership before using these values.
+     *
+     * An absent or stale exchange LTT returns empty; no invented values and
+     * no historical snapshots survive a disconnect or session close.
+     */
+    public record DisplayQuote(String instrumentKey, java.math.BigDecimal ltp,
+            java.math.BigDecimal previousClose, Long openInterest,
+            java.math.BigDecimal iv, java.math.BigDecimal delta,
+            java.math.BigDecimal theta, java.math.BigDecimal gamma,
+            java.math.BigDecimal vega, java.math.BigDecimal bid,
+            java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt,
+            Long volume, Long bidQuantity, Long askQuantity,
+            Long lastTradedQuantity) {
+        // Compatibility: an older feed fixture has UNKNOWN volume and depth
+        // sizes; never derive them from OI or synthesize a positive number.
+        public DisplayQuote(String key, java.math.BigDecimal ltp,
+                java.math.BigDecimal previousClose, Long openInterest,
+                java.math.BigDecimal iv, java.math.BigDecimal delta,
+                java.math.BigDecimal theta, java.math.BigDecimal gamma,
+                java.math.BigDecimal vega, java.math.BigDecimal bid,
+                java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt) {
+            this(key, ltp, previousClose, openInterest,
+                iv, delta, theta, gamma, vega,
+                bid, ask, exchangeAt, observedAt,
+                null, null, null, null);
+        }
+    }
+
+    /**
+     * Display-only V3 observation. A fresh exchange-timed LTPC is meaningful
+     * even if first-level depth has no executable two-sided bid/ask.
+     * This NEVER authorizes an order: eligiblePaperQuote remains independent.
+     */
+    public java.util.Optional<DisplayQuote> eligibleDisplayQuote(String key) {
+        if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)
+                || !regularNseSession(clock.instant())) {
+            return java.util.Optional.empty();
+        }
+        if (!subscribed.contains(key)) {
+            var pool = supplementaryPool();
+            return pool == null ? java.util.Optional.empty()
+                : pool.eligibleSupplementaryQuote(key);
+        }
+        if (!wanted || destroyed || !"CONNECTED".equals(state)) {
+            return java.util.Optional.empty();
+        }
+        Observation observation = latest.get(key);
+        if (observation == null || !subscribed.contains(key)) {
+            return java.util.Optional.empty();
+        }
+        var tick = observation.tick();
+        Instant now = clock.instant();
+        Instant exchange = tick.tradedAt();
+        Instant received = observation.observedAt();
+        if (exchange == null || exchange.isAfter(now.plusSeconds(2))
+                || received.isAfter(now.plusSeconds(2))
+                || exchange.isAfter(received.plusSeconds(2))
+                || Duration.between(exchange, now).isNegative()
+                || Duration.between(exchange, now).compareTo(Duration.ofSeconds(15)) > 0
+                || Duration.between(received, now).isNegative()
+                || Duration.between(received, now).compareTo(Duration.ofSeconds(15)) > 0
+                || tick.ltp() == null || tick.ltp().signum() <= 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new DisplayQuote(
+                key, tick.ltp(), tick.previousClose(), tick.openInterest(),
+                tick.iv(), tick.delta(), tick.theta(), tick.gamma(), tick.vega(),
+                tick.bid(), tick.ask(), exchange, received,
+                tick.volume(), tick.bidQuantity(), tick.askQuantity(),
+                tick.lastTradedQuantity()));
+    }
+
+    /**
+     * Bounded exchange-timed display quotes for the separate customer snapshot
+     * collector. This exposes no rights and never grants execution eligibility.
+     */
+    /**
+     * Read-only subscription identity proof for Mintick Mind coverage checks.
+     * A subscription is NOT a fresh quote, source entitlement or order grant.
+     */
+    public boolean hasActiveFnoSubscription(String key) {
+        if (!UpstoxFnoV3FeedCodec.validKey(key)) return false;
+        if (wanted && !destroyed && "CONNECTED".equals(state) &&
+                subscribed.contains(key)) return true;
+        if (subscribed.contains(key)) return false;
+        var pool = supplementaryPool();
+        return pool != null && pool.hasSupplementarySubscription(key);
+    }
+
+    /**
+     * Bounded, no-key-leakage realtime NSE_FO coverage counters for Mintick
+     * Mind operational monitoring. Counts only the original current V3 socket;
+     * never promotes a successful subscription send into a fresh market tick.
+     * Spot keys, stale LTT, disconnected and closed-session observations do
+     * not count as realtime NSE derivative prices.
+     */
+    public record StreamingCounts(String socketState, int subscribedNseFno,
+            int freshExchangeLtp, int freshTwoSidedDepth,
+            int withoutFreshLtp, int withOi, int withVolume, int withGreeks,
+            Instant checkedAt, boolean liveOrderAuthorized) {}
+
+    public StreamingCounts streamingCoverage() {
+        var local = localStreamingCoverage();
+        var pool = supplementaryPool();
+        if (pool == null) return local;
+        var plus = pool.supplementaryCoverage();
+        return new StreamingCounts(local.socketState(),
+            local.subscribedNseFno() + plus.subscribedNseFno(),
+            local.freshExchangeLtp() + plus.freshExchangeLtp(),
+            local.freshTwoSidedDepth() + plus.freshTwoSidedDepth(),
+            local.withoutFreshLtp() + plus.withoutFreshLtp(),
+            local.withOi() + plus.withOi(),
+            local.withVolume() + plus.withVolume(),
+            local.withGreeks() + plus.withGreeks(),
+            local.checkedAt(), false);
+    }
+
+    StreamingCounts localStreamingCoverage() {
+        Instant now = clock.instant();
+        String socketState = state;
+        if (!wanted || destroyed || !"CONNECTED".equals(socketState)
+                || !regularNseSession(now)) {
+            return new StreamingCounts(socketState, 0, 0, 0, 0,
+                0, 0, 0, now, false);
+        }
+        int subscribedNse = 0;
+        int freshLtp = 0, depth = 0, oi = 0, volume = 0, greeks = 0;
+        for (String key : subscribed) {
+            if (!key.startsWith("NSE_FO|")) continue;
+            subscribedNse++;
+            var quote = eligibleDisplayQuote(key);
+            if (quote.isEmpty()) continue;
+            freshLtp++;
+            var q = quote.orElseThrow();
+            if (eligiblePaperQuote(key).isPresent()) depth++;
+            if (q.openInterest() != null) oi++;
+            if (q.volume() != null) volume++;
+            if (q.iv() != null && q.delta() != null &&
+                    q.gamma() != null && q.theta() != null &&
+                    q.vega() != null) greeks++;
+        }
+        return new StreamingCounts(socketState, subscribedNse, freshLtp,
+            depth, subscribedNse - freshLtp, oi, volume, greeks, now, false);
+    }
+
+    public List<DisplayQuote> eligibleDisplaySnapshot() {
+        if (!regularNseSession(clock.instant())) return List.of();
+        List<DisplayQuote> local = (!wanted || destroyed || !"CONNECTED".equals(state))
+            ? List.of() : subscribed.stream()
+                .filter(UpstoxFnoV3FeedCodec::validKey)
+                .limit(subscriptionLimit)
+                .map(this::eligibleDisplayQuote)
+                .flatMap(java.util.Optional::stream)
+                .toList();
+        var pool = supplementaryPool();
+        if (pool == null) return local;
+        var merged = new java.util.ArrayList<>(local);
+        merged.addAll(pool.supplementarySnapshot());
+        return merged.stream().limit(UpstoxFnoPlusMultiSocketPool.MAX_LOCAL_FULL_SUBSCRIPTIONS)
+            .toList();
+    }
+
+    /** A frame is observation evidence only; never a trade or permission grant. */
+    private void consume(byte[] frame) {
+        try {
+            UpstoxFnoV3FeedCodec.FeedFrame data = UpstoxFnoV3FeedCodec.decode(frame, spotSubscribed);
+            Instant now = clock.instant();
+            for (var tick : data.ticks()) {
+                if (!subscribed.contains(tick.instrumentKey())) continue;
+                // Monotone exchange trade timestamp per instrument; reject future
+                // and superseded trades, but keep unknown trade times non-executable.
+                if (tick.tradedAt() != null && tick.tradedAt().isAfter(now.plusSeconds(5)))
+                    continue;
+                latest.compute(tick.instrumentKey(), (key, previous) -> {
+                    if (previous != null && previous.tick().tradedAt() != null
+                            && (tick.tradedAt() == null ||
+                            tick.tradedAt().isBefore(previous.tick().tradedAt())))
+                        return previous;
+                    return new Observation(tick, now);
+                });
+                Instant at = tick.tradedAt();
+                if (at != null && (lastTradeAt == null || at.isAfter(lastTradeAt))) lastTradeAt = at;
+            }
+            lastFrameAt = now;
+            decodedFrames++;
+        } catch (RuntimeException ignored) {
+            discardedFrames++;
+        }
+    }
+
+    private final class FeedListener implements WebSocket.Listener {
+        private final long attempt;
+        private final ByteArrayOutputStream fragments = new ByteArrayOutputStream();
+        private FeedListener(long attempt) { this.attempt = attempt; }
+
+        @Override
+        public void onOpen(WebSocket ws) {
+            synchronized (UpstoxFnoV3LiveFeedService.this) {
+                if (!wanted || destroyed || attempt != connectionAttemptId || retryScheduled) {
+                    ws.sendClose(WebSocket.NORMAL_CLOSURE, "stopped");
+                    return;
+                }
+                socket = ws;
+                state = "SUBSCRIBING";
+            }
+            // The one-socket AUTO start is <=64, but source-verified additions
+            // can expand to 256. The V3 command builder deliberately enforces
+            // <=64 keys per command. Replaying all 256 as one command on
+            // reconnect would throw and silently lose *every* quote.
+            //
+            // Replay one bounded batch at a time with per-batch spot scope,
+            // preserving the original socket, key set and exchange-time gates.
+            var replay = new java.util.ArrayList<>(subscribed);
+            java.util.Collections.sort(replay);
+            CompletableFuture<WebSocket> replayed =
+                CompletableFuture.completedFuture(ws);
+            for (int i = 0; i < replay.size(); i += MAX_INITIAL_SUBSCRIPTIONS) {
+                var keys = List.copyOf(replay.subList(i,
+                    Math.min(i + MAX_INITIAL_SUBSCRIPTIONS, replay.size())));
+                var allowedSpot = spotSubscribed.stream().filter(keys::contains)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                byte[] command = UpstoxFnoV3FeedCodec.subscription(
+                    "sub", "full", keys, allowedSpot);
+                replayed = replayed.thenCompose(ignored -> {
+                    synchronized (UpstoxFnoV3LiveFeedService.this) {
+                        if (!wanted || destroyed || retryScheduled ||
+                                attempt != connectionAttemptId || socket != ws) {
+                            return CompletableFuture.failedFuture(
+                                new IllegalStateException("FNO_REPLAY_SESSION_CHANGED"));
+                        }
+                    }
+                    return ws.sendBinary(ByteBuffer.wrap(command), true);
+                });
+            }
+            replayed.whenComplete((ignored, err) -> {
+                        if (err != null) {
+                            scheduleReconnect(attempt);
+                            ws.abort();
+                        } else {
+                            synchronized (UpstoxFnoV3LiveFeedService.this) {
+                                // An initial binary frame may arrive before the async
+                                // subscription send completes. Do not downgrade an
+                                // already CONNECTED socket back to AWAITING_TICKS.
+                                if (wanted && !destroyed && attempt == connectionAttemptId
+                                        && socket == ws && "SUBSCRIBING".equals(state)) {
+                                    state = "CONNECTED_AWAITING_TICKS";
+                                    retryCount = 0;
+                                }
+                            }
+                        }
+                    });
+            ws.request(1);
+        }
+
+        @Override
+        public CompletionStage<?> onBinary(WebSocket ws, ByteBuffer message, boolean last) {
+            synchronized (UpstoxFnoV3LiveFeedService.this) {
+                // Serialize observations with stop/reconnect. Late frames from the
+                // prior socket must not restore eligibility or mark us CONNECTED.
+                if (attempt != connectionAttemptId || !wanted || destroyed
+                        || retryScheduled || socket != ws
+                        || (!"SUBSCRIBING".equals(state)
+                            && !"CONNECTED_AWAITING_TICKS".equals(state)
+                            && !"CONNECTED".equals(state))) {
+                    ws.request(1);
+                    return CompletableFuture.completedFuture(null);
+                }
+                try {
+                if (message.remaining() > MAX_FRAGMENT_BYTES - fragments.size()) {
+                    fragments.reset();
+                    discardedFrames++;
+                    ws.abort();
+                    scheduleReconnect(attempt);
+                } else {
+                    byte[] bytes = new byte[message.remaining()];
+                    message.get(bytes);
+                    fragments.writeBytes(bytes);
+                    if (last) {
+                        consume(fragments.toByteArray());
+                        fragments.reset();
+                        if (wanted) {
+                            state = "CONNECTED";
+                            retryCount = 0;
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                fragments.reset();
+                discardedFrames++;
+                ws.abort();
+                scheduleReconnect(attempt);
+                }
+            }
+            ws.request(1);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletionStage<?> onText(WebSocket ws, CharSequence text, boolean last) {
+            // Upstox V3 market prices are protobuf binary; never parse text as ticks.
+            discardedFrames++;
+            ws.request(1);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletionStage<?> onClose(WebSocket ws, int statusCode, String reason) {
+            if (wanted && !destroyed) scheduleReconnect(attempt);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public void onError(WebSocket ws, Throwable error) {
+            if (wanted && !destroyed) scheduleReconnect(attempt);
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        synchronized (this) {
+            destroyed = true;
+            wanted = false;
+            ++connectionAttemptId;
+            retryScheduled = false;
+            state = "STOPPED";
+            subscribed = Set.of();
+        spotSubscribed = Set.of();
+            latest.clear();
+            lastTradeAt = null;
+            lastFrameAt = null;
+            WebSocket ws = socket;
+            socket = null;
+            if (ws != null) ws.abort();
+        }
+        reconnects.shutdownNow();
+    }
+}

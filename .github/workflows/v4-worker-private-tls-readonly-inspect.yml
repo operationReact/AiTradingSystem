@@ -1,0 +1,170 @@
+name: Inspect V86 private research worker HTTPS edge (read-only, dormant only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: v86-private-worker-https-inspect
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Check real AWS internal TLS metadata; do not create or deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AWS_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT: '816344830716'
+      ECS_CLUSTER: ai-trading-system
+      INTERNAL_ALB_NAME: aitrading-rsrch-private
+      WORKER_TARGET_GROUP: aitrading-rsrch-8090
+      WORKER_FQDN: research-worker.maargglobal.com
+    steps:
+      - name: Check out exact dev source
+        uses: actions/checkout@v4
+
+      - name: Reject non-dev and missing dedicated read-only AWS OIDC identity
+        shell: bash
+        env:
+          NETWORK_ROLE: ${{ vars.AWS_WORKER_TLS_READONLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/dev' || exit 1
+          test "$AWS_REGION" = 'us-east-1' || exit 1
+          test "$EXPECTED_AWS_ACCOUNT" = '816344830716' || exit 1
+          test "$WORKER_FQDN" = 'research-worker.maargglobal.com' || exit 1
+          if [[ ! "$NETWORK_ROLE" =~ ^arn:aws:iam::816344830716:role/[A-Za-z0-9_+=,.@/-]+$ ]]; then
+            echo "::error::Create exact-dev V86 read-only IAM role and set AWS_WORKER_TLS_READONLY_ROLE_ARN"
+            exit 1
+          fi
+
+      - name: Assume separate metadata-only OIDC role (no AWS static keys)
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_WORKER_TLS_READONLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '816344830716'
+          role-session-name: github-v86-worker-tls-readonly-${{ github.run_id }}
+          action-timeout-s: 120
+
+      - name: Read snapshot metadata only; emit sanitized BLOCKED-or-dormant verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          temp="$(mktemp -d)"
+          chmod 700 "$temp"
+          trap 'rm -rf "$temp"' EXIT
+
+          # Never echo raw service/SG/ACM/Route53 payloads into CI logs.
+          # Missing resources and insufficient IAM permissions become {} and
+          # necessarily fail closed in the Python posture evaluator.
+          optional_read() {
+            local file="$1"
+            shift
+            if ! aws "$@" --output json > "$temp/$file.json" 2>/dev/null; then
+              printf '%s\n' '{}' > "$temp/$file.json"
+            fi
+          }
+          read_member() {
+            local file="$1" key="$2"
+            python3 - "$temp/$file.json" "$key" <<'PY'
+          import json, sys
+          try:
+              document = json.load(open(sys.argv[1], encoding="utf-8"))
+              key = sys.argv[2]
+              value = {
+                  "alb": lambda: document["LoadBalancers"][0]["LoadBalancerArn"],
+                  "vpc": lambda: document["LoadBalancers"][0]["VpcId"],
+                  "listener": lambda: document["Listeners"][0]["ListenerArn"],
+                  "cert": lambda: document["Listeners"][0]["Certificates"][0]["CertificateArn"],
+                  "zone": lambda: next(
+                      z["Id"].split("/")[-1] for z in document["HostedZones"]
+                      if z["Name"] == "research-worker.maargglobal.com."
+                      and z.get("Config", {}).get("PrivateZone") is True
+                  ),
+              }[key]()
+              print(value if isinstance(value, str) else "")
+          except (ValueError, TypeError, KeyError, IndexError, StopIteration):
+              print("")
+          PY
+          }
+
+          optional_read identity sts get-caller-identity
+          optional_read load_balancers elbv2 describe-load-balancers --names "$INTERNAL_ALB_NAME"
+          optional_read target_groups elbv2 describe-target-groups --names "$WORKER_TARGET_GROUP"
+          optional_read services ecs describe-services --cluster "$ECS_CLUSTER" \
+            --services ai-trading-system-backend ai-trading-system-frontend \
+            ai-trading-system-research-worker
+          optional_read security_groups ec2 describe-security-groups \
+            --filters "Name=group-name,Values=ai-trading-system-worker-java-identity,ai-trading-system-worker-https-alb,ai-trading-system-research-worker"
+          optional_read zones route53 list-hosted-zones-by-name \
+            --dns-name "$WORKER_FQDN"
+
+          alb_arn="$(read_member load_balancers alb)"
+          vpc_id="$(read_member load_balancers vpc)"
+          if [[ -n "$alb_arn" ]]; then
+            optional_read listeners elbv2 describe-listeners --load-balancer-arn "$alb_arn"
+          else
+            printf '%s\n' '{}' > "$temp/listeners.json"
+          fi
+          listener_arn="$(read_member listeners listener)"
+          cert_arn="$(read_member listeners cert)"
+          if [[ -n "$listener_arn" ]]; then
+            optional_read rules elbv2 describe-rules --listener-arn "$listener_arn"
+          else
+            printf '%s\n' '{}' > "$temp/rules.json"
+          fi
+          if [[ -n "$cert_arn" ]]; then
+            optional_read certificate acm describe-certificate --certificate-arn "$cert_arn"
+          else
+            printf '%s\n' '{}' > "$temp/certificate.json"
+          fi
+          if [[ -n "$vpc_id" ]]; then
+            optional_read subnets ec2 describe-subnets \
+              --filters "Name=vpc-id,Values=$vpc_id"
+          else
+            printf '%s\n' '{}' > "$temp/subnets.json"
+          fi
+
+          private_id="$(read_member zones zone)"
+          if [[ -n "$private_id" ]]; then
+            optional_read private_zone route53 get-hosted-zone --id "$private_id"
+            optional_read record_sets route53 list-resource-record-sets \
+              --hosted-zone-id "$private_id"
+          else
+            printf '%s\n' '{}' > "$temp/private_zone.json"
+            printf '%s\n' '{}' > "$temp/record_sets.json"
+          fi
+
+          python3 scripts/v4_worker_private_tls_posture.py \
+            --identity "$temp/identity.json" \
+            --load-balancers "$temp/load_balancers.json" \
+            --listeners "$temp/listeners.json" \
+            --rules "$temp/rules.json" \
+            --target-groups "$temp/target_groups.json" \
+            --certificate "$temp/certificate.json" \
+            --zones "$temp/zones.json" \
+            --private-zone "$temp/private_zone.json" \
+            --record-sets "$temp/record_sets.json" \
+            --security-groups "$temp/security_groups.json" \
+            --subnets "$temp/subnets.json" \
+            --services "$temp/services.json" \
+            --expected-sha "$GITHUB_SHA" \
+            --output "$GITHUB_WORKSPACE/v86-private-worker-tls-posture.json"
+
+      - name: Retain ONLY sanitized metadata evidence for operator review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v86-private-worker-tls-readonly
+          path: v86-private-worker-tls-posture.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+# No Terraform plan/apply, ECS update, model retrieval, ECR push, Secrets
+# Manager GetSecretValue, public network probe, worker call, or trading.

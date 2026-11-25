@@ -1,0 +1,58 @@
+name: MintTick F&O Original Upstox HTTP Custody (NO ORDERS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-original-http-custody.yml'
+      - 'infra/ec2-paper/fno_history_backfill.py'
+      - 'infra/ec2-paper/upstox_fno_backfill_adapters.py'
+      - 'infra/ec2-paper/fno_independent_candle_e2e.py'
+      - 'scripts/tests/test_fno_independent_candle_e2e.py'
+      - 'scripts/tests/test_upstox_fno_backfill_adapters.py'
+      - 'scripts/tests/test_fno_history_backfill.py'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-original-http-custody.yml'
+      - 'infra/ec2-paper/fno_history_backfill.py'
+      - 'infra/ec2-paper/upstox_fno_backfill_adapters.py'
+      - 'infra/ec2-paper/fno_independent_candle_e2e.py'
+permissions:
+  contents: read
+jobs:
+  original-provider-roundtrip:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile provider/custody modules
+        run: |
+          python3 -m py_compile infra/ec2-paper/fno_history_backfill.py
+          python3 -m py_compile infra/ec2-paper/upstox_fno_backfill_adapters.py
+          python3 -m py_compile infra/ec2-paper/fno_independent_candle_e2e.py
+      - name: Full independent no-network original HTTP and checkpoint acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_history_backfill.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_backfill_adapters.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_independent_candle_e2e.py' -v
+      - name: Assert no provider credentials, broker orders or false certification
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          v = Path('infra/ec2-paper/fno_independent_candle_e2e.py').read_text()
+          s = Path('infra/ec2-paper/upstox_fno_backfill_adapters.py').read_text()
+          for t in ('replayableOriginalHttpResponseBatches',
+                    '"historicalStrategyE2EValidated":0',
+                    '"originalProviderPublicationTimeVerified":False'):
+              assert t in v,t
+          for t in ('fno_original_http_capture', 'SourceObservation',
+                    'ORIGINAL_PROVIDER_RESPONSE_REVISION',
+                    'CANNOT_RETROFIT_OLD_HTTP_CAPTURE'):
+              assert t in s,t
+          for t in ('place_order(', 'submit_order(', 'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert t not in s,t
+          PY

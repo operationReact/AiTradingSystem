@@ -1,0 +1,91 @@
+name: MintTick F&O - stage disabled source on exact EC2
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-history-source-stage.yml'
+      - 'infra/ec2-paper/fno_history_stage.py'
+      - 'scripts/tests/test_fno_history_stage.py'
+      - 'infra/ec2-paper/FNO_HISTORY_CODE_STAGE.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-history-code-stage.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify fixed package, offline staging and no broker rights
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_history_stage.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_history_stage.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('infra/ec2-paper/fno_history_stage.py').read_text()
+          assert '"max_provider_gets": 0' in script
+          assert '"persist_market_data": False' in script
+          assert '"start_service": False' in script
+          assert 'verify_aws()' in script
+          for forbidden in ('get-parameter', 'put-parameter', 'api.upstox.com',
+                            'systemctl start', 'placeOrder', 'submitOrder',
+                            'TRADING_MODE=LIVE'):
+              assert forbidden not in script, forbidden
+          PY
+
+  stage:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact single-file approved code stage request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-history-code-stage.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_history_stage import expected_request
+          p=Path('infra/ec2-paper/requests/fno-history-code-stage.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1024
+          assert json.loads(p.read_text())==expected_request()
+          PY
+      - name: Assume pre-existing exact-host SSM deployment role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-source-stage
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Install only reviewed source files; no service start
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_history_stage.py runner
+
+# No workflow_dispatch, new EC2 instance, Upstox GET, trading orders,
+# credential writes, market-data storage or service activation.

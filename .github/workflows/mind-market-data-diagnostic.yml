@@ -1,0 +1,74 @@
+name: Mind market-data diagnostic (read-only)
+
+# Read-only: prints the classified PAPER-cycle data blocker, candle freshness and quote age for the
+# verification instrument. It never creates a room, cycle, order or state change. Runs only when a
+# reviewed one-file diagnostic request is committed to dev.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/mind-market-data-diagnostic.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mind-market-data-diagnostic-dev
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BASE: https://api.minttick.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require exact one-file read-only diagnostic request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/mind-market-data-diagnostic.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual = json.loads(Path("infra/minttick-domain/requests/mind-market-data-diagnostic.json").read_text())
+          assert actual.get("operation") == "read-only-market-data-diagnostic", "Unexpected diagnostic request"
+          assert actual.get("read_only") is True, "Diagnostic must be read-only"
+          assert actual.get("symbol") == "RELIANCE-EQ" and actual.get("exchange") == "NSE", "Unexpected instrument"
+          assert actual.get("application") == "MintTick" and actual.get("environment") == "dev"
+          print("PASS: exact read-only diagnostic request")
+          PY
+
+      - name: Mint per-run verification token (never printed)
+        env:
+          VERIFY_USERNAME: ${{ secrets.MINDTICK_VERIFY_USERNAME }}
+          VERIFY_PASSWORD: ${{ secrets.MINDTICK_VERIFY_PASSWORD }}
+          VERIFY_NEW_PASSWORD: ${{ secrets.MINDTICK_VERIFY_NEW_PASSWORD }}
+          VERIFY_CLIENT_ID: ${{ vars.MINDTICK_VERIFY_COGNITO_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "$VERIFY_USERNAME" ] || [ -z "$VERIFY_PASSWORD" ] || [ -z "$VERIFY_CLIENT_ID" ]; then
+            echo "AUTHENTICATED_RUNTIME_NOT_VERIFIED: verification secrets are not configured."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
+          printf '%s' "$VERIFY_NEW_PASSWORD" > "$RUNNER_TEMP/verify_new_password"
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" \
+            "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password" "$RUNNER_TEMP/diag_token"
+          rm -f "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password"
+          test -s "$RUNNER_TEMP/diag_token" || { echo "FAIL: no token minted"; exit 1; }
+
+      - name: Run read-only market-data diagnostic
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/mind/market_data_diagnostic.py "$BASE" "$RUNNER_TEMP/diag_token" RELIANCE-EQ NSE auto \
+            "$RUNNER_TEMP/diag_summary.json"
+          rm -f "$RUNNER_TEMP/diag_token"

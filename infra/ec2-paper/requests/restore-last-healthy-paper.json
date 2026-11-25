@@ -1,0 +1,12 @@
+{
+  "application": "MintTick",
+  "region": "ap-south-1",
+  "aws_account": "098859530205",
+  "instance_id": "i-09c01b470fb39b85a",
+  "environment": "PAPER",
+  "operation": "restore-exact-last-verified-paper-images",
+  "failed_release": "e99b1e604584d16422b67065df14127d59bb016d",
+  "target_release": "bc792b8e21e024190cfc553044c50719da8f8743",
+  "postgres": "KEEP_RUNNING",
+  "broker_orders": "UNCHANGED"
+}

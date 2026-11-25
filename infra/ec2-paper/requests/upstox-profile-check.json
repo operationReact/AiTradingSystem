@@ -1,0 +1,12 @@
+{
+  "kind": "minttick-owner-upstox-profile-check-v1",
+  "operation": "one-get-upstox-user-profile-read-only",
+  "environment": "PAPER",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "authorization": "OWNER_APPROVED_UPSTOX_PROFILE_CHECK_2026_11_21",
+  "max_provider_gets": 1,
+  "persist": false,
+  "trading_rights_change": false
+}

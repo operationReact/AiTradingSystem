@@ -1,0 +1,546 @@
+name: Phase 11 - Android APK delivery
+
+on:
+  # Reused by the dev-only, exact-request connected release workflow.
+  # No credentials are exposed to pull-request callers; only dev may sign.
+  workflow_call:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/android-cognito-test.json'
+      - 'infra/minttick-domain/requests/android-connected-test.json'
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/phase11-android-apk.yml'
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'HTTPS base URL reachable from the physical Android device (for example https://api.example.com)'
+        required: true
+        type: string
+      cognito_user_pool_id:
+        description: 'Cognito User Pool ID from the MintTick Terraform output (ap-south-1_...)'
+        required: true
+        type: string
+      cognito_client_id:
+        description: 'Cognito public Flutter app client ID; never a client secret'
+        required: true
+        type: string
+
+concurrency:
+  group: phase11-android-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-apk:
+    # Signing credentials are available only on reviewed dev releases.
+    if: github.event_name == 'pull_request' || (github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    env:
+      # Public values for PR sideload tests; release signature remains dev-only.
+      API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || 'https://api.minttick.com' }}
+      MINTTICK_COGNITO_USER_POOL_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.cognito_user_pool_id || 'ap-south-1_jz2T8qbiY' }}
+      MINTTICK_COGNITO_CLIENT_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.cognito_client_id || '6jm18v2mdpcfraip92hrjhqjnd' }}
+      MINTTICK_AUTH_ONLY_TEST: ${{ github.event_name == 'push' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require exact reviewed one-file Android build request
+        if: github.event_name == 'push'
+        id: request_mode
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          changed=subprocess.check_output(
+              ['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],
+              text=True).strip()
+          prefix='infra/minttick-domain/requests/'
+          identity_path=prefix+'android-cognito-test.json'
+          connected_path=prefix+'android-connected-test.json'
+          release_path=prefix+'android-connected.json'
+          if changed not in (identity_path, connected_path, release_path):
+              raise SystemExit('Only one reviewed Android request file is permitted')
+          document=json.loads(Path(changed).read_text())
+          common={
+              "application":"MintTick",
+              "environment":"dev",
+              "cognito_pool":"ap-south-1_jz2T8qbiY"
+          }
+          if changed==identity_path:
+              expected={
+                  **common,
+                  "operation":"build-cognito-only-android-test",
+                  "public_api_ready":False,
+                  "authorization":"USER_APPROVED_ANDROID_COGNITO_TEST_2026-11-07"
+              }
+              source=Path('apps/trading_client/lib/src/presentation/welcome_page.dart').read_text()
+              assert "MINTTICK_AUTH_ONLY_TEST" in source
+              assert "pushNamedAndRemoveUntil('/auth-test'" in source
+              assert "await MintTickCustomerAccountApi().provision()" in source
+              status=Path('apps/trading_client/lib/src/presentation/cognito_test_page.dart').read_text()
+              assert "Trading rooms and brokerage actions are unavailable" in status
+              main=Path('apps/trading_client/lib/main.dart').read_text()
+              assert "cognitoTestSession" in main
+          elif changed==connected_path:
+              expected={
+                  **common,
+                  "operation":"build-backend-connected-android-test",
+                  "public_api_ready":True,
+                  "api_origin":"https://api.minttick.com",
+                  "authorization":"USER_REQUESTED_CONNECTED_ANDROID_2026-11-08"
+              }
+              with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+                  stream.write('connected=true\n')
+              with open(os.environ['GITHUB_ENV'],'a') as stream:
+                  stream.write('MINTTICK_AUTH_ONLY_TEST=false\n')
+          else:
+              # The validated reusable release caller uses this existing exact
+              # one-file dev request. An arbitrary push cannot claim approval.
+              expected={
+                  "application":"MintTick",
+                  "environment":"dev",
+                  "operation":"build-connected-android",
+                  "api_base_url":"https://api.minttick.com",
+                  "public_api_ready":True,
+                  "cognito_pool":"ap-south-1_jz2T8qbiY",
+                  "authorization":"USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07",
+              }
+              with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+                  stream.write('connected=true\n')
+              with open(os.environ['GITHUB_ENV'],'a') as stream:
+                  stream.write('MINTTICK_AUTH_ONLY_TEST=false\n')
+          if document != expected:
+              raise SystemExit('Unexpected Android request contents')
+          print('PASS: exact user-requested build mode validated; no broker credentials')
+          PY
+
+      - name: Validate physical-device API endpoint
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || steps.request_mode.outputs.connected == 'true'
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          import re
+
+          raw = os.environ['API_BASE_URL'].strip()
+          parsed = urlparse(raw)
+          blocked = {'localhost', '127.0.0.1', '0.0.0.0', '10.0.2.2', '::1'}
+          if parsed.scheme != 'https' or not parsed.hostname:
+              raise SystemExit('api_base_url must be an absolute HTTPS URL reachable from the Android phone')
+          if parsed.hostname.lower() in blocked:
+              raise SystemExit('api_base_url cannot target localhost or the Android-emulator host alias')
+          pool = os.environ['MINTTICK_COGNITO_USER_POOL_ID'].strip()
+          client = os.environ['MINTTICK_COGNITO_CLIENT_ID'].strip()
+          if not re.fullmatch(r'ap-south-1_[A-Za-z0-9]+', pool):
+              raise SystemExit('cognito_user_pool_id must be a Mumbai Cognito pool ID')
+          if not re.fullmatch(r'[a-z0-9]{16,}', client):
+              raise SystemExit('cognito_client_id must be a public Cognito app client ID')
+          print(f'Validated physical-device endpoint: {parsed.scheme}://{parsed.hostname}')
+          print('Validated public Cognito User Pool and client identifiers (no secrets)')
+          PY
+
+      - name: Verify live HTTPS account API before packaging device APK
+        if: github.event_name == 'workflow_dispatch' || steps.request_mode.outputs.connected == 'true'
+        working-directory: .
+        run: python3 scripts/verify_minttick_live_api.py
+
+      - name: Validate CI sideload identity without granting release credentials
+        if: github.event_name == 'pull_request'
+        run: |
+          test "$API_BASE_URL" = 'https://api.minttick.com'
+          test "$MINTTICK_COGNITO_USER_POOL_ID" = 'ap-south-1_jz2T8qbiY'
+          test "$MINTTICK_COGNITO_CLIENT_ID" = '6jm18v2mdpcfraip92hrjhqjnd'
+          test "$MINTTICK_AUTH_ONLY_TEST" = 'false'
+          echo 'PASS: PR APK has public Cognito and HTTPS API values; signing remains CI-only.'
+
+      - name: Explicitly mark Cognito-only sideloadable test release
+        if: github.event_name == 'push' && steps.request_mode.outputs.connected != 'true'
+        run: echo 'Cognito is real. Customer backend activation is pending; this test never grants trading access.'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Restore modern Android v2 scaffold
+        run: |
+          flutter create --platforms=android --project-name trading_client --org in.aitradingsystem .
+          test -f android/gradlew
+          test -f android/settings.gradle.kts
+          grep -q 'io.flutter.embedding.android.FlutterActivity' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
+          grep -q 'android:value="2"' android/app/src/main/AndroidManifest.xml
+
+      - name: Normalize generated Android Gradle compatibility
+        run: |
+          grep -q '^android.newDsl=' android/gradle.properties || echo 'android.newDsl=false' >> android/gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_path = Path('android/app/build.gradle.kts')
+          gradle_text = gradle_path.read_text()
+          updated, count = re.subn(
+              r'\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*JavaVersion\.VERSION_17\.toString\(\)\s*\}\s*',
+              '\n',
+              gradle_text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('Expected generated kotlinOptions JVM target block was not found')
+
+          modern_kotlin = '''\nkotlin {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n\n'''
+          marker = 'flutter {'
+          if marker not in updated:
+              raise SystemExit('Expected generated Flutter Gradle block was not found')
+          updated = updated.replace(marker, modern_kotlin + marker, 1)
+          gradle_path.write_text(updated)
+          # Cognito's AWS crypto dependency (Tink) references these runtime
+          # annotation classes; R8 requires the types to be present. Never
+          # disable shrinker checks or use blanket -dontwarn rules.
+          updated = gradle_path.read_text()
+          updated += '''
+          dependencies {
+              implementation("com.google.errorprone:error_prone_annotations:2.36.0")
+              implementation("com.google.code.findbugs:jsr305:3.0.2")
+          }
+          '''
+          gradle_path.write_text(updated)
+
+          activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
+          activity_text = activity_path.read_text()
+          expected = 'package in.aitradingsystem.trading_client'
+          if expected not in activity_text:
+              raise SystemExit('Expected generated MainActivity package declaration was not found')
+          activity_path.write_text(activity_text.replace(expected, 'package `in`.aitradingsystem.trading_client', 1))
+
+          # Flutter's generated release manifest may omit INTERNET permission.
+          # A customer authentication APK cannot contact Cognito or MintTick without it.
+          manifest_path = Path('android/app/src/main/AndroidManifest.xml')
+          manifest = manifest_path.read_text()
+          permission = '<uses-permission android:name="android.permission.INTERNET" />'
+          if permission not in manifest:
+              root_close = manifest.find('>', manifest.find('<manifest'))
+              if root_close == -1:
+                  raise SystemExit('Generated Android manifest has no <manifest> root')
+              manifest = manifest[:root_close + 1] + '\n    ' + permission + manifest[root_close + 1:]
+              manifest_path.write_text(manifest)
+          PY
+          grep -q '^android.newDsl=false$' android/gradle.properties
+          grep -q 'compilerOptions' android/app/build.gradle.kts
+          grep -q 'MINTTICK_REQUIRE_STABLE_SIGNING' android/app/build.gradle.kts
+          grep -q 'minttickRelease' android/app/build.gradle.kts
+          ! grep -q 'kotlinOptions' android/app/build.gradle.kts
+          grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+
+      - name: Stage checksum-verified Gradle 9.3.1 from public archive mirrors
+        run: |
+          set -euo pipefail
+          # Gradle's official CDN currently redirects to github.com/releases
+          # which persistently returns HTTP 504 on the GitHub runner.
+          # Mirrors are used only to transfer bytes: the SHA-256 independently
+          # published by Gradle must match before any artifact is executed.
+          artifact="$RUNNER_TEMP/minttick-gradle-9.3.1-bin.zip"
+          checksum="b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06"
+          found=false
+          for source in \
+            "https://mirrors.huaweicloud.com/gradle/gradle-9.3.1-bin.zip" \
+            "https://mirror.nju.edu.cn/gradle/gradle-9.3.1-bin.zip"; do
+            rm -f -- "$artifact"
+            if curl --fail --show-error --location --retry 3 --retry-all-errors \
+                --retry-delay 3 --connect-timeout 12 --max-time 180 \
+                "$source" --output "$artifact"; then
+              if (cd "$RUNNER_TEMP" && \
+                printf '%s  %s\n' "$checksum" "minttick-gradle-9.3.1-bin.zip" \
+                  | sha256sum --check --status); then
+                found=true
+                break
+              fi
+              echo "Rejected Gradle mirror data: checksum mismatch" >&2
+            fi
+          done
+          test "$found" = "true" || {
+            echo "No independently verified Gradle 9.3.1 distribution available" >&2
+            exit 2
+          }
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p=Path('android/gradle/wrapper/gradle-wrapper.properties')
+          content=p.read_text()
+          if 'gradle-9.3.1-all.zip' not in content and 'gradle-9.3.1-bin.zip' not in content:
+              raise SystemExit('Unexpected generated Gradle version; manual upgrade required')
+          artifact=Path(os.environ['RUNNER_TEMP'])/'minttick-gradle-9.3.1-bin.zip'
+          if not artifact.is_file() or artifact.stat().st_size < 100_000_000:
+              raise SystemExit('Pinned Gradle distribution is absent or incomplete')
+          local_url=artifact.as_uri().replace(':','\\:',1)
+          settings={
+            'distributionUrl':local_url,
+            'distributionSha256Sum':'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06',
+            'networkTimeout':'60000',
+            'retries':'2',
+            'retryBackOffMs':'3000',
+          }
+          lines=[line for line in content.splitlines()
+                 if line.split('=',1)[0] not in settings]
+          lines.extend(f'{key}={value}' for key,value in settings.items())
+          p.write_text('\n'.join(lines)+'\n')
+          print('PASS: local Gradle 9.3.1 archive pinned to official SHA-256')
+          PY
+
+      - name: Stage checksum-verified Kotlin compiler from independent Maven cache
+        run: |
+          set -euo pipefail
+          # Kotlin 2.2.21 and 2.4.0 compiler archives are redirected to
+          # GitHub releases by Maven Central, which returns 504 on CI.
+          # Both binaries must match independently published JetBrains SHA-256
+          # from kotlin/gradle/verification-metadata.xml before use.
+          local_repo="$RUNNER_TEMP/minttick-verified-kotlin-maven"
+          mkdir -p "$HOME/.gradle/init.d"
+          while read -r version expected_sha; do
+            module_path="org/jetbrains/kotlin/kotlin-compiler-embeddable/$version"
+            mkdir -p "$local_repo/$module_path"
+            artifact="kotlin-compiler-embeddable-$version.jar"
+            # Mirror outages must never require removing integrity checks.
+            # Try independent caches, accepting bytes only with JetBrains' pinned SHA-256.
+            verified=false
+            for mirror in \
+              "https://repo.maven.apache.org/maven2/$module_path/$artifact" \
+              "https://maven-central.storage-download.googleapis.com/maven2/$module_path/$artifact" \
+              "https://maven.wso2.org/nexus/content/groups/public/$module_path/$artifact" \
+              "https://repository.liferay.com/nexus/content/repositories/gradle-plugins/$module_path/$artifact" \
+              "https://maven.aliyun.com/repository/central/$module_path/$artifact" \
+              "https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"; do
+              rm -f -- "$local_repo/$module_path/$artifact"
+              if curl --fail --silent --show-error --location \
+                  --retry 2 --retry-all-errors --retry-delay 2 \
+                  --connect-timeout 12 --max-time 180 \
+                  "$mirror" --output "$local_repo/$module_path/$artifact" \
+                  && (cd "$local_repo/$module_path" && \
+                    printf '%s  %s\n' "$expected_sha" "$artifact" \
+                    | sha256sum --check --status); then
+                verified=true
+                break
+              fi
+              echo 'Rejected unavailable or unverified Kotlin compiler mirror'
+            done
+            if [ "$verified" != true ]; then
+              echo "::error::No SHA-256 verified Kotlin compiler $version available"
+              exit 2
+            fi
+            curl --fail --show-error --location --retry 3 --retry-all-errors \
+              --connect-timeout 12 --max-time 25 \
+              "https://repo.maven.apache.org/maven2/$module_path/kotlin-compiler-embeddable-$version.pom" \
+              --output "$local_repo/$module_path/kotlin-compiler-embeddable-$version.pom"
+          done <<'KOTLIN_VERSIONS'
+          2.2.21 9588fa696ac5507af764fd5660df6894185e12704ec1bc3f5cb772af4987f295
+          2.4.0 c2b25e8c1c93ec416ba4327f5e31eaec0f0c8847241b9353e294b8db9dce564f
+          KOTLIN_VERSIONS
+          echo "MINTTICK_VERIFIED_KOTLIN_MAVEN=file://$local_repo" >> "$GITHUB_ENV"
+          cat > "$HOME/.gradle/init.d/minttick-verified-kotlin.gradle" <<'GRADLE'
+          // Flutter Gradle's included build uses settings-level dependency
+          // repositories and explicitly forbids project-level repositories.
+          // Register our already-verified *local* cache before settings are
+          // evaluated, including the isolated Flutter Gradle included build.
+          gradle.beforeSettings { settings ->
+              def verified = System.getenv("MINTTICK_VERIFIED_KOTLIN_MAVEN")
+              if (verified == null || !verified.startsWith("file:///")) {
+                  throw new GradleException("Verified Kotlin local repository was not configured")
+              }
+              // Adding a local repository to initially empty pluginManagement
+              // disables Gradle's implicit Plugin Portal fallback. Preserve
+              // the normal upstream repositories explicitly.
+              settings.pluginManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
+                  repo.content {
+                      includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
+                  }
+              }
+              settings.pluginManagement.repositories.gradlePluginPortal()
+              settings.pluginManagement.repositories.google()
+              settings.pluginManagement.repositories.mavenCentral()
+              // Kotlin compiler JARs are staged and hash-verified locally.
+              // Maven Central would otherwise win repository selection and
+              // redirect large artifacts to github.com, returning HTTP 504.
+              // Exclusive content prevents resolution of this exact module
+              // through any other dependency repository, including plugins.
+              def verifiedRepo = settings.dependencyResolutionManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
+              }
+              settings.dependencyResolutionManagement.repositories.exclusiveContent {
+                  forRepositories(verifiedRepo)
+                  filter {
+                      includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
+                  }
+              }
+              settings.dependencyResolutionManagement.repositories.mavenCentral()
+              settings.dependencyResolutionManagement.repositories.google()
+          }
+          GRADLE
+          echo "PASS: Kotlin 2.2.21 and 2.4.0 compilers match upstream JetBrains SHA-256"
+
+      - name: Validate Gradle settings and verified offline Kotlin repository
+        run: |
+          set -euo pipefail
+          # A quick Gradle configuration check catches init-script DSL errors
+          # before the longer Flutter test suite and release compilation.
+          (cd android && ./gradlew --no-daemon help)
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Verify and stage the permanent Android signing key
+        if: github.event_name != 'pull_request'
+        env:
+          MINTTICK_ANDROID_KEYSTORE_BASE64: ${{ secrets.MINTTICK_ANDROID_KEYSTORE_BASE64 }}
+          MINTTICK_ANDROID_KEY_ALIAS: ${{ secrets.MINTTICK_ANDROID_KEY_ALIAS }}
+          MINTTICK_ANDROID_STORE_PASSWORD: ${{ secrets.MINTTICK_ANDROID_STORE_PASSWORD }}
+          MINTTICK_ANDROID_KEY_PASSWORD: ${{ secrets.MINTTICK_ANDROID_KEY_PASSWORD }}
+          MINTTICK_ANDROID_CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          # Never use the private release key on a non-dev or custom-endpoint build.
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          test "$API_BASE_URL" = 'https://api.minttick.com'
+          test "$MINTTICK_COGNITO_USER_POOL_ID" = 'ap-south-1_jz2T8qbiY'
+          test "$MINTTICK_COGNITO_CLIENT_ID" = '6jm18v2mdpcfraip92hrjhqjnd'
+          for name in MINTTICK_ANDROID_KEYSTORE_BASE64 MINTTICK_ANDROID_KEY_ALIAS MINTTICK_ANDROID_STORE_PASSWORD MINTTICK_ANDROID_KEY_PASSWORD MINTTICK_ANDROID_CERT_SHA256; do
+            if test -z "${!name:-}"; then
+              echo "::error::Missing permanent Android signing configuration: $name"
+              exit 2
+            fi
+          done
+          umask 077
+          keystore="$RUNNER_TEMP/minttick-release-keystore.p12"
+          printf '%s' "$MINTTICK_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          test -s "$keystore" || { echo "::error::Empty release keystore"; exit 2; }
+          cert_details="$(keytool -list -v -keystore "$keystore" -alias "$MINTTICK_ANDROID_KEY_ALIAS" -storepass:env MINTTICK_ANDROID_STORE_PASSWORD)" || {
+            echo "::error::Signing keystore, alias or password could not be verified"
+            exit 2
+          }
+          actual="$(printf '%s\n' "$cert_details" | sed -n -E 's/^[[:space:]]*SHA256:[[:space:]]*([[:xdigit:]:]+).*$/\1/p' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "${#actual}" -eq 64 && test "$actual" = "$expected" || {
+            echo "::error::Signing certificate differs from the pinned MintTick certificate"
+            exit 2
+          }
+          echo "PASS: permanent release keystore matches pinned certificate; credentials remain private"
+
+      - name: Build sideloadable stable-signed release APK
+        if: github.event_name != 'pull_request'
+        env:
+          MINTTICK_REQUIRE_STABLE_SIGNING: 'true'
+          MINTTICK_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/minttick-release-keystore.p12
+          MINTTICK_ANDROID_KEY_ALIAS: ${{ secrets.MINTTICK_ANDROID_KEY_ALIAS }}
+          MINTTICK_ANDROID_STORE_PASSWORD: ${{ secrets.MINTTICK_ANDROID_STORE_PASSWORD }}
+          MINTTICK_ANDROID_KEY_PASSWORD: ${{ secrets.MINTTICK_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Retry transient upstream Gradle/Kotlin HTTP 504, not source tests.
+          for attempt in 1 2 3; do
+            if flutter build apk --release \
+              --build-number="$((100000 + GITHUB_RUN_NUMBER))" \
+              --dart-define=API_BASE_URL="$API_BASE_URL" \
+              --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+              --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+              --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+              --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Release APK failed after bounded retries" >&2
+              exit 1
+            fi
+            sleep "$((attempt * 12))"
+          done
+
+      - name: Build CI-only debug-signed configured APK without release credentials
+        if: github.event_name == 'pull_request'
+        env:
+          MINTTICK_REQUIRE_STABLE_SIGNING: 'false'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if flutter build apk --release \
+              --build-number="$((100000 + GITHUB_RUN_NUMBER))" \
+              --dart-define=API_BASE_URL="$API_BASE_URL" \
+              --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+              --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+              --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+              --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"; then
+              break
+            fi
+            test "$attempt" -lt 3 || exit 1
+            sleep "$((attempt * 12))"
+          done
+
+      - name: Regression-test strict APK signer certificate parsing
+        run: |
+          cd ../..
+          python3 -m unittest discover -s scripts/tests -p test_verify_apk_signer.py -v
+
+      - name: Confirm APK is signed by the pinned permanent certificate
+        if: github.event_name != 'pull_request'
+        env:
+          MINTTICK_ANDROID_CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk_dir" || { echo "::error::Android SDK location not available"; exit 2; }
+          verifier="$(find "$sdk_dir/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          test -n "$verifier" && test -x "$verifier" || {
+            echo "::error::apksigner missing; cannot verify release signer"
+            exit 2
+          }
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          # apksigner must return success *and* the public Signer #1
+          # certificate must exactly match MintTick's pinned release identity.
+          # Python fixture tests cover Android SDK output variants and rejects.
+          python3 ../../scripts/verify_apk_signer.py \
+            "$verifier" "$apk" "$MINTTICK_ANDROID_CERT_SHA256" "$apk.signer.sha256"
+
+      - name: Record APK checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event_name == 'push' && (steps.request_mode.outputs.connected == 'true' && 'MintTick-Connected-Android-Test' || 'MintTick-Cognito-Android-Test') || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
+          path: |
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.signer.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove signing keystore from ephemeral runner
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/minttick-release-keystore.p12"

@@ -1,0 +1,72 @@
+name: MintTick web publisher dev OIDC identity diagnostic
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-web-publisher-oidc-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-token-subject:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect dev OIDC subject only (never print JWT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os
+          from urllib.request import Request, urlopen
+          allowed = {
+              "repo:operationReact/AiTradingSystem:ref:refs/heads/dev",
+              "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+          }
+          assert os.environ["GITHUB_REF"] == "refs/heads/dev"
+          assert os.environ["GITHUB_REPOSITORY"] == "operationReact/AiTradingSystem"
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+          bearer = os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
+          separator = "&" if "?" in url else "?"
+          req = Request(url + separator + "audience=sts.amazonaws.com",
+                        headers={"Authorization": "Bearer " + bearer})
+          with urlopen(req, timeout=20) as response:
+              token = json.load(response)["value"]
+          encoded = token.split(".")[1]
+          claims = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+          sub = claims.get("sub")
+          print("DEV_OIDC_SUB=" + str(sub))
+          print("OIDC_REPO_ID=" + str(claims.get("repository_id")))
+          print("OIDC_OWNER_ID=" + str(claims.get("repository_owner_id")))
+          assert claims.get("aud") == "sts.amazonaws.com"
+          assert str(claims.get("repository_id")) == "1433875172"
+          assert str(claims.get("repository_owner_id")) == "215111824"
+          assert sub in allowed, "Unexpected GitHub OIDC subject; do not broaden IAM trust"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("MintTick dev OIDC subject confirmed. No JWT exposed.\n")
+          PY
+      - name: Check required scoped trust values in versioned CloudFormation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('infra/minttick-domain/bootstrap-public-web.yml').read_text()
+          expected = [
+              "repo:operationReact/AiTradingSystem:ref:refs/heads/dev",
+              "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+          ]
+          for subject in expected:
+              assert "'" + subject + "'" in s
+          policy = s.split('  GithubWebPublishRole:', 1)[1].split('      Policies:', 1)[0]
+          assert 'StringEquals:' in policy and 'StringLike:' not in policy
+          print("PASS: versioned CloudFormation matches both exact OIDC subjects")
+          PY

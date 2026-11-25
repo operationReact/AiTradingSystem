@@ -1,0 +1,8 @@
+# Explicitly opt into only the vetted build inputs for research-release Dockerfile.
+**
+!pyproject.toml
+!README.md
+!src/
+!src/**
+!.research-release/
+!.research-release/**

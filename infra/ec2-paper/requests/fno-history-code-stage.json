@@ -1,0 +1,13 @@
+{
+  "kind": "minttick-fno-source-stage-v1",
+  "operation": "stage-reviewed-fno-python-library-without-start",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "environment": "PAPER",
+  "authorization": "OWNER_APPROVED_FNO_SOURCE_STAGE_NO_EXECUTION_2026_11_21",
+  "max_provider_gets": 0,
+  "persist_market_data": false,
+  "start_service": false,
+  "trading_rights_change": false
+}

@@ -1,0 +1,9 @@
+{
+    "application": "MintTick",
+    "environment": "paper",
+    "aws_account": "098859530205",
+    "region": "ap-south-1",
+    "instance_id": "i-09c01b470fb39b85a",
+    "operation": "activate-upstox-bse-crosswalk",
+    "authorization": "USER_APPROVED_SOURCE_VERIFIED_BSE_REPAIR_2026-11-13"
+}

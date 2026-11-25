@@ -1,0 +1,67 @@
+name: MintTick STR176 forward NSE original observation (NO ORDERS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-forward-nse-capture.yml'
+      - 'infra/ec2-paper/str176_forward_nse_capture.py'
+      - 'scripts/tests/test_str176_forward_nse_capture.py'
+      - 'infra/ec2-paper/requests/str176-forward-nse-capture.json'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/str176-forward-nse-capture.json'
+permissions:
+  contents: read
+jobs:
+  offline-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify bounded private capture
+        run: |
+          python3 -m py_compile infra/ec2-paper/str176_forward_nse_capture.py
+          python3 -m unittest discover -s scripts/tests -p 'test_str176_forward_nse_capture.py' -v
+  exact-host-capture:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && github.repository == 'operationReact/AiTradingSystem'
+    needs: offline-acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact single-file owner request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/str176-forward-nse-capture.json'
+          python3 - <<'PY'
+          import sys
+          from datetime import datetime,timezone
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from str176_forward_nse_capture import load_request
+          p=Path('infra/ec2-paper/requests/str176-forward-nse-capture.json')
+          load_request(p,datetime.now(timezone.utc))
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-str176-forward-nse
+      - name: Acquire actual final NSE archive and privately persist original bytes
+        run: |
+          set -euo pipefail
+          set +x
+          python3 infra/ec2-paper/str176_forward_nse_capture.py runner
+# No broker orders, trading settings changes, provider-rights writes or market data export.

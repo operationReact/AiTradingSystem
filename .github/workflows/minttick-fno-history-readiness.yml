@@ -1,0 +1,91 @@
+name: MintTick F&O history - exact-host zero-GET readiness
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-history-readiness.yml'
+      - 'infra/ec2-paper/fno_history_readiness.py'
+      - 'scripts/tests/test_fno_history_readiness.py'
+      - 'infra/ec2-paper/FNO_HISTORY_OPERATIONAL_READINESS.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-history-readiness.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline exact request and restart tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_history_readiness.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_history_readiness.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/fno_history_readiness.py').read_text()
+          assert '"max_provider_gets": 0' in p
+          assert '"persist": False' in p
+          assert '"trading_rights_change": False' in p
+          assert 'verify_aws()' in p
+          for forbidden in ('get-parameter','api.upstox.com','placeOrder',
+                            'TRADING_MODE=LIVE', 'systemctl start'):
+              assert forbidden not in p, forbidden
+          PY
+
+  audit:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require approved single-file zero-provider-request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-history-readiness.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"infra/ec2-paper")
+          from fno_history_readiness import expected_request
+          p=Path("infra/ec2-paper/requests/fno-history-readiness.json")
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - name: Assume existing exact-host OIDC SSM diagnostic role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-readiness
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Zero-provider-GET inspection of existing host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_history_readiness.py runner
+
+# No workflow_dispatch, resource mutation, SSM credential retrieval,
+# Upstox network calls, market-data retention or broker orders. Only a
+# separately approved one-file request on dev triggers the AWS check.

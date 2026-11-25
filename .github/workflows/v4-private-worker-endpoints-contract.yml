@@ -1,0 +1,34 @@
+name: V77 private research worker VPC endpoint safety contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-private-endpoints.tf'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_private_worker_endpoints.py'
+      - '.github/workflows/v4-private-worker-endpoints-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-private-endpoints.tf'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_private_worker_endpoints.py'
+      - '.github/workflows/v4-private-worker-endpoints-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-private-network:
+    name: Reject public worker egress, worker startup or unguarded endpoints
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check private network fail-closed invariants
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_private_worker_endpoints.py

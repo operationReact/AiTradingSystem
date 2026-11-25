@@ -1,0 +1,82 @@
+name: Mind progress walker - PR checks
+
+# Narrow PR-level checks for the authenticated progress inventory walker. These run with no
+# secrets, no AWS role, no id-token and no deployment permission. The authenticated walk itself
+# runs only in the trusted dev workflow `mind-live-verify.yml`, after merge.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/mind/walk_progress_inventory.py'
+      - 'scripts/mind/test_walk_progress_inventory.py'
+      - 'scripts/mind/paper_verification_cycle.py'
+      - 'scripts/mind/test_paper_verification_cycle.py'
+      - 'scripts/mind/paper_verification_room.py'
+      - 'scripts/mind/market_data_diagnostic.py'
+      - 'scripts/mind/test_market_data_diagnostic.py'
+      - '.github/workflows/mind-market-data-diagnostic.yml'
+      - 'scripts/mind/test_paper_verification_room.py'
+      - '.github/workflows/mind-paper-verification-room.yml'
+      - '.github/workflows/mind-paper-verification-cycle.yml'
+      - '.github/workflows/mind-live-verify.yml'
+      - '.github/workflows/mind-progress-walker-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mind-progress-walker-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  walker-unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Compile the walker and its tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mind/walk_progress_inventory.py scripts/mind/test_walk_progress_inventory.py scripts/mind/paper_verification_cycle.py scripts/mind/test_paper_verification_cycle.py scripts/mind/paper_verification_room.py scripts/mind/test_paper_verification_room.py
+
+      - name: Run walker unit tests (offline, no network, no credentials)
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/mind -p test_walk_progress_inventory.py -v
+          python3 -m unittest discover -s scripts/mind -p test_paper_verification_cycle.py -v
+          python3 -m unittest discover -s scripts/mind -p test_paper_verification_room.py -v
+          python3 -m unittest discover -s scripts/mind -p test_market_data_diagnostic.py -v
+
+      - name: Validate workflow YAML syntax and walker wiring
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for name in (
+              ".github/workflows/mind-live-verify.yml",
+              ".github/workflows/mind-progress-walker-check.yml",
+              ".github/workflows/mind-paper-verification-cycle.yml",
+              ".github/workflows/mind-paper-verification-room.yml",
+              ".github/workflows/mind-market-data-diagnostic.yml",
+          ):
+              doc = yaml.safe_load(Path(name).read_text())
+              assert isinstance(doc, dict) and doc.get("jobs"), f"invalid workflow: {name}"
+
+          live = Path(".github/workflows/mind-live-verify.yml").read_text()
+          assert "scripts/mind/walk_progress_inventory.py" in live, "walker not wired into live verify"
+          assert "313" in live, "expected inventory total not pinned in live verify"
+          assert "rm -f \"$RUNNER_TEMP/verify_walk_token\"" in live, "walker token file not removed"
+
+          import re
+          check = Path(".github/workflows/mind-progress-walker-check.yml").read_text()
+          assert not re.search(r"\$\{\{\s*secrets\.", check), "PR check must not read secrets"
+          assert not re.search(r"^\s*(id-token|role-to-assume)\s*:", check, re.M), "PR check must not assume a role"
+          assert not re.search(r"^\s*aws\s", check, re.M), "PR check must not call AWS"
+          assert not re.search(r"^\s*update-function-code\b", check, re.M), "PR check must not deploy"
+          print("PASS: workflow YAML valid; walker wired; PR check has no secrets or deploy permissions")
+          PY

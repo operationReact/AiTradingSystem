@@ -1,0 +1,56 @@
+# V80: separate *operator-built only* research worker image with checked model bytes.
+# This Dockerfile intentionally fails unless the local .research-release bundle
+# has been prepared from actual pinned models. It is never built/pushed by the
+# existing deployment workflows.
+# V98: mandatory immutable base image identity. No default mutable tag.
+# CI binds the just-pulled official Python image digest for synthetic tests.
+# Real releases still require an independently reviewed and approved digest.
+ARG RESEARCH_PYTHON_BASE_IMAGE
+FROM ${RESEARCH_PYTHON_BASE_IMAGE}
+ARG RESEARCH_PYTHON_BASE_IMAGE
+
+# LightGBM's native runtime requires GNU OpenMP; python:3.11-slim omits
+# libgomp.so.1. Without it even offline artifact receipt verification fails.
+# Keep only the runtime library and remove apt metadata in this image layer.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir .
+
+# V97: fail image BUILD before private model bytes enter this context when the
+# resolved graph is broken, reviewed direct ML pins drift, or dev tools leak.
+# This does NOT attest the still-floating Python base / transitive wheel lock.
+RUN python -m aitrading_intelligence.research_base_digest_gate verify \
+    --reference "${RESEARCH_PYTHON_BASE_IMAGE}" && \
+    python -m aitrading_intelligence.research_dependency_gate
+
+# Unlike the everyday Dockerfile, only this explicitly selected Dockerfile
+# can see the independently staged research model release build context.
+COPY --chown=65532:65532 .research-release/ /opt/research/
+ARG RESEARCH_SOURCE_SHA
+
+# Fail build on missing/tampered/extra model files, forged authority fields,
+# incorrect code SHA or receipt/manifest hashes, without printing file bytes.
+RUN python -m aitrading_intelligence.research_release_bundle verify \
+    --bundle /opt/research --code-sha "${RESEARCH_SOURCE_SHA}"
+
+USER 65532:65532
+ENV TRADING_MODE=PAPER \
+    AI_RESEARCH_STRICT_BOOT_REQUIRED=true \
+    AI_RESEARCH_MODEL_MANIFEST=/opt/research/manifest.json
+
+LABEL org.opencontainers.image.description="Research-only PAPER Python worker with checked local model artifacts"
+EXPOSE 8090
+
+# Runtime private token must arrive through ECS Secrets Manager, never at build.
+# This dedicated model-containing image refuses to start when an ECS/runtime
+# override sets strict bootstrap to false; the ordinary dev image stays lenient.
+# Fixed ENTRYPOINT rather than CMD: an ECS `command` override is only
+# appended as unused arguments to sh -c, never substituted for this gate.
+# An explicitly overridden ECS `entryPoint` remains outside image-only controls
+# and must be governed by independent IAM/task-definition review.
+ENTRYPOINT ["sh", "-c", "test \"$AI_RESEARCH_STRICT_BOOT_REQUIRED\" = true && python -m aitrading_intelligence.research_startup_gate && exec uvicorn aitrading_intelligence.app:app --host 0.0.0.0 --port 8090"]

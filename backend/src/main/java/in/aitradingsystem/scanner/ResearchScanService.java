@@ -1,0 +1,227 @@
+package in.aitradingsystem.scanner;
+
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.mind.MindSourceSnapshot;
+import in.aitradingsystem.news.feature.NewsContext;
+import in.aitradingsystem.news.feature.NewsFeatureService;
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
+import in.aitradingsystem.marketdata.MarketCandle;
+import in.aitradingsystem.marketdata.MarketDataQualityService;
+import in.aitradingsystem.marketdata.MarketDataRepository;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ResearchScanService {
+    private static final int REQUIRED_CANDLES = 64;
+
+    private final ResearchScanRepository scans;
+    private final MarketDataRepository marketData;
+    private final MarketDataQualityService quality;
+    private final Clock clock;
+    private final int maxUniverseSize;
+    private final StrategyRegistry registry;
+    private final StrategyConfigService strategyConfigs;
+    private final ScannerEngine engine;
+    /** Optional advisory news context. Null in fixtures; when disabled, nothing is attached. */
+    private final NewsFeatureService newsFeatures;
+
+    @Autowired
+    public ResearchScanService(
+            ResearchScanRepository scans,
+            MarketDataRepository marketData,
+            MarketDataQualityService quality,
+            Clock clock,
+            StrategyRegistry registry,
+            StrategyConfigService strategyConfigs,
+            NewsFeatureService newsFeatures,
+            @Value("${app.research.scan.max-universe-size:3500}") int maxUniverseSize,
+            @Value("${app.research.scan.max-candle-age-minutes:60}") int maxCandleAgeMinutes) {
+        this(scans, marketData, quality, clock, registry, strategyConfigs,
+                maxUniverseSize, maxCandleAgeMinutes, false, newsFeatures);
+    }
+
+    /** Unit-fixture constructor: production always injects the quality/configuration gates. */
+    ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData, Clock clock,
+            int maxUniverseSize, int maxCandleAgeMinutes) {
+        this(scans, marketData, null, clock, defaultRegistry(), null,
+                maxUniverseSize, maxCandleAgeMinutes, true, null);
+    }
+
+    /** Quality-gate fixture constructor retained for focused scan tests. */
+    ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
+            MarketDataQualityService quality, Clock clock, int maxUniverseSize, int maxCandleAgeMinutes) {
+        this(scans, marketData, quality, clock, defaultRegistry(), null,
+                maxUniverseSize, maxCandleAgeMinutes, true, null);
+    }
+
+    private ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
+            MarketDataQualityService quality, Clock clock, StrategyRegistry registry,
+            StrategyConfigService strategyConfigs, int maxUniverseSize, int maxCandleAgeMinutes,
+            boolean fixtureBypass, NewsFeatureService newsFeatures) {
+        if (maxUniverseSize < 1 || maxUniverseSize > 10000) {
+            throw new IllegalArgumentException("maxUniverseSize must be between 1 and 10000");
+        }
+        if (maxCandleAgeMinutes < 1 || maxCandleAgeMinutes > 1440) {
+            throw new IllegalArgumentException("maxCandleAgeMinutes must be between 1 and 1440");
+        }
+        if (registry == null) throw new IllegalArgumentException("strategy registry is required");
+        if (!fixtureBypass && quality == null) throw new IllegalArgumentException("market data quality gate is required");
+        if (!fixtureBypass && strategyConfigs == null) throw new IllegalArgumentException("strategy config service is required");
+        this.scans = scans;
+        this.marketData = marketData;
+        this.quality = quality;
+        this.clock = clock;
+        this.maxUniverseSize = maxUniverseSize;
+        this.registry = registry;
+        this.strategyConfigs = strategyConfigs;
+        this.newsFeatures = newsFeatures;
+        this.engine = new ScannerEngine(registry.enabledStrategies(), Duration.ofMinutes(maxCandleAgeMinutes));
+    }
+
+    public ResearchScanSummary run(HistoricalCandleInterval interval, int requestedLimit) {
+        if (interval == null) throw new IllegalArgumentException("A supported interval is required");
+        if (requestedLimit < 1 || requestedLimit > maxUniverseSize) {
+            throw new IllegalArgumentException("requestedLimit must be between 1 and " + maxUniverseSize);
+        }
+        if (interval == HistoricalCandleInterval.ONE_DAY) {
+            throw new IllegalArgumentException("Intraday research scans do not support ONE_DAY");
+        }
+
+        UUID runId = UUID.randomUUID();
+        String strategySet = registry.descriptors().stream()
+                .map(StrategyDescriptor::code)
+                .collect(Collectors.joining(","));
+        scans.createRun(runId, interval.name(), requestedLimit, strategySet);
+        int scannedCount = 0;
+        int candidateCount = 0;
+        int diagnosticCount = 0;
+        int incompleteHistoryCount = 0;
+        try {
+            List<Instrument> universe = scans.activeCashEquityUniverse(requestedLimit);
+            Instant evaluatedAt = clock.instant();
+            for (Instrument instrument : universe) {
+                try {
+                    List<MarketCandle> candles = marketData.recentCandles(instrument.id(), interval.name(), REQUIRED_CANDLES);
+                    if (candles.size() < REQUIRED_CANDLES) {
+                        // A 2,756-instrument request does not imply 2,756
+                        // analyzable stocks. Preserve explicit gaps rather
+                        // than reporting a fully successful universe scan.
+                        incompleteHistoryCount++;
+                        scans.saveDiagnostic(runId, instrument.id(), null, "WARN",
+                                "INSUFFICIENT_CANDLE_HISTORY",
+                                "Fewer than 64 stored candles; full strategy coverage unavailable");
+                        if (candles.isEmpty()) {
+                            recordNotEvaluated(runId, instrument.id(), "NO_CANDLES", null);
+                            scannedCount++;
+                            continue;
+                        }
+                    }
+                    if (quality != null && (candles.isEmpty()
+                            || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
+                        recordNotEvaluated(runId, instrument.id(), "QUALITY_GATE_REJECTED", null);
+                        scannedCount++;
+                        continue;
+                    }
+                    ScanContext context = new ScanContext(
+                            instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
+                            evaluatedAt, candles);
+                    List<ScannerEngine.StrategyEvaluation> evaluations = engine.evaluate(context);
+                    List<ScanCandidate> candidates = ScannerEngine.candidates(evaluations);
+                    Instant dataCutoffAt = candles.isEmpty() ? null : candles.getLast().candleTime();
+                    // Every registered strategy's outcome is recorded: candidate, no signal, or not evaluated.
+                    for (ScannerEngine.StrategyEvaluation evaluation : evaluations) {
+                        scans.saveOutcome(runId, instrument.id(), evaluation.strategy(), evaluation.outcome(),
+                                evaluation.reasonCode(), dataCutoffAt);
+                    }
+                    for (ScanCandidate candidate : candidates) {
+                        ScannerStrategy strategy = registry.require(candidate.strategy())
+                                .orElseThrow(() -> new IllegalStateException("Candidate references unknown strategy: " + candidate.strategy()));
+                        StrategyConfigSnapshot activeConfig = strategyConfigs == null ? null : strategyConfigs.active(candidate.strategy());
+                        Integer configVersion = activeConfig == null ? null : activeConfig.configVersion();
+                        if (scans.saveCandidate(runId, candidate, strategy.descriptor().version(), configVersion,
+                                instrument.catalogueVersion(), dataCutoffAt)) {
+                            // Advisory annotation only: news never changes candidacy, score or execution.
+                            String newsJson = newsContextJson(instrument, evaluatedAt);
+                            if (newsJson != null) {
+                                scans.recordNewsContext(runId, instrument.id(), candidate.strategy(),
+                                        candidate.candleTime(), newsJson);
+                            }
+                            // Capture at the exact scanner evaluation boundary.
+                            // A custody failure marks this scan PARTIAL; later Mind
+                            // replay refuses a candidate without frozen inputs.
+                            if (MovingAverageReclaimStrategy.NAME.equals(candidate.strategy())) {
+                                MindSourceSnapshot frozen = MindSourceSnapshot.capture(
+                                    candles, candidate, evaluatedAt);
+                                scans.recordMindInputCustody(runId, candidate,
+                                    strategy.descriptor().version(), frozen);
+                            } else if (OpeningRangeBreakoutStrategy.NAME.equals(candidate.strategy())) {
+                                MindSourceSnapshot frozen = MindSourceSnapshot.captureOpeningRange(
+                                    candles, candidate, evaluatedAt);
+                                scans.recordOpeningRangeMindInputCustody(runId, candidate,
+                                    strategy.descriptor().version(), frozen);
+                            }
+                            candidateCount++;
+                        }
+                    }
+                    scannedCount++;
+                } catch (RuntimeException instrumentFailure) {
+                    diagnosticCount++;
+                    scans.saveDiagnostic(runId, instrument.id(), null, "ERROR", "INSTRUMENT_SCAN_FAILED",
+                            "Instrument scan failed; remaining universe continued");
+                }
+            }
+            if (diagnosticCount == 0 && incompleteHistoryCount == 0) {
+                scans.finishRun(runId, scannedCount, candidateCount);
+            } else if (diagnosticCount > 0) {
+                scans.partialRun(runId, scannedCount, candidateCount, "PARTIAL_SCAN",
+                        diagnosticCount + " instrument(s) failed during scan"
+                        + (incompleteHistoryCount == 0 ? ""
+                            : "; " + incompleteHistoryCount + " instrument(s) lack full candle history"));
+            } else {
+                scans.partialRun(runId, scannedCount, candidateCount, "INCOMPLETE_HISTORY_COVERAGE",
+                        incompleteHistoryCount + " instrument(s) lack the 64-candle research window");
+            }
+        } catch (RuntimeException e) {
+            scans.saveDiagnostic(runId, null, null, "ERROR", "SCAN_FAILED",
+                    "Research scan failed before the universe could be completed");
+            scans.failRun(runId, scannedCount, candidateCount, "SCAN_FAILED", "Research scan failed before completion");
+        }
+        return scans.requireRun(runId);
+    }
+
+    /**
+     * Serialized as-of news context, or null when the rollout flag is off. A failed lookup is
+     * recorded as UNAVAILABLE rather than failing the scan, and is never read as neutral evidence.
+     */
+    private String newsContextJson(Instrument instrument, Instant asOf) {
+        if (newsFeatures == null || !newsFeatures.enabled()) return null;
+        try {
+            return newsFeatures.toJson(newsFeatures.contextFor(instrument.id(), instrument.tradingSymbol(), asOf));
+        } catch (RuntimeException e) {
+            return newsFeatures.toJson(NewsContext.unavailable(instrument.id(), instrument.tradingSymbol(), asOf));
+        }
+    }
+
+    private void recordNotEvaluated(UUID runId, long instrumentId, String reasonCode, Instant dataCutoffAt) {
+        for (String strategy : engine.strategyCodes()) {
+            scans.saveOutcome(runId, instrumentId, strategy, ScannerEngine.NOT_EVALUATED, reasonCode, dataCutoffAt);
+        }
+    }
+
+    private static StrategyRegistry defaultRegistry() {
+        return new StrategyRegistry(List.of(
+                new VolumeBreakoutStrategy(),
+                new MovingAverageReclaimStrategy(),
+                new OpeningRangeBreakoutStrategy(),
+                new VwapMomentumStrategy(),
+                new RsiReversalStrategy()));
+    }
+}

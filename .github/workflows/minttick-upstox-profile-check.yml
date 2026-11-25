@@ -1,0 +1,101 @@
+name: MintTick - read-only Upstox account-profile segment check
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-upstox-profile-check.yml'
+      - 'infra/ec2-paper/upstox_profile_probe.py'
+      - 'scripts/tests/test_upstox_profile_probe.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-profile-check.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify fixed one-GET no-storage profile check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/upstox_profile_probe.py
+          python3 -m unittest discover -s scripts/tests -p test_upstox_profile_probe.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/upstox_profile_probe.py').read_text()
+          assert 6000 < len(s) < 15000
+          assert '"max_provider_gets": 1' in s
+          assert '"persist": False' in s
+          assert '"trading_rights_change": False' in s
+          assert 'https://api.upstox.com/v2/user/profile' in s
+          for forbidden in ('placeOrder', 'submitOrder', 'put-parameter',
+                            'UPDATE customer_', 'DELETE FROM', 'print(body',
+                            'TRADING_MODE=LIVE', 'print(token)', 'print(result.stdout)'):
+              assert forbidden not in s, forbidden
+          PY
+
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact single-file owner-approved profile request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/upstox-profile-check.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from upstox_profile_probe import expected_request
+          p=Path('infra/ec2-paper/requests/upstox-profile-check.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-upstox-profile-audit
+          role-duration-seconds: 900
+      - name: GET account profile with existing SSM token on fixed EC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/upstox_profile_probe.py runner \
+            | tee "$RUNNER_TEMP/upstox-profile-audit.txt"
+      - name: Retain sanitized profile receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstox-profile-readonly
+          path: "$RUNNER_TEMP/upstox-profile-audit.txt"
+          if-no-files-found: ignore
+          retention-days: 14
+
+# No names, emails, user identifiers, products, quotes, credentials, historical data, trading rights, EC2 resources,
+# workloads or broker orders are persisted or changed by this workflow.

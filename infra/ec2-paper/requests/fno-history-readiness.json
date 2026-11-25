@@ -1,0 +1,12 @@
+{
+  "account": "098859530205",
+  "authorization": "OWNER_APPROVED_READONLY_FNO_HISTORY_READINESS_2026_11_21",
+  "environment": "PAPER",
+  "instance_id": "i-09c01b470fb39b85a",
+  "kind": "minttick-fno-history-readiness-v1",
+  "max_provider_gets": 0,
+  "operation": "inspect-existing-fno-history-runtime-without-writes",
+  "persist": false,
+  "region": "ap-south-1",
+  "trading_rights_change": false
+}

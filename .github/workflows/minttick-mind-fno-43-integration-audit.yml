@@ -1,0 +1,567 @@
+name: MintTick Mind F&O - all 43 research evaluator integration evidence
+
+# Research source/tests + catalog contract validation, not broker execution.
+# No AWS credentials, market-data APIs, broker endpoints, SSM or deployments.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-mind-fno-43-integration-audit.yml'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43SourceEvidenceController.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V100__fno_verified_final_price_oi_sessions.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V101__fno_cash_futures_feasibility_evidence.sql'
+      - 'backend/src/main/resources/db/migration/V102__fno_verified_completed_ohlcv_oi_session.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V103__fno_index_hedge_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V104__fno_verified_intraday_liquidity_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V105__fno_verified_expiry_basis_pair_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V106__fno_nifty_long_option_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V107__fno_verified_nifty_debit_spread_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDebitSpreadSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDebitSpreadSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V108__fno_verified_nifty_credit_spread_margin_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCreditSpreadSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCreditSpreadSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V109__fno_owned_equity_option_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V110__fno_verified_owned_equity_collar_cost.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V111__fno_verified_nifty_ratio_spread_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedRatioSpreadSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedRatioSpreadSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V112__fno_verified_nifty_straddle_iv_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V113__fno_verified_nifty_strangle_iv_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStrangleIvSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStrangleIvSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V114__fno_verified_nifty_short_straddle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V115__fno_verified_nifty_short_strangle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V116__fno_verified_nifty_iron_condor_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronCondorSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronCondorSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronCondorResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronCondorResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V117__fno_verified_nifty_iron_butterfly_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronButterflySourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronButterflySourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V118__fno_verified_nifty_long_butterfly_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V119__fno_verified_nifty_calendar_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCalendarSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCalendarSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V120__fno_verified_nifty_diagonal_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V121__fno_verified_nifty_30d_iv_rank_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V122__fno_verified_event_vol_crush_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V123__fno_verified_str203_206_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy203206SourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy203206SourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V124__fno_str207_212_original_research_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy207212SourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy207212SourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGate.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGateTest.java'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
+      - 'backend/src/main/resources/mind/capability-manifest.v1.json'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno*V1Test.java'
+      - 'docs/strategies/STR-*.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-mind-fno-43-integration-audit.yml'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43SourceEvidenceController.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V100__fno_verified_final_price_oi_sessions.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V101__fno_cash_futures_feasibility_evidence.sql'
+      - 'backend/src/main/resources/db/migration/V102__fno_verified_completed_ohlcv_oi_session.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V103__fno_index_hedge_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V104__fno_verified_intraday_liquidity_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V105__fno_verified_expiry_basis_pair_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V106__fno_nifty_long_option_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V107__fno_verified_nifty_debit_spread_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDebitSpreadSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDebitSpreadSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V108__fno_verified_nifty_credit_spread_margin_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCreditSpreadSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCreditSpreadSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V109__fno_owned_equity_option_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V110__fno_verified_owned_equity_collar_cost.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V111__fno_verified_nifty_ratio_spread_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedRatioSpreadSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedRatioSpreadSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V112__fno_verified_nifty_straddle_iv_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V113__fno_verified_nifty_strangle_iv_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStrangleIvSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStrangleIvSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V114__fno_verified_nifty_short_straddle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V115__fno_verified_nifty_short_strangle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V116__fno_verified_nifty_iron_condor_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronCondorSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronCondorSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronCondorResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronCondorResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V117__fno_verified_nifty_iron_butterfly_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronButterflySourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronButterflySourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V118__fno_verified_nifty_long_butterfly_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V119__fno_verified_nifty_calendar_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCalendarSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCalendarSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V120__fno_verified_nifty_diagonal_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V121__fno_verified_nifty_30d_iv_rank_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V122__fno_verified_event_vol_crush_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V123__fno_verified_str203_206_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy203206SourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy203206SourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V124__fno_str207_212_original_research_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy207212SourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy207212SourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGate.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGateTest.java'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
+      - 'backend/src/main/resources/mind/capability-manifest.v1.json'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno*V1Test.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-fno43-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fno-43-research-evaluator-evidence:
+    name: Verify all 43 F&O evaluators and audited JUnit results (NO broker)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python source/manifest audit contract tests (zero network)
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_strategy_e2e_audit.py' -v
+      - name: Set up isolated Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute exactly the 43 manifest-attested strategy test classes
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          test_list=$(python3 ../scripts/fno_strategy_e2e_audit.py --list-tests)
+          test "$(printf '%s\n' "$test_list" | tr ',' '\n' | wc -l)" -eq 43
+          mvn --batch-mode --no-transfer-progress "-Dtest=$test_list" test
+      - name: Validate read-only 43-strategy runtime readiness coverage and role contract
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=Fno43StrategyReadinessServiceTest' test
+      - name: Validate STR-173 source adapter and rights-attested snapshot SQL
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoFuturesResearchServiceTest,FnoClosingSnapshotStoreTest' test
+      - name: Validate STR-174 verified final-price/OI source and strict as-of SQL
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedFinalPriceOiSessionStoreTest' test
+      - name: Validate STR-175 broker account depth, capital and cost evidence without orders
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoCashFuturesFeasibilityStoreTest' test
+      - name: Validate STR-176 completed futures OHLCV and finalized OI source receipts
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedCompletedOhlcvOiStoreTest' test
+      - name: Validate STR-178 private beta, margin, risk and independently entitled futures depth
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoIndexHedgeResearchStoreTest' test
+      - name: Validate STR-179 original-time quote OI volume source evidence and three independent rights
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedIntradayLiquidityStoreTest' test
+      - name: Validate STR-180 dual exchange close calendars and three independent source/carry rights
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedExpiryBasisPairStoreTest' test
+      - name: Validate STR-181/182 option contract/chain rights, 35 completed NIFTY closes and distinct evaluator calls
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoOptionsResearchServiceTest,FnoVerifiedNiftyLongOptionSourceStoreTest' test
+      - name: Validate STR-183/184 two-leg CE/PE debit spread original source rights and combined tax/margin-free premium risk
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoDebitSpreadResearchServiceTest,FnoVerifiedNiftyDebitSpreadSourceStoreTest' test
+      - name: Validate STR-185/186 credit source, account margin, assignment and stressed loss evidence
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoCreditSpreadResearchServiceTest,FnoVerifiedNiftyCreditSpreadSourceStoreTest' test
+      - name: Validate STR-187/188 settled broker equity share and physical option coverage receipts
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoOwnedEquityOptionsResearchServiceTest,FnoVerifiedEquityOwnedOptionStoreTest' test
+      - name: Validate STR-189 same settled equity lot, genuine stock bid/ask and nonduplicated collar fees
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoEquityCollarResearchServiceTest,FnoVerifiedOwnedEquityCollarCostStoreTest' test
+      - name: Validate STR-190 and STR-191 true 1x2 short leg depth, research rights and margin stress
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoRatioSpreadResearchServiceTest,FnoVerifiedRatioSpreadSourceStoreTest' test
+      - name: Validate STR-192 original CE and PE IV, same-strike contracts and no-order policy
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoStraddleResearchServiceTest,FnoVerifiedNiftyStraddleIvSourceStoreTest' test
+      - name: Validate STR-193 distinct OTM CE and PE original IV, strike ordering and no-order policy
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoStrangleResearchServiceTest,FnoVerifiedNiftyStrangleIvSourceStoreTest' test
+      - name: Validate STR-194 original BID depth, independently verified CE/PE IV, broker margin and unbounded tail loss
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoShortStraddleResearchServiceTest,FnoVerifiedNiftyShortStraddleSourceStoreTest' test
+      - name: Validate STR-195 original OTM CE/PE short BID depth, independent IV, broker account margin and naked-call tail
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoShortStrangleResearchServiceTest,FnoVerifiedNiftyShortStrangleSourceStoreTest' test
+      - name: Validate STR-196 original four-leg quote, independently sourced IV and defined expiry-risk research
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoIronCondorResearchServiceTest,FnoVerifiedNiftyIronCondorSourceStoreTest' test
+      - name: Validate STR-197 original centered CE and PE short legs, independent four-option IV and protected wings
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoIronButterflyResearchServiceTest,FnoVerifiedNiftyIronButterflySourceStoreTest' test
+      - name: Validate STR-198 authentic three CALL keys and TWO center short lots with four-contract costs
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoLongButterflyResearchServiceTest,FnoVerifiedNiftyLongButterflySourceStoreTest' test
+      - name: Validate STR-199 independent original near/far expiry IV, BID and ASK and unresolved far residual mark
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoCalendarSpreadResearchServiceTest,FnoVerifiedNiftyCalendarSourceStoreTest' test
+      - name: Validate STR-200 distinct OTM near short strike and ITM far long strike, expiries and original IV
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoDiagonalSpreadResearchServiceTest,FnoVerifiedNiftyDiagonalSourceStoreTest' test
+      - name: Validate STR-201 200-plus NIFTY original session-aligned OHLC and licensed 30-day IV rank
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoIvRankResearchServiceTest,FnoVerifiedNiftyIvRankSourceStoreTest' test
+      - name: Validate STR-202 verified official pre-known event, 35 original NIFTY closes and two separately sourced 30d IV observations
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVolatilityCrushResearchServiceTest,FnoVerifiedNiftyVolCrushSourceStoreTest' test
+      - name: Validate STR-203 through STR-206 rights-attested original typed research-only source
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedStrategy203206SourceStoreTest,FnoGammaScalpingResearchServiceTest,FnoDeltaHedgeResearchServiceTest,FnoBetaHedgeOptionsResearchServiceTest,FnoTailRiskPutHedgeResearchServiceTest' test
+      - name: Validate STR-207 through STR-212 exact broker-reconciled typed research-only evaluators
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedStrategy207212SourceStoreTest,FnoPutSpreadCollarResearchServiceTest,FnoDefinedRiskSpreadRollResearchServiceTest,FnoExpiryRiskNeutralizationResearchServiceTest,FnoPortfolioProtectiveOverlayResearchServiceTest,FnoGreeksExposureRebalanceResearchServiceTest,FnoSkewBasedHedgeResearchServiceTest' test
+      - name: Confirm real-market source evidence does not promote research fixtures to paper/live readiness
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=Fno43RuntimeSourceAuditServiceTest' test
+      - name: Validate original provider and first-known timestamp gates for ten research adapters
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoTypedResearchProvenanceGateTest,FnoGammaScalpingResearchServiceTest,FnoDeltaHedgeResearchServiceTest,FnoBetaHedgeOptionsResearchServiceTest,FnoTailRiskPutHedgeResearchServiceTest,FnoPutSpreadCollarResearchServiceTest,FnoDefinedRiskSpreadRollResearchServiceTest,FnoExpiryRiskNeutralizationResearchServiceTest,FnoPortfolioProtectiveOverlayResearchServiceTest,FnoGreeksExposureRebalanceResearchServiceTest,FnoSkewBasedHedgeResearchServiceTest' test
+      - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fno_strategy_e2e_audit.py \
+            --surefire-dir backend/target/surefire-reports \
+            --require-surefire \
+            --report artifacts/fno43-evaluator-validation.json
+      - name: Summary with explicit real-data and trade-access blockers
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib
+          path=pathlib.Path('artifacts/fno43-evaluator-validation.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## F&O 43-strategy research integration evidence\n\n')
+              if not path.is_file():
+                  f.write('FAILED: audit report absent; no source or execution readiness may be inferred.\n')
+              else:
+                  a=json.loads(path.read_text())
+                  s=a['summary']
+                  f.write(f"Manifest coverage: **{s['implemented']}/43**; executed JUnit files: "
+                          f"**{s['junitEvidenceComplete']}/43**; JUnit cases: **{s['executedJunitCases']}**.\n\n")
+                  f.write(f"Real-source E2E: **{s['realDataE2EValidated']}/43**. ")
+                  f.write(f"PAPER: **{s['paperTradingValidated']}/43**; ")
+                  f.write(f"LIVE: **{s['liveTradingValidated']}/43**.\n\n")
+                  f.write('This check has NO exchange/broker data and must never authorize orders.\n')
+          PY
+      - name: Publish falsifiable per-strategy evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minttick-fno43-research-evidence
+          path: |
+            artifacts/fno43-evaluator-validation.json
+            backend/target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno*V1Test.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+# This validates deterministic evaluator research and test evidence.
+# Real NSE provider rights, original-time replay, broker-book reconciliation,
+# PAPER and LIVE integration remain separate auditable stages.

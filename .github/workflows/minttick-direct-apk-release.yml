@@ -1,0 +1,133 @@
+name: MintTick - direct signed Android APK via CloudFront
+on:
+  push:
+    branches: [dev]
+    paths:
+      - infra/minttick-domain/requests/publish-direct-apk.json
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+concurrency:
+  group: minttick-direct-apk-cloudfront
+  cancel-in-progress: false
+jobs:
+  publish-signed-apk:
+    name: Publish and verify direct HTTPS signed APK
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '43981767136'
+      ARTIFACT_NAME: MintTick-Connected-Android-Test-4feb32d67e55c6a74d7a93531d40859aaab4dcf6
+      EXPECTED_APK_SHA: fedea96374ac6bcb26b410a0ea23ef787a0fd6faa693098c242c4707de1895fb
+      EXPECTED_SIGNER: 7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B
+      WEB_BUCKET: minttick-web-098859530205-us-east-1
+      OBJECT_KEY: downloads/MintTick-dev-4feb32d67e55.apk
+      DIRECT_URL: https://www.minttick.com/downloads/MintTick-dev-4feb32d67e55.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify exact owner-approved immutable APK publishing request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import subprocess
+          changed = set(subprocess.check_output(
+              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+              text=True).splitlines())
+          approved = {
+              "infra/minttick-domain/requests/publish-direct-apk.json",
+              ".github/workflows/minttick-direct-apk-release.yml",
+          }
+          if "infra/minttick-domain/requests/publish-direct-apk.json" not in changed or not changed.issubset(approved):
+              raise SystemExit("DENIED: unauthorized APK release paths " + repr(changed))
+          from pathlib import Path
+          data=json.loads(Path('infra/minttick-domain/requests/publish-direct-apk.json').read_text())
+          expected={
+            "application":"MintTick",
+            "environment":"dev",
+            "operation":"publish-stable-signed-android-cloudfront",
+            "source_run_id":43981767136,
+            "source_artifact_id":14284181318,
+            "source_sha":"4feb32d67e55c6a74d7a93531d40859aaab4dcf6",
+            "expected_apk_sha256":"fedea96374ac6bcb26b410a0ea23ef787a0fd6faa693098c242c4707de1895fb",
+            "expected_signer_sha256":"7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
+            "bucket":"minttick-web-098859530205-us-east-1",
+            "object_key":"downloads/MintTick-dev-4feb32d67e55.apk",
+            "authorization":"USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-17",
+            "publication_attempt":1,
+          }
+          if data != expected:
+            raise SystemExit("DENIED: request is not the reviewed exact APK publication")
+          PY
+      - name: Retrieve exact signed APK from successful Android workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$ARTIFACT_NAME" --dir source
+          test -s source/app-release.apk
+          test -f source/app-release.apk.sha256
+          test -f source/app-release.apk.signer.sha256
+      - name: Verify source APK bytes and permanent signing fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(sha256sum source/app-release.apk | cut -d' ' -f1)"
+          test "$actual" = "$EXPECTED_APK_SHA"
+          test "$(cut -d' ' -f1 source/app-release.apk.sha256)" = "$actual"
+          test "$(tr -d '\r\n' < source/app-release.apk.signer.sha256)" = "$EXPECTED_SIGNER"
+          test "$(stat -c '%s' source/app-release.apk)" -eq 75308863
+          echo "PASS: exact stable-signed Android file fingerprint and size"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-web-github-publish
+          aws-region: us-east-1
+          role-session-name: minttick-apk-direct-${{ github.run_id }}
+      - name: Verify existing account, dedicated private bucket and CloudFront
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
+          test "$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query 'Stacks[0].StackStatus' --output text)" = CREATE_COMPLETE
+          bucket="$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue|[0]" --output text)"
+          distribution="$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue|[0]" --output text)"
+          test "$bucket" = "$WEB_BUCKET"
+          test -n "$distribution" && test "$distribution" != None
+          echo "MINTTICK_DISTRIBUTION=$distribution" >> "$GITHUB_ENV"
+      - name: Publish only reviewed signed APK to private S3 HTTPS origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 cp source/app-release.apk "s3://$WEB_BUCKET/$OBJECT_KEY" \
+            --content-type "application/vnd.android.package-archive" \
+            --content-disposition "attachment; filename=MintTick-dev-4feb32d67e55.apk" \
+            --cache-control "public, max-age=300" --only-show-errors
+          test "$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$OBJECT_KEY" \
+            --query ContentLength --output text)" = '75308863'
+      - name: Invalidate and independently verify actual public APK bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          request="$(aws cloudfront create-invalidation \
+            --distribution-id "$MINTTICK_DISTRIBUTION" \
+            --paths "/$OBJECT_KEY" --query Invalidation.Id --output text)"
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "$MINTTICK_DISTRIBUTION" --id "$request"
+          curl --fail --location --silent --show-error --retry 4 --retry-delay 4 \
+            --max-time 180 --output /tmp/minttick-public.apk \
+            "$DIRECT_URL?verify=$GITHUB_RUN_ID"
+          test "$(stat -c '%s' /tmp/minttick-public.apk)" -eq 75308863
+          test "$(sha256sum /tmp/minttick-public.apk | cut -d' ' -f1)" = "$EXPECTED_APK_SHA"
+          echo "PASS: downloaded 75,308,863 bytes over public HTTPS; SHA256 matches official signed APK"
+          echo "DIRECT VERIFIED APK: $DIRECT_URL" >> "$GITHUB_STEP_SUMMARY"

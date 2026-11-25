@@ -1,0 +1,58 @@
+name: MintTick domain - check public delegation and SSL (read only)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/verify_delegation.py'
+      - '.github/workflows/minttick-domain-verify.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/verify-delegation.json'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate read-only delegation verifier
+        run: python3 -m py_compile infra/minttick-domain/verify_delegation.py
+  inspect:
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify exact single-file read-only request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/verify-delegation.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected = {"domain":"minttick.com","operation":"verify-public-delegation","aws_account":"098859530205","read_only":True}
+          actual = json.loads(Path("infra/minttick-domain/requests/verify-delegation.json").read_text())
+          assert actual == expected, "Unexpected verification request"
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-domain-github-deploy
+          aws-region: us-east-1
+          role-session-name: minttick-public-dns-check-${{ github.run_id }}
+      - name: Check public .com registry, public resolvers and ACM certificate
+        run: |
+          set -euo pipefail
+          command -v dig
+          python3 infra/minttick-domain/verify_delegation.py

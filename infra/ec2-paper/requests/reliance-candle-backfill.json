@@ -1,0 +1,19 @@
+{
+  "application": "MintTick",
+  "environment": "paper",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "bounded-reliance-candle-backfill",
+  "instrument_id": 417378,
+  "symbol": "RELIANCE-EQ",
+  "exchange": "NSE",
+  "intervals": [
+    "FIVE_MINUTE",
+    "ONE_DAY"
+  ],
+  "from_date": "2026-11-03",
+  "to_date": "2026-11-17",
+  "authorization": "USER_APPROVED_RELIANCE_CANDLE_BACKFILL_2026-11-18",
+  "attempt": 7
+}

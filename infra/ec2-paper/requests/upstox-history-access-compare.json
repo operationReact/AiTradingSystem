@@ -1,0 +1,12 @@
+{
+  "authorization": "OWNER_APPROVED_DIAGNOSE_FNO_SOURCE_2026_11_21",
+  "persist": false,
+  "kind": "minttick-owner-upstox-history-access-comparison-v1",
+  "operation": "compare-standard-v3-and-expired-expiries-read-only",
+  "max_provider_gets": 2,
+  "region": "ap-south-1",
+  "environment": "PAPER",
+  "instance_id": "i-09c01b470fb39b85a",
+  "account": "098859530205",
+  "trading_rights_change": false
+}

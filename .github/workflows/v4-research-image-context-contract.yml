@@ -1,0 +1,42 @@
+name: V84 research source-bound local image context safety (offline)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_image_context.py'
+      - 'intelligence/tests/test_research_image_context.py'
+      - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
+      - 'intelligence/Dockerfile.research-release'
+      - 'scripts/tests/test_v4_research_image_context_contract.py'
+      - '.github/workflows/v4-research-image-context-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_image_context.py'
+      - 'intelligence/tests/test_research_image_context.py'
+      - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
+      - 'intelligence/Dockerfile.research-release'
+      - 'scripts/tests/test_v4_research_image_context_contract.py'
+      - '.github/workflows/v4-research-image-context-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-provenance-contract:
+    name: Refuse mutable source, unsafe archive or image-release authority
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check exact Git archive and offline source constraints
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_research_image_context_contract.py
+
+# Real synthetic CatBoost/LightGBM archive tests run with Python intelligence CI.
+# This workflow never obtains AWS credentials, builds/pushes model images,
+# uploads private model weights or contacts a trading broker.

@@ -1,0 +1,31 @@
+name: MintTick - Android release certificate parser regression
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/verify_apk_signer.py'
+      - 'scripts/tests/test_verify_apk_signer.py'
+      - '.github/workflows/minttick-apk-certificate-parser-tests.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/verify_apk_signer.py'
+      - 'scripts/tests/test_verify_apk_signer.py'
+      - '.github/workflows/minttick-apk-certificate-parser-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verifier-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate certificate parser syntax
+        run: python3 -m py_compile scripts/verify_apk_signer.py scripts/tests/test_verify_apk_signer.py
+      - name: Regression test legacy and Build Tools 37 signer output
+        run: python3 -m unittest discover -s scripts/tests -p test_verify_apk_signer.py -v

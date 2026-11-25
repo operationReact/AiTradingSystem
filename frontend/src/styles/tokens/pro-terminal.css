@@ -1,0 +1,36 @@
+/* Canonical Neon triad is decorative; semantic text/action colors remain legible in each mode. */
+:root, :root[data-experience='pro-terminal'] {
+  --neon-cyan: 13 235 255;
+  --neon-violet: 110 64 255;
+  --neon-magenta: 255 36 199;
+  --neon-glass: 5 20 41;
+  --neon-glass-mid: 8 8 33;
+  --neon-glass-end: 26 5 38;
+  --neon-grid: 77 103 255;
+  --studio-cyan: var(--neon-cyan);
+  --studio-violet: var(--neon-violet);
+  --studio-magenta: var(--neon-magenta);
+}
+:root[data-experience='pro-terminal'] {
+  --bg: 2 5 17;
+  --surface: 5 19 38;
+  --surface-2: 8 20 41;
+  --border: 48 68 98;
+  --text: 240 250 255;
+  --muted: 159 178 209;
+  --accent: var(--neon-cyan);
+  --accent-contrast: 2 5 17;
+  --radius-panel: 1rem;
+  --elevation-panel: 0 0 24px rgb(var(--neon-violet) / .08);
+}
+:root[data-experience='pro-terminal'].light {
+  --bg: 242 246 255;
+  --surface: 255 255 255;
+  --surface-2: 234 240 255;
+  --border: 200 210 233;
+  --text: 16 23 42;
+  --muted: 82 96 121;
+  --accent: 69 50 190;
+  --accent-contrast: 255 255 255;
+  --elevation-panel: 0 6px 24px rgb(var(--neon-violet) / .07);
+}

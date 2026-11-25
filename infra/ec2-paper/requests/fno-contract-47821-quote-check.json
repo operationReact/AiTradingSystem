@@ -1,0 +1,12 @@
+{
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "two-read-only-upstox-fno-quote-gets",
+  "instrument": "NSE_FO|47821",
+  "expiry": "2026-12-01",
+  "max_provider_gets": 2,
+  "orders": false,
+  "persist": false
+}

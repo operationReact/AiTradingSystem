@@ -1,0 +1,94 @@
+name: MintTick F&O - bounded real expired candle download pilot
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-ephemeral-history-pilot.yml'
+      - 'infra/ec2-paper/fno_ephemeral_pilot.py'
+      - 'scripts/tests/test_fno_ephemeral_pilot.py'
+      - 'infra/ec2-paper/FNO_EPHEMERAL_PILOT.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-ephemeral-pilot.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded real F&O source pilot; synthetic offline tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_ephemeral_pilot.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_ephemeral_pilot.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/fno_ephemeral_pilot.py').read_text()
+          assert 'MAX_GETS=16' in p and 'MONTHS=3' in p
+          assert '"persist_market_data":False' in p
+          assert '"publish_market_data":False' in p
+          assert '"trading_rights_change":False' in p
+          assert 'verify_aws()' in p
+          assert 'MintTick-Upstox-ReadOnly-Diagnostics/1.0' in p
+          for forbidden in ('sqlite3', 'put-parameter', 'aws s3', 'CREATE TABLE',
+                            'os.replace(', 'systemctl start', 'placeOrder',
+                            'submitOrder', 'TRADING_MODE=LIVE'):
+              assert forbidden not in p, forbidden
+          PY
+
+  sample:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify one exact owner-approved bounded sample request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-ephemeral-pilot.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_ephemeral_pilot import expected_request
+          p=Path('infra/ec2-paper/requests/fno-ephemeral-pilot.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - name: Assume restricted existing AWS SSM diagnostic role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-volatile-pilot
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Fetch and validate real expired F&O in volatile memory only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_ephemeral_pilot.py runner
+
+# This is a 16 GET maximum one-time real read-only source sample.
+# No market-data persistence, no trading orders, no scheduler, no new cloud
+# infrastructure; raw OHLCV/OI exists only inside private process memory.

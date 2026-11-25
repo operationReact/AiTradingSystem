@@ -1,0 +1,519 @@
+"""Minimal API Gateway to private MintTick PAPER Spring Boot reverse proxy.
+
+Private TCP 10.87.0.10:8081 is reachable only from the dedicated Lambda
+security group; the API Gateway JWT authorizer gates customer paths.
+No management, research, admin, LIVE trading, or broker credentials exposed.
+"""
+import base64
+import binascii
+import json
+from datetime import date
+from decimal import Decimal, InvalidOperation
+import re
+import urllib.parse
+import urllib.error
+import urllib.request
+
+BACKEND = "http://10.87.0.10:8081"
+ISSUER = "https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_jz2T8qbiY"
+CLIENT_ID = "6jm18v2mdpcfraip92hrjhqjnd"
+EXACT = {
+    ("POST", "/api/auth/cognito/provision"),
+    ("GET", "/api/auth/cognito/me"),
+    ("GET", "/api/customer/trading-rooms"),
+    ("POST", "/api/customer/trading-rooms"),
+    ("GET", "/api/customer/brokers/angel-one/status"),
+    ("GET", "/api/customer/brokers/angel-one/configured-login"),
+    # Authenticated self-only Cognito reference; never a SmartAPI secret.
+    ("GET", "/api/customer/brokers/angel-one/owner-link-reference"),
+    ("POST", "/api/customer/brokers/angel-one/connect-configured"),
+    ("POST", "/api/customer/brokers/angel-one/connect"),
+    ("POST", "/api/customer/brokers/angel-one/disconnect"),
+    ("GET", "/api/customer/brokers/angel-one/funds"),
+    ("GET", "/api/customer/brokers/angel-one/holdings"),
+    ("GET", "/api/customer/brokers/angel-one/positions"),
+    ("GET", "/api/customer/brokers/angel-one/orders"),
+    ("POST", "/api/customer/brokers/upstox/start"),
+    ("POST", "/api/customer/brokers/upstox/disconnect"),
+    ("GET", "/api/customer/brokers/upstox/status"),
+    ("GET", "/api/customer/brokers/upstox/configured-login"),
+    ("POST", "/api/customer/brokers/upstox/connect-configured"),
+    ("GET", "/api/customer/brokers/upstox/funds"),
+    ("GET", "/api/customer/brokers/upstox/holdings"),
+    ("GET", "/api/customer/brokers/upstox/positions"),
+    ("GET", "/api/customer/brokers/upstox/orders"),
+    ("GET", "/api/customer/brokers/upstox/registered-ips"),
+    ("GET", "/api/customer/portfolio/records"),
+    ("GET", "/api/customer/home/v1/summary"),
+    ("GET", "/api/customer/home/v1/activity"),
+    ("GET", "/api/customer/owner-history/v1/progress"),
+    # Owner-sub checked in Spring; read-only, 365-day bounded private OHLCV cache.
+    ("GET", "/api/customer/owner-history/v1/candles"),
+    ("GET", "/api/customer/owner-history/v1/monthly-candles"),
+    ("GET", "/api/customer/owner-history/v1/intraday-candles"),
+    ("GET", "/api/customer/owner-upstox-analytics/v1/progress"),
+    ("GET", "/api/customer/owner-upstox-analytics/v1/persisted-receipts"),
+    ("GET", "/api/customer/market-data/instruments/status"),
+    ("GET", "/api/customer/market-data/instruments"),
+    ("GET", "/api/customer/market-data/quotes"),
+    ("GET", "/api/customer/market-data/quotes/detail"),
+    ("GET", "/api/customer/market-data/overview"),
+    ("GET", "/api/customer/market-data/universe-facets"),
+    ("GET", "/api/customer/market-data/company-profile"),
+    ("GET", "/api/customer/market-data/fundamentals"),
+    ("GET", "/api/customer/market-data/snapshot"),
+    ("GET", "/api/customer/market-data/candles"),
+    ("GET", "/api/customer/market-data/full-quote-coverage"),
+    ("GET", "/api/customer/market-data/board"),
+    ("GET", "/api/customer/market-data/board/summary"),
+    ("GET", "/api/customer/watchlist"),
+    ("POST", "/api/customer/watchlist"),
+    # Mintick Mind: customer-authenticated, read-only research/progress/PAPER views.
+    ("GET", "/api/customer/mind/v1/overview"),
+    ("GET", "/api/customer/mind/v1/fno-evaluation"),
+    ("GET", "/api/customer/mind/v1/evidence"),
+    ("GET", "/api/customer/mind/v1/strategy-replay"),
+    ("GET", "/api/customer/mind/v1/decision-history"),
+    ("GET", "/api/customer/mind/v1/verified-news-evidence"),
+    ("GET", "/api/customer/mind/v1/decision-outcomes"),
+    ("GET", "/api/customer/mind/v1/ma-walkforward"),
+    ("GET", "/api/customer/mind/v1/prospective-cohort"),
+    ("GET", "/api/customer/mind/v1/prospective-signals"),
+    ("GET", "/api/customer/mind/v1/prospective-outcomes"),
+    ("GET", "/api/customer/mind/v1/prospective-evidence-completeness"),
+    ("GET", "/api/customer/mind/v1/progress"),
+    ("GET", "/api/customer/mind/v1/progress/inventory"),
+    ("GET", "/api/customer/mind/v1/paper-portfolio"),
+    ("GET", "/api/customer/mind/v1/paper-journal"),
+    ("GET", "/api/customer/mind/v1/research-engines"),
+}
+MIND_ASSISTANT_QUERY = "/api/customer/mind/v1/assistant/query"
+WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
+UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
+ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
+ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
+PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
+PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(capability|orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
+LIVE_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|orders|market|expiries)$")
+FNO_DISCOVERY = re.compile(r"^/api/customer/markets/fno/(capability|expiries|market)$")
+LIVE_FNO_RECONCILE = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/orders/[0-9a-fA-F-]{36}/reconcile$")
+# Synthetic-only, no NSE_FO keys or broker/provider routes. Separate ledger.
+FNO_SANDBOX = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/sandbox/(state|orders)$")
+READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
+LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
+MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")
+MIND_PROGRESS_NOTES = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*/notes$")
+MIND_PAPER_CYCLES = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/paper-cycles$")
+MIND_FNO_PAPER_CYCLES = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/paper-cycles$")
+MIND_FNO_PAPER_AUTOMATION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/paper-automation(/control|/history)?$")
+MIND_FNO_LIVE_PROPOSAL = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/live-proposal$")
+MIND_CYCLE_INTERVALS = {"FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR", "ONE_DAY"}
+ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 428, 429, 500, 502, 503}
+MAX_BODY = 65536
+
+def reply(status, obj):
+    return {"statusCode": status, "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+    }, "body": json.dumps(obj, separators=(",", ":"))}
+
+def paper_allowed(method, path):
+    if not PAPER.fullmatch(path):
+        return False
+    action = path.rsplit("/", 1)[-1]
+    return ((method == "GET" and action in {"account", "ledger", "orders", "positions"})
+            or (method == "POST" and action in {"activate", "resume", "pause", "orders"}))
+
+def paper_fno_allowed(method, path):
+    if not PAPER_FNO.fullmatch(path):
+        return False
+    action = path.rsplit("/", 1)[-1]
+    return ((method == "GET" and action in {"capability", "orders", "positions", "market", "expiries", "reconciliation", "wallet-reconciliation"})
+            or (method == "POST" and action == "orders"))
+
+def live_fno_allowed(method, path):
+    if LIVE_FNO_RECONCILE.fullmatch(path):
+        return method == "POST"
+    if not LIVE_FNO.fullmatch(path):
+        return False
+    action = path.rsplit("/", 1)[-1]
+    return (method == "GET" and action in {"orders", "capability", "market", "expiries"}) or (method == "POST" and action == "orders")
+
+def allowed(method, path):
+    return ((method, path) in EXACT
+            or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
+            or (method == "GET" and path == UPSTOX_CALLBACK)
+            or (method == "GET" and ROOM.fullmatch(path))
+            or (method == "PUT" and ROOM_RENAME.fullmatch(path))
+            or (method == "GET" and READINESS.fullmatch(path))
+            or (method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path))
+            or (method == "GET" and MIND_PROGRESS_ITEM.fullmatch(path) and len(path) <= 160)
+            or (method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path) and len(path) <= 170)
+            or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
+            or (method == "POST" and MIND_FNO_PAPER_CYCLES.fullmatch(path))
+            or (MIND_FNO_PAPER_AUTOMATION.fullmatch(path) and (
+                (method == "POST" and path.endswith("/control")) or
+                (method == "GET" and not path.endswith("/control"))))
+            or (method == "GET" and MIND_FNO_LIVE_PROPOSAL.fullmatch(path))
+            or (method == "POST" and path == MIND_ASSISTANT_QUERY)
+            or paper_fno_allowed(method, path)
+            or live_fno_allowed(method, path)
+            or (method == "GET" and FNO_DISCOVERY.fullmatch(path))
+            or ((method == "GET" and path.endswith("/state")) or
+                (method == "POST" and path.endswith("/orders"))) and bool(FNO_SANDBOX.fullmatch(path))
+            or paper_allowed(method, path))
+
+def callback_query_safe(query):
+    # The public redirect's one-time state is independently consumed by Spring.
+    # Reject repeated/unknown query names and oversized OAuth credentials.
+    if not query or len(query) > 4096:
+        return False
+    try:
+        fields = urllib.parse.parse_qs(query, keep_blank_values=True,
+                                     strict_parsing=True, max_num_fields=3)
+    except (ValueError, UnicodeError):
+        return False
+    if set(fields) - {"code", "state", "error"}:
+        return False
+    if any(len(values) != 1 for values in fields.values()):
+        return False
+    state = fields.get("state", [""])[0]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", state):
+        return False
+    code = fields.get("code", [""])[0]
+    error = fields.get("error", [""])[0]
+    return (bool(code) != bool(error)
+            and len(code) <= 2048
+            and len(error) <= 200)
+
+
+# These statuses are hard-coded constants from MintTick's own backend only.
+# Never render arbitrary provider query parameters or upstream response bodies.
+CALLBACK_OUTCOMES = {
+    "STATE_INVALID": "The secure login session expired or was replaced. "
+                     "Close this browser tab and start a new Upstox login inside MintTick.",
+    "CALLBACK_PARAMETERS": "Upstox returned an unexpected authorization response. "
+                           "Close this tab and start a fresh login inside MintTick.",
+    "DECLINED": "The Upstox authorization was cancelled or declined. Start a fresh login.",
+    "CODE_INVALID": "The one-time Upstox authorization code is invalid or has been used. "
+                    "Start a fresh login; do not reopen the old callback.",
+    "APP_CREDENTIALS": "Upstox rejected the developer application's credentials. "
+                       "The protected server configuration needs attention.",
+    "REDIRECT_REJECTED": "Upstox rejected the application's registered callback URL.",
+    "SEGMENTS_INACTIVE": "Upstox reports inactive trading segments for this account.",
+    "PROFILE_REJECTED": "Upstox could not verify an active account profile.",
+    "ALREADY_CONNECTED": "This Upstox account is connected to another MintTick user.",
+    "BROKER_UNAVAILABLE": "MintTick could not establish the Upstox token exchange connection. "
+                          "Retry a new login, and check protected backend network access.",
+    "INVALID_TOKEN_RESPONSE": "Upstox returned an unexpected token response. "
+                              "MintTick needs its response parser checked.",
+    "TOKEN_CLIENT_FAILURE": "MintTick encountered a token-exchange client error. "
+                            "This does not establish an Upstox outage.",
+    "BACKEND_UNAVAILABLE": "MintTick could not reach its private broker backend. Retry later.",
+    "UNVERIFIED": "Return to MintTick and tap Refresh connection to inspect the result.",
+}
+
+def callback_html(ok, reason="UNVERIFIED"):
+    # Fixed HTML prevents any broker-supplied state, code, or error reflecting
+    # into rendered content, cache, redirects or referrer headers.
+    message = ("Upstox connected to MintTick. Return to MintTick and refresh."
+               if ok else "Upstox connection was not completed. "
+                          + CALLBACK_OUTCOMES.get(reason, CALLBACK_OUTCOMES["UNVERIFIED"]))
+    html = ("<!doctype html><html><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>MintTick broker connection</title></head><body>"
+            "<h1>MintTick</h1><p>" + message + "</p>"
+            "<p>Live order placement remains disabled.</p></body></html>")
+    return {"statusCode": 200 if ok else 400, "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "referrer-policy": "no-referrer",
+        "content-security-policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+    }, "body": html}
+
+
+def authorized(event):
+    jwt = event.get("requestContext", {}).get("authorizer", {}).get("jwt", {})
+    claims = jwt.get("claims", {})
+    return (isinstance(claims, dict)
+            and claims.get("token_use") == "access"
+            and claims.get("iss") == ISSUER
+            and claims.get("client_id") == CLIENT_ID
+            and isinstance(claims.get("sub"), str)
+            and len(claims["sub"]) > 0)
+
+def handler(event, context):
+    method = event.get("requestContext", {}).get("http", {}).get("method", "")
+    path = event.get("rawPath", "")
+    is_health = method == "GET" and path == "/actuator/health/readiness"
+    is_callback = method == "GET" and path == UPSTOX_CALLBACK
+    if not is_health and not allowed(method, path):
+        return reply(404, {"error": "NOT_FOUND"})
+    if not is_health and not is_callback and not authorized(event):
+        return reply(401, {"error": "AUTHENTICATION_REQUIRED"})
+    query = event.get("rawQueryString", "")
+    if not isinstance(query, str) or len(query) > (4096 if is_callback else 300):
+        return reply(400, {"error": "INVALID_QUERY"})
+    if is_callback and not callback_query_safe(query):
+        return callback_html(False, "CALLBACK_PARAMETERS")
+    if query and is_health:
+        return reply(400, {"error": "INVALID_QUERY"})
+    headers = event.get("headers", {})
+    bearer = headers.get("authorization", "")
+    if not is_health and not is_callback and (not isinstance(bearer, str)
+                          or not bearer.startswith("Bearer ")
+                          or len(bearer) > 10000):
+        return reply(401, {"error": "AUTHENTICATION_REQUIRED"})
+    raw = event.get("body") or ""
+    try:
+        if not isinstance(raw, str):
+            raise ValueError("bad body")
+        body = base64.b64decode(raw, validate=True) if event.get("isBase64Encoded") else raw.encode()
+    except (ValueError, UnicodeError, binascii.Error):
+        return reply(400, {"error": "INVALID_BODY"})
+    if len(body) > MAX_BODY:
+        return reply(413, {"error": "BODY_TOO_LARGE"})
+    if method == "GET" and body:
+        return reply(400, {"error": "INVALID_BODY"})
+    if method == "PUT" and ROOM_RENAME.fullmatch(path):
+        # A display-only rename is the sole exposed PUT route. Validate the
+        # exact payload before forwarding to the customer-scoped Java backend.
+        try:
+            rename = json.loads(body)
+            name = rename.get("name") if type(rename) is dict else None
+            normalized = re.sub(r"\s+", " ", name.strip()) if isinstance(name, str) else ""
+            valid = (type(rename) is dict and set(rename) == {"name"}
+                     and 1 <= len(normalized) <= 80
+                     and not any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_ROOM_NAME"})
+    if method == "POST" and path in {
+        "/api/auth/cognito/provision",
+        "/api/customer/brokers/angel-one/connect-configured",
+        "/api/customer/brokers/angel-one/disconnect",
+        "/api/customer/brokers/upstox/start",
+        "/api/customer/brokers/upstox/connect-configured",
+        "/api/customer/brokers/upstox/disconnect",
+    } and body:
+        return reply(400, {"error": "INVALID_BODY"})
+    if method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path):
+        try:
+            selected = json.loads(body)
+            valid = (type(selected) is dict
+                     and set(selected) == {"broker"}
+                     and selected["broker"] in {"ANGEL_ONE", "UPSTOX"})
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_LIVE_BROKER_SELECTION"})
+    paper_order_key = None
+    live_fno_confirmed = False
+    if method == "POST" and PAPER.fullmatch(path):
+        action = path.rsplit("/", 1)[-1]
+        if action in {"activate", "resume", "pause"} and body:
+            return reply(400, {"error": "INVALID_BODY"})
+        if action == "orders":
+            paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+            if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+                return reply(400, {"error": "INVALID_PAPER_ORDER_KEY"})
+            try:
+                order = json.loads(body)
+                valid = (isinstance(order, dict)
+                    and set(order) == {"instrumentId", "side", "quantity", "limitPrice"}
+                    and type(order["instrumentId"]) is int and order["instrumentId"] > 0
+                    and order["side"] in ("BUY", "SELL")
+                    and type(order["quantity"]) is int and 1 <= order["quantity"] <= 10000
+                    and type(order["limitPrice"]) in (int, float)
+                    and 0.01 <= order["limitPrice"] <= 1000000)
+            except (ValueError, TypeError, KeyError, OverflowError):
+                valid = False
+            if not valid:
+                return reply(400, {"error": "INVALID_PAPER_ORDER_INPUT"})
+    # Synthetic training orders never accept exchange symbols, real quotes or
+    # LIVE routing. Strictly validate the exact request before forwarding.
+    if method == "POST" and FNO_SANDBOX.fullmatch(path):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_SYNTHETIC_ORDER_KEY"})
+        try:
+            order = json.loads(body)
+            valid = (type(order) is dict and set(order) == {"contractCode", "side", "lots"}
+                and order["contractCode"] in ("SIM_FNO_CE", "SIM_FNO_PE")
+                and order["side"] in ("BUY", "SELL")
+                and type(order["lots"]) is int and 1 <= order["lots"] <= 20)
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_SYNTHETIC_ORDER_INPUT"})
+    # NSE_FO PAPER orders require an explicit idempotency key at the customer
+    # edge. Previously this route was allowlisted, but silently DROPPED the
+    # header, so Spring rejected it. Keep the existing provider/session/rights
+    # checks downstream and do not admit LIVE, shorts or futures here.
+    if method == "POST" and PAPER_FNO.fullmatch(path) and path.endswith("/orders"):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_FNO_PAPER_ORDER_KEY"})
+        try:
+            order = json.loads(body)
+            valid = (type(order) is dict
+                and set(order) == {"instrumentKey", "expiry", "side", "lots", "limitPrice"}
+                and isinstance(order["instrumentKey"], str)
+                and re.fullmatch(r"NSE_FO\|[A-Za-z0-9._-]{1,64}", order["instrumentKey"])
+                and isinstance(order["expiry"], str)
+                and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", order["expiry"])
+                and date.fromisoformat(order["expiry"]).isoformat() == order["expiry"]
+                and order["side"] in ("BUY", "SELL")
+                and type(order["lots"]) is int and 1 <= order["lots"] <= 20
+                and type(order["limitPrice"]) in (int, float))
+            if valid:
+                price = Decimal(str(order["limitPrice"]))
+                valid = (price.is_finite() and Decimal("0.01") <= price <= Decimal("1000000")
+                         and price.as_tuple().exponent >= -4)
+        except (ValueError, TypeError, KeyError, OverflowError, InvalidOperation):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_FNO_PAPER_ORDER_INPUT"})
+    # Owner-confirmed LIVE Upstox NFO is a separate, narrowly admitted route.
+    # Exact confirmation is forwarded only after verifying the request body;
+    # the Java service still enforces owner, feature, broker, risk and custody.
+    live_fno_confirmed = False
+    if method == "POST" and LIVE_FNO.fullmatch(path) and path.endswith("/orders"):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        confirm = headers.get("x-confirm-live-order") or headers.get("X-Confirm-Live-Order")
+        live_fno_confirmed = confirm == "CONFIRM_LIVE_UPSTOX_NFO"
+        if not live_fno_confirmed:
+            return reply(428, {"error": "LIVE_ORDER_EXPLICIT_CONFIRMATION_REQUIRED"})
+        if not isinstance(paper_order_key, str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_FNO_LIVE_ORDER_KEY"})
+        try:
+            order = json.loads(body)
+            valid = (type(order) is dict
+                and set(order) == {"instrumentKey", "expiry", "side", "lots", "limitPrice"}
+                and isinstance(order["instrumentKey"], str)
+                and re.fullmatch(r"NSE_FO\|[A-Za-z0-9._-]{1,64}", order["instrumentKey"])
+                and isinstance(order["expiry"], str)
+                and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", order["expiry"])
+                and date.fromisoformat(order["expiry"]).isoformat() == order["expiry"]
+                and order["side"] in ("BUY", "SELL")
+                and type(order["lots"]) is int and order["lots"] == 1
+                and type(order["limitPrice"]) in (int, float))
+            if valid:
+                price = Decimal(str(order["limitPrice"]))
+                valid = (price.is_finite() and Decimal("0.01") <= price <= Decimal("1000000")
+                        and price.as_tuple().exponent >= -4)
+        except (ValueError, TypeError, KeyError, OverflowError, InvalidOperation):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_FNO_LIVE_ORDER_INPUT"})
+    if method == "POST" and LIVE_FNO_RECONCILE.fullmatch(path) and body:
+        return reply(400, {"error": "INVALID_LIVE_RECONCILE_BODY"})
+
+    # Mind PAPER strategy cycle: owner-initiated, virtual money only; exact payload.
+    if method == "POST" and MIND_PAPER_CYCLES.fullmatch(path):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_MIND_CYCLE_KEY"})
+        try:
+            cycle = json.loads(body)
+            valid = (isinstance(cycle, dict) and set(cycle) == {"instrumentId", "interval"}
+                     and type(cycle["instrumentId"]) is int and cycle["instrumentId"] > 0
+                     and cycle["interval"] in MIND_CYCLE_INTERVALS)
+        except (ValueError, TypeError, KeyError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_MIND_CYCLE_INPUT"})
+    # Read-only Mind assistant: body is exactly {"question": 1-280 printable chars}; no trade fields.
+    if method == "POST" and path == MIND_ASSISTANT_QUERY:
+        try:
+            question = json.loads(body)
+            text = question.get("question") if type(question) is dict and set(question) == {"question"} else None
+            valid = (isinstance(text, str) and 1 <= len(text) <= 280
+                     and not any(ord(ch) < 32 and ch not in "\n\t" for ch in text))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_MIND_QUESTION"})
+    # Mind progress annotation: a note or recheck request only; never a status write.
+    if method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_:.-]{8,128}", paper_order_key):
+            return reply(400, {"error": "INVALID_MIND_NOTE_KEY"})
+        try:
+            note = json.loads(body)
+            valid = (isinstance(note, dict) and "type" in note and set(note) <= {"type", "text"}
+                     and note["type"] in ("NOTE", "RECHECK_REQUESTED")
+                     and (("text" not in note) or (isinstance(note["text"], str) and len(note["text"]) <= 500)))
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_MIND_NOTE"})
+    # Manual SmartAPI login is customer-scoped and authorized. Accept only the
+    # four required short-lived input fields; never log, cache or echo them.
+    if method == "POST" and path == "/api/customer/brokers/angel-one/connect":
+        try:
+            credentials = json.loads(body)
+            valid = (isinstance(credentials, dict)
+                and set(credentials) == {"apiKey", "clientCode", "pin", "totp"}
+                and all(isinstance(v, str) for v in credentials.values())
+                and 1 <= len(credentials["apiKey"]) <= 256
+                and re.fullmatch(r"(?i)[a-z0-9]{4,20}", credentials["clientCode"])
+                and re.fullmatch(r"[0-9]{4,8}", credentials["pin"])
+                and re.fullmatch(r"[0-9]{6}", credentials["totp"]))
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_BROKER_LOGIN_INPUT"})
+    internal_path = "/api/health" if is_health else path
+    if query:
+        internal_path += "?" + query
+    upstream_headers = {"Accept": "text/html" if is_callback else "application/json"}
+    if not is_health and not is_callback:
+        upstream_headers["Authorization"] = bearer
+    if body:
+        upstream_headers["Content-Type"] = "application/json"
+    if paper_order_key is not None:
+        upstream_headers["Idempotency-Key"] = paper_order_key
+    if live_fno_confirmed:
+        upstream_headers["X-Confirm-Live-Order"] = "CONFIRM_LIVE_UPSTOX_NFO"
+    request = urllib.request.Request(
+        BACKEND + internal_path,
+        data=body if method in {"POST", "PUT"} else None,
+        headers=upstream_headers,
+        method=method)
+    callback_outcome = "UNVERIFIED"
+    try:
+        with urllib.request.urlopen(request, timeout=7) as upstream:
+            status = upstream.status
+            payload = upstream.read(131073)
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        payload = exc.read(131073)
+        if is_callback:
+            # Never reflect arbitrary headers: only internally-defined enum.
+            candidate = exc.headers.get("X-MintTick-Upstox-Outcome", "")
+            if candidate in CALLBACK_OUTCOMES:
+                callback_outcome = candidate
+    except (urllib.error.URLError, TimeoutError, OSError):
+        if is_callback:
+            return callback_html(False, "BACKEND_UNAVAILABLE")
+        return reply(503, {"error": "PRIVATE_BACKEND_UNAVAILABLE"})
+    if len(payload) > 131072 or status not in ALLOWED_RESPONSES:
+        return reply(502, {"error": "INVALID_UPSTREAM_RESPONSE"})
+    if is_health:
+        return reply(200 if status == 200 else 503,
+                     {"status": "UP" if status == 200 else "DOWN"})
+    if is_callback:
+        return callback_html(status == 200, callback_outcome)
+    try:
+        decoded = json.loads(payload) if payload else {}
+        if not isinstance(decoded, (dict, list)):
+            raise ValueError("non-object response")
+    except (ValueError, UnicodeError):
+        return reply(502, {"error": "INVALID_UPSTREAM_RESPONSE"})
+    return reply(status, decoded)

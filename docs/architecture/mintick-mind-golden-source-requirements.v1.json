@@ -1,0 +1,2076 @@
+{
+  "contract_version": "minttick.mind.golden-source-requirements.v1",
+  "source_of_truth": "Flutter MintickMindScreens.all / MindFixtures.models and strategy catalog, repository dev",
+  "provenance": "Code-audited requirements only; proposed fields are NOT a claim that commercial data is acquired, model is deployed or backend has records",
+  "global_invariants": [
+    "No fabricated market values or predictions in connected UI",
+    "All observed/available/captured/ingested timestamps are independently retained",
+    "Any missing mandatory licensed input => UNAVAILABLE / ABSTAIN",
+    "Historical universe includes delisted, renamed, suspended and inactive listings as-of decision",
+    "20-year DAILY target is per listing since listing date, not 20-year tick-level guarantee",
+    "Intraday, orderbook, flows, derivatives, fundamentals, corporate actions and fees are separate typed sources",
+    "Training label_available_at must exceed decision_as_of and labels may not be used as inference inputs",
+    "All evidence includes dataset/feature/model fingerprints, provenance, licensing policy, corporate-adjustment mode and revision",
+    "User broker orders and portfolio records remain isolated from shared market data",
+    "Model inference cannot bypass deterministic Java risk gates"
+  ],
+  "required_temporal_columns": [
+    "event_at",
+    "source_published_at",
+    "first_available_at",
+    "ingested_at",
+    "source_revision",
+    "dataset_version"
+  ],
+  "required_market_lineage": [
+    "listing_id",
+    "exchange",
+    "source_id",
+    "rights_policy_id",
+    "quality_flags",
+    "content_hash"
+  ],
+  "data_sources": {
+    "security_identity": {
+      "state": "partial_repository",
+      "history": "20+y / listing lifecycle",
+      "fields": [
+        "security_id",
+        "listing_id",
+        "isin_when_available",
+        "exchange",
+        "series",
+        "provider_token",
+        "symbol",
+        "valid_from",
+        "valid_to",
+        "listing_status",
+        "sector_as_of",
+        "index_member_as_of"
+      ],
+      "requirements": "Historical alias resolution, delisted instruments, mergers/spin-offs and survivorship-safe universe membership"
+    },
+    "market_calendar": {
+      "state": "partial_repository",
+      "history": "20+y / venue and session",
+      "fields": [
+        "exchange",
+        "session_date",
+        "market_open",
+        "market_close",
+        "holiday",
+        "special_session",
+        "listing_suspension",
+        "available_at"
+      ],
+      "requirements": "Session-exact expected bars and no false gaps on holidays"
+    },
+    "daily_bars": {
+      "state": "provider_sample_only",
+      "history": "20-25y from each listing date where licensed/available",
+      "fields": [
+        "listing_id",
+        "exchange",
+        "session_date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "source_id",
+        "published_at",
+        "available_at",
+        "revision"
+      ],
+      "requirements": "Raw daily bars plus separate split-adjusted/total-return views; no fabricated gaps"
+    },
+    "intraday_bars": {
+      "state": "provider_sample_only",
+      "history": "5m 1-2y; 1m 3-6m subject to rights",
+      "fields": [
+        "listing_id",
+        "interval",
+        "bar_open_at",
+        "bar_close_at",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "vwap_when_available",
+        "source_id",
+        "available_at"
+      ],
+      "requirements": "Exactly closed-bar availability; session breaks, out-of-order and late revisions"
+    },
+    "live_quotes": {
+      "state": "partial_repository_unverified_live",
+      "history": "current + bounded retained snapshots",
+      "fields": [
+        "listing_id",
+        "event_at",
+        "exchange_time",
+        "last_trade_price",
+        "day_ohlc",
+        "day_volume",
+        "best_bid",
+        "best_ask",
+        "source",
+        "fetched_at",
+        "staleness"
+      ],
+      "requirements": "WebSocket and last-verified snapshot; never label closed-market cache as LIVE"
+    },
+    "index_breadth_vix": {
+      "state": "partial_repository",
+      "history": "20+y daily where available; live intraday",
+      "fields": [
+        "index_id",
+        "constituents_as_of",
+        "weights_as_of",
+        "sector_map_as_of",
+        "index_ohlcv",
+        "advance_decline",
+        "return_dispersion",
+        "vix_close",
+        "market_breadth",
+        "available_at"
+      ],
+      "requirements": "Use India VIX, historical NSE/BSE membership, sector classifications and delisted constituents"
+    },
+    "market_depth_delivery": {
+      "state": "missing_verified_source",
+      "history": "intraday where licensed",
+      "fields": [
+        "listing_id",
+        "bid_depth",
+        "ask_depth",
+        "bid_ask_spread",
+        "trade_imbalance",
+        "delivery_quantity",
+        "delivery_percent",
+        "orderbook_event_at",
+        "source_available_at"
+      ],
+      "requirements": "L2 depth and delivery stats are not reconstructible from daily OHLCV"
+    },
+    "corporate_actions": {
+      "state": "missing_complete_history",
+      "history": "20+y event and revision history",
+      "fields": [
+        "listing_id",
+        "event_type",
+        "announcement_at",
+        "ex_date",
+        "record_date",
+        "factor",
+        "dividend_cash",
+        "rights_ratio",
+        "effective_at",
+        "source_revision"
+      ],
+      "requirements": "Splits, bonuses, dividends, mergers, delistings and point-in-time adjustment factors"
+    },
+    "fundamental_filings": {
+      "state": "not_populated",
+      "history": "20+y as available from filings",
+      "fields": [
+        "security_id",
+        "report_period",
+        "filing_published_at",
+        "consolidated_standalone",
+        "revenue",
+        "ebitda",
+        "net_income",
+        "eps",
+        "cash_flow",
+        "capex",
+        "debt",
+        "equity",
+        "shares_outstanding",
+        "roe",
+        "roce",
+        "restated_at"
+      ],
+      "requirements": "Financial statements, releases, restatements and fiscal-calendar changes; do not backdate filings"
+    },
+    "ownership_governance": {
+      "state": "not_populated",
+      "history": "quarterly/event archives where available",
+      "fields": [
+        "promoter_holding",
+        "promoter_pledge",
+        "fii_dii_holdings",
+        "institutional_ownership",
+        "insider_transactions",
+        "auditor_flags",
+        "dilution",
+        "filing_at",
+        "available_at"
+      ],
+      "requirements": "Fundamental quality, promoter pledging and governance checks"
+    },
+    "news_events": {
+      "state": "partial_research_contract_unlicensed_corpus",
+      "history": "licensed event availability history",
+      "fields": [
+        "event_id",
+        "source_id",
+        "rights_id",
+        "headline_metadata",
+        "source_published_at",
+        "captured_at",
+        "first_available_at",
+        "linked_security_ids",
+        "event_type",
+        "sentiment_score",
+        "model_version"
+      ],
+      "requirements": "NLP text is separately licensed; timestamp both original publication and first known availability"
+    },
+    "flows_fii_dii": {
+      "state": "mock_ui_no_verified_pipeline",
+      "history": "EOD/intraday from permitted exchange reports",
+      "fields": [
+        "trade_date",
+        "category",
+        "gross_buy",
+        "gross_sell",
+        "net_flow",
+        "segment",
+        "report_release_at",
+        "revision",
+        "source"
+      ],
+      "requirements": "Institutional cash and derivatives flows; never infer actual institutional flow from market OHLCV"
+    },
+    "macro_fx_rates": {
+      "state": "partial_research_contract",
+      "history": "20+y where available",
+      "fields": [
+        "indicator_id",
+        "observation_date",
+        "published_at",
+        "value",
+        "revision_at",
+        "usd_inr",
+        "crude",
+        "gsec_yield",
+        "repo_rate",
+        "global_index",
+        "policy_event"
+      ],
+      "requirements": "FX, rates, commodities, economic surprises and historical revision-vintage data"
+    },
+    "derivatives_chain": {
+      "state": "mock_ui_no_verified_pipeline",
+      "history": "contract lifecycle plus licensed short-window OI/IV",
+      "fields": [
+        "contract_id",
+        "underlying_listing_id",
+        "symbol",
+        "expiry",
+        "strike",
+        "call_put",
+        "lot_size",
+        "option_ltp",
+        "open_interest",
+        "volume",
+        "bid",
+        "ask",
+        "implied_volatility",
+        "delta",
+        "gamma",
+        "theta",
+        "vega",
+        "source_time"
+      ],
+      "requirements": "Historical option chains and OI/IV/Greeks unavailable from cash daily candles"
+    },
+    "derivatives_reference_margin": {
+      "state": "mock_ui_no_verified_pipeline",
+      "history": "effective-dated exchange/broker series",
+      "fields": [
+        "contract_spec_version",
+        "underlying_id",
+        "expiry_cycle",
+        "tick_size",
+        "lot_size",
+        "margin_rule",
+        "span_exposure",
+        "borrow_eligible",
+        "available_at"
+      ],
+      "requirements": "Actual contract rolls, specs, eligibility and margin cannot be reconstructed from OHLCV"
+    },
+    "costs_liquidity": {
+      "state": "partial_research_contract",
+      "history": "effective-dated full horizon",
+      "fields": [
+        "brokerage",
+        "stt",
+        "stamp_duty",
+        "exchange_fee",
+        "sebi_fee",
+        "gst",
+        "slippage_model",
+        "spread_model",
+        "impact_model",
+        "min_turnover",
+        "effective_from"
+      ],
+      "requirements": "Realistic India net-of-cost backtest, including time-varying charges"
+    },
+    "model_features": {
+      "state": "research_schema_exists_hot_store_missing",
+      "history": "versioned immutable dataset snapshots",
+      "fields": [
+        "listing_id",
+        "feature_schema_version",
+        "decision_as_of",
+        "input_available_at",
+        "market_return_1",
+        "market_range_pct",
+        "market_volume_change_1",
+        "rsi",
+        "atr",
+        "volatility",
+        "beta",
+        "sector_context",
+        "missingness_mask",
+        "feature_fingerprint"
+      ],
+      "requirements": "Compute once from licensed, point-in-time source snapshots; no accidental zero-imputation of missing required features"
+    },
+    "model_registry_receipts": {
+      "state": "backend_existing_partial",
+      "history": "append-only model lifecycle",
+      "fields": [
+        "model_id",
+        "artifact_digest",
+        "features_schema_digest",
+        "training_dataset_digest",
+        "model_version",
+        "inference_at",
+        "prediction_probability",
+        "uncertainty",
+        "calibration_version",
+        "reason",
+        "inference_receipt_id",
+        "abstention_status"
+      ],
+      "requirements": "Real prediction receipts and monotonic provenance; synthetic fixture leaderboard does not establish trained deployment"
+    },
+    "backtest_outcomes": {
+      "state": "backend_existing_partial",
+      "history": "immutable experiment windows and labels",
+      "fields": [
+        "experiment_id",
+        "dataset_version",
+        "label_horizon",
+        "outcome_available_at",
+        "training_fold",
+        "holdout_fold",
+        "after_cost_return",
+        "drawdown",
+        "sharpe",
+        "sample_count",
+        "data_quality_denominator",
+        "provenance"
+      ],
+      "requirements": "Research only; preserve train/calibrate/test and prospective cohort"
+    },
+    "trading_room_strategy": {
+      "state": "backend_existing_partial",
+      "history": "versioned user/room settings",
+      "fields": [
+        "user_id",
+        "room_id",
+        "strategy_id",
+        "horizon",
+        "mode",
+        "strategy_params",
+        "effective_from",
+        "strategy_version",
+        "eligibility_state"
+      ],
+      "requirements": "Per-room configuration separate from canonical historical data"
+    },
+    "portfolio_ledger": {
+      "state": "backend_existing_partial",
+      "history": "private per-user ledger",
+      "fields": [
+        "account_id",
+        "portfolio_id",
+        "positions",
+        "cash",
+        "fills",
+        "corporate_action_application",
+        "mark_price_at",
+        "realized_pnl",
+        "unrealized_pnl",
+        "broker_reconciliation"
+      ],
+      "requirements": "User-scoped auth and custody; never put account/portfolio secrets in shared data lake"
+    },
+    "risk_execution_controls": {
+      "state": "backend_existing_partial",
+      "history": "audit/event sourced",
+      "fields": [
+        "user_id",
+        "mode",
+        "risk_limits",
+        "position_caps",
+        "exposure",
+        "sector_concentration",
+        "correlation",
+        "drawdown",
+        "approval",
+        "emergency_stop",
+        "order_intent",
+        "fill_status"
+      ],
+      "requirements": "Deterministic Java authority, separately from research forecasts; PAPER/LIVE toggles must not leak authority"
+    },
+    "account_preferences": {
+      "state": "backend_existing_partial",
+      "history": "per-user current/preferences",
+      "fields": [
+        "user_id",
+        "theme",
+        "notifications",
+        "watchlist",
+        "report_preferences",
+        "locale",
+        "updated_at"
+      ],
+      "requirements": "UI preferences are not historical market training features"
+    },
+    "operations_health": {
+      "state": "partial_repository",
+      "history": "bounded operational monitoring",
+      "fields": [
+        "provider",
+        "last_success_at",
+        "feed_lag",
+        "quote_coverage",
+        "dataset_coverage",
+        "model_drift",
+        "worker_p95",
+        "data_license_state",
+        "incident_id",
+        "status"
+      ],
+      "requirements": "Always distinguish UI mock data, unavailable source, stale source and validated evidence"
+    }
+  },
+  "screens": [
+    {
+      "id": "app-home",
+      "title": "MintTick Home",
+      "group": "PRIMARY",
+      "required_sources": [
+        "live_quotes",
+        "model_registry_receipts",
+        "trading_room_strategy"
+      ],
+      "optional_sources": [
+        "portfolio_ledger",
+        "account_preferences"
+      ],
+      "outputs": "Market overview, room entry, system readiness",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "overview",
+      "title": "Mind Overview",
+      "group": "PRIMARY",
+      "required_sources": [
+        "live_quotes",
+        "model_registry_receipts",
+        "trading_room_strategy",
+        "backtest_outcomes"
+      ],
+      "optional_sources": [
+        "portfolio_ledger",
+        "risk_execution_controls"
+      ],
+      "outputs": "Readiness, strategy replay, prospective evidence, sample-labelled mock metrics",
+      "ui_data_state": "fixture_plus_optional_authenticated_evidence",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "intelligence-hub",
+      "title": "Decision Intelligence",
+      "group": "AGENTS",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "index_breadth_vix"
+      ],
+      "optional_sources": [
+        "risk_execution_controls"
+      ],
+      "outputs": "Model pipeline status, regime, confidence",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "agent-council",
+      "title": "Agent Council & Debate",
+      "group": "AGENTS",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "news_events"
+      ],
+      "outputs": "Per-model vote, calibrated probability, disagreement and veto",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "agent-evidence",
+      "title": "Evidence Ledger",
+      "group": "AGENTS",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "intraday_bars"
+      ],
+      "optional_sources": [
+        "news_events",
+        "operations_health"
+      ],
+      "outputs": "Evidence source, timestamp, custody and reason",
+      "ui_data_state": "fixture_plus_optional_authenticated_evidence",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "regime-weights",
+      "title": "Regime Weight Studio",
+      "group": "AGENTS",
+      "required_sources": [
+        "index_breadth_vix",
+        "model_registry_receipts"
+      ],
+      "optional_sources": [
+        "macro_fx_rates"
+      ],
+      "outputs": "Regime-specific weights and time-valid eligibility",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "signal-scorecard",
+      "title": "Signal Scorecard",
+      "group": "AGENTS",
+      "required_sources": [
+        "backtest_outcomes",
+        "model_registry_receipts",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "market_depth_delivery"
+      ],
+      "outputs": "Per-horizon sample count, win rate, net expectancy",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "confidence-lab",
+      "title": "Confidence Calibration",
+      "group": "AGENTS",
+      "required_sources": [
+        "model_registry_receipts",
+        "backtest_outcomes"
+      ],
+      "optional_sources": [
+        "model_features"
+      ],
+      "outputs": "Reliability bins, Brier/calibration, sample size and drift",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "shadow-arena",
+      "title": "Shadow Trading Arena",
+      "group": "AGENTS",
+      "required_sources": [
+        "backtest_outcomes",
+        "model_registry_receipts",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "portfolio_ledger"
+      ],
+      "outputs": "Aligned outcome cohorts, shadows, costs, missing labels",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "institutional-flow",
+      "title": "FII / DII Flow",
+      "group": "AGENTS",
+      "required_sources": [
+        "flows_fii_dii",
+        "index_breadth_vix"
+      ],
+      "optional_sources": [
+        "market_depth_delivery"
+      ],
+      "outputs": "FII/DII gross/net participation, source and release time",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "daily-verdict",
+      "title": "Daily Market Verdict",
+      "group": "AGENTS",
+      "required_sources": [
+        "live_quotes",
+        "index_breadth_vix",
+        "model_registry_receipts"
+      ],
+      "optional_sources": [
+        "news_events",
+        "flows_fii_dii"
+      ],
+      "outputs": "Posture, leadership, blockers, observed session",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "culprit-catcher",
+      "title": "Culprit Catcher",
+      "group": "AGENTS",
+      "required_sources": [
+        "model_registry_receipts",
+        "operations_health",
+        "backtest_outcomes"
+      ],
+      "optional_sources": [
+        "risk_execution_controls"
+      ],
+      "outputs": "Incident reason, chronology, model/data failure",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "trading-rooms",
+      "title": "Trading Rooms",
+      "group": "PRIMARY",
+      "required_sources": [
+        "trading_room_strategy",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "portfolio_ledger",
+        "model_registry_receipts"
+      ],
+      "outputs": "Rooms, risk mode, member strategies",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "strategies",
+      "title": "Strategy Universe",
+      "group": "PRIMARY",
+      "required_sources": [
+        "trading_room_strategy",
+        "backtest_outcomes",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "model_registry_receipts"
+      ],
+      "outputs": "232 strategy templates, family, horizon, eligibility",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "strategy-detail",
+      "title": "Strategy Detail",
+      "group": "PRIMARY",
+      "required_sources": [
+        "trading_room_strategy",
+        "backtest_outcomes",
+        "model_features"
+      ],
+      "optional_sources": [
+        "risk_execution_controls"
+      ],
+      "outputs": "Version, params, causal inputs, outcomes",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "charts",
+      "title": "Chart Intelligence",
+      "group": "PRIMARY",
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "corporate_actions",
+        "live_quotes"
+      ],
+      "optional_sources": [
+        "news_events",
+        "model_features"
+      ],
+      "outputs": "Intervals, candlesticks, adjusted views, indicators",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "decisions",
+      "title": "Decision Explorer",
+      "group": "PRIMARY",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "trading_room_strategy",
+        "portfolio_ledger"
+      ],
+      "outputs": "Evidence-bound decisions and timestamp",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "decision-detail",
+      "title": "Decision Anatomy",
+      "group": "PRIMARY",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "news_events",
+        "costs_liquidity"
+      ],
+      "outputs": "Decision anatomy, causal state, veto and no-order state",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "decision-lab",
+      "title": "Decision Simulator",
+      "group": "PRIMARY",
+      "required_sources": [
+        "model_features",
+        "model_registry_receipts",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "backtest_outcomes"
+      ],
+      "outputs": "Sandbox what-if, no capital authority",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "dependencies",
+      "title": "Dependency Map",
+      "group": "PRIMARY",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "trading_room_strategy"
+      ],
+      "optional_sources": [
+        "backtest_outcomes"
+      ],
+      "outputs": "Model/strategy dependencies and feature versions",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "models",
+      "title": "Model Laboratory",
+      "group": "RESEARCH",
+      "required_sources": [
+        "model_registry_receipts",
+        "backtest_outcomes",
+        "operations_health"
+      ],
+      "optional_sources": [
+        "model_features"
+      ],
+      "outputs": "18 model cards with evidence-backed status, not fixture AUC",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "model-detail",
+      "title": "Model Deep Dive",
+      "group": "RESEARCH",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "backtest_outcomes"
+      ],
+      "optional_sources": [
+        "operations_health"
+      ],
+      "outputs": "Artifacts, feature schema, trained lineage, health",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "research",
+      "title": "Research & Backtesting",
+      "group": "RESEARCH",
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "backtest_outcomes",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "corporate_actions",
+        "index_breadth_vix"
+      ],
+      "outputs": "Experiment registration, provenance, walk-forward and metrics",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "research-engines",
+      "title": "Research Engines Lab",
+      "group": "RESEARCH",
+      "required_sources": [
+        "model_registry_receipts",
+        "operations_health"
+      ],
+      "optional_sources": [
+        "backtest_outcomes"
+      ],
+      "outputs": "External engine capability/licensing rather than live research",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "experiment-detail",
+      "title": "Experiment Results",
+      "group": "RESEARCH",
+      "required_sources": [
+        "backtest_outcomes",
+        "model_registry_receipts",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "security_identity"
+      ],
+      "outputs": "Fold, losses, benchmark, sample and licensing",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "performance",
+      "title": "Performance & Learning",
+      "group": "RESEARCH",
+      "required_sources": [
+        "portfolio_ledger",
+        "backtest_outcomes",
+        "model_registry_receipts"
+      ],
+      "optional_sources": [
+        "costs_liquidity"
+      ],
+      "outputs": "Actual versus research after-cost attribution",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "journal",
+      "title": "Decision Journal",
+      "group": "RESEARCH",
+      "required_sources": [
+        "model_registry_receipts",
+        "risk_execution_controls",
+        "trading_room_strategy"
+      ],
+      "optional_sources": [
+        "portfolio_ledger"
+      ],
+      "outputs": "Immutable decision chronology and reasons",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "multibagger",
+      "title": "Multibagger Discovery",
+      "group": "RESEARCH",
+      "required_sources": [
+        "daily_bars",
+        "fundamental_filings",
+        "security_identity",
+        "corporate_actions"
+      ],
+      "optional_sources": [
+        "ownership_governance",
+        "index_breadth_vix"
+      ],
+      "outputs": "ROCE, earnings, valuation, liquidity, delisting correction",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "thesis-detail",
+      "title": "Investment Thesis",
+      "group": "RESEARCH",
+      "required_sources": [
+        "fundamental_filings",
+        "ownership_governance",
+        "corporate_actions",
+        "daily_bars"
+      ],
+      "optional_sources": [
+        "news_events",
+        "macro_fx_rates"
+      ],
+      "outputs": "Multi-year cash flows, promoter, dilution, thesis revisions",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "regimes",
+      "title": "Market Regimes",
+      "group": "RESEARCH",
+      "required_sources": [
+        "index_breadth_vix",
+        "macro_fx_rates",
+        "model_registry_receipts"
+      ],
+      "optional_sources": [
+        "flows_fii_dii"
+      ],
+      "outputs": "Benchmarks, breadth, VIX, FX, yield and commodity",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "events",
+      "title": "Events & Knowledge Graph",
+      "group": "RESEARCH",
+      "required_sources": [
+        "news_events",
+        "security_identity"
+      ],
+      "optional_sources": [
+        "fundamental_filings",
+        "corporate_actions"
+      ],
+      "outputs": "Event timeline, impacted companies, temporal news graph",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "portfolio",
+      "title": "Portfolio Digital Twin",
+      "group": "CAPITAL",
+      "required_sources": [
+        "portfolio_ledger",
+        "risk_execution_controls",
+        "live_quotes"
+      ],
+      "optional_sources": [
+        "model_registry_receipts",
+        "costs_liquidity"
+      ],
+      "outputs": "Positions, P&L, allocation, stress test",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "risk",
+      "title": "Risk Center",
+      "group": "CAPITAL",
+      "required_sources": [
+        "risk_execution_controls",
+        "portfolio_ledger",
+        "live_quotes",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "market_depth_delivery"
+      ],
+      "outputs": "Stops, caps, exposures, broker reconciliations",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "derivatives",
+      "title": "Futures & Options",
+      "group": "CAPITAL",
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin",
+        "live_quotes"
+      ],
+      "optional_sources": [
+        "costs_liquidity"
+      ],
+      "outputs": "Contract universe, expiry, carry, OI and margin",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "options-chain",
+      "title": "Option Chain",
+      "group": "CAPITAL",
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin"
+      ],
+      "optional_sources": [
+        "live_quotes",
+        "market_depth_delivery"
+      ],
+      "outputs": "Real expiry/strike, bid-ask, OI, IV and Greeks",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "option-builder",
+      "title": "Strategy Payoff Builder",
+      "group": "CAPITAL",
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "portfolio_ledger"
+      ],
+      "outputs": "Expiry payoffs, greeks, executable bid/ask, fees",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "controls",
+      "title": "Engine Control",
+      "group": "SYSTEM",
+      "required_sources": [
+        "risk_execution_controls",
+        "model_registry_receipts",
+        "operations_health"
+      ],
+      "optional_sources": [
+        "account_preferences"
+      ],
+      "outputs": "Admin gating, emergency control, model lifecycle",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "assistant",
+      "title": "Ask MintTick Mind",
+      "group": "SYSTEM",
+      "required_sources": [
+        "model_registry_receipts",
+        "operations_health"
+      ],
+      "optional_sources": [
+        "trading_room_strategy",
+        "portfolio_ledger"
+      ],
+      "outputs": "Evidence-linked explanatory responses, zero invented context",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "room-detail",
+      "title": "Trading Room Detail",
+      "group": "SYSTEM",
+      "required_sources": [
+        "trading_room_strategy",
+        "risk_execution_controls",
+        "portfolio_ledger"
+      ],
+      "optional_sources": [
+        "model_registry_receipts"
+      ],
+      "outputs": "Room configuration, strategies, positions, outcomes",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "design-gallery",
+      "title": "Visual Mockup Gallery",
+      "group": "SYSTEM",
+      "required_sources": [],
+      "optional_sources": [],
+      "outputs": "Visual design artifact only: no financial data requirements",
+      "ui_data_state": "design_only",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "design-preview",
+      "title": "Clickable Design Mode",
+      "group": "SYSTEM",
+      "required_sources": [],
+      "optional_sources": [],
+      "outputs": "Clickable design artifact only: no financial data requirements",
+      "ui_data_state": "design_only",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "coverage",
+      "title": "Screen & Strategy Coverage",
+      "group": "SYSTEM",
+      "required_sources": [
+        "operations_health",
+        "model_registry_receipts"
+      ],
+      "optional_sources": [
+        "trading_room_strategy"
+      ],
+      "outputs": "Route/readiness ledger, verified versus fixture mapping",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    },
+    {
+      "id": "settings",
+      "title": "Preferences",
+      "group": "SYSTEM",
+      "required_sources": [
+        "account_preferences"
+      ],
+      "optional_sources": [
+        "risk_execution_controls"
+      ],
+      "outputs": "Authenticated preferences; never market-training input",
+      "ui_data_state": "synthetic_or_demo_until_wired",
+      "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
+    }
+  ],
+  "models": [
+    {
+      "name": "LightGBM",
+      "family": "Structured Alpha",
+      "ui_role": "Champion",
+      "ui_status": "Research",
+      "fixture_metric": "AUC 0.81",
+      "required_sources": [
+        "model_features",
+        "daily_bars",
+        "intraday_bars"
+      ],
+      "optional_sources": [
+        "news_events",
+        "fundamental_filings"
+      ],
+      "input_contract": "Tabular returns/range/volume, optional causally observed event/fundamental features; label after costs",
+      "candidate_python_modules": [
+        "lightgbm_model.py",
+        "baseline.py"
+      ],
+      "verified_state": "trained_synthetic_research",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "CatBoost",
+      "family": "Structured Alpha",
+      "ui_role": "Challenger",
+      "ui_status": "Research",
+      "fixture_metric": "AUC 0.79",
+      "required_sources": [
+        "model_features",
+        "daily_bars",
+        "intraday_bars"
+      ],
+      "optional_sources": [
+        "news_events",
+        "fundamental_filings"
+      ],
+      "input_contract": "Tabular causal feature rows, categorical metadata only if valid as-of, calibrated forward-return label",
+      "candidate_python_modules": [
+        "catboost_model.py",
+        "baseline.py"
+      ],
+      "verified_state": "trained_synthetic_research",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "XGBoost",
+      "family": "Structured Alpha",
+      "ui_role": "Benchmark",
+      "ui_status": "Research",
+      "fixture_metric": "AUC 0.77",
+      "required_sources": [
+        "model_features",
+        "daily_bars",
+        "intraday_bars",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "news_events"
+      ],
+      "input_contract": "Fixed fair-comparison cohort, numeric market/finance features, costs and label",
+      "candidate_python_modules": [
+        "xgboost_benchmark.py"
+      ],
+      "verified_state": "research_benchmark",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "PyTorch MLP",
+      "family": "Neural Baseline",
+      "ui_role": "Benchmark",
+      "ui_status": "Research",
+      "fixture_metric": "AUC 0.73",
+      "required_sources": [
+        "model_features",
+        "daily_bars",
+        "intraday_bars"
+      ],
+      "optional_sources": [
+        "news_events",
+        "fundamental_filings"
+      ],
+      "input_contract": "Normalized fixed-order causal feature tensor, training-only normalization and labels",
+      "candidate_python_modules": [
+        "pytorch_model.py"
+      ],
+      "verified_state": "research_benchmark",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Original Patch Transformer",
+      "family": "Time-Series",
+      "ui_role": "Challenger",
+      "ui_status": "Research",
+      "fixture_metric": "MAE 0.031",
+      "required_sources": [
+        "intraday_bars",
+        "market_calendar",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "index_breadth_vix",
+        "model_features"
+      ],
+      "input_contract": "Closed-bar lagged return patches, session-local masks and future after-cost labels",
+      "candidate_python_modules": [
+        "india_patch_transformer.py"
+      ],
+      "verified_state": "bounded_cpu_research",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "TFT-inspired Model",
+      "family": "Time-Series",
+      "ui_role": "Challenger",
+      "ui_status": "Research",
+      "fixture_metric": "MAE 0.034",
+      "required_sources": [
+        "intraday_bars",
+        "market_calendar",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "index_breadth_vix",
+        "model_features"
+      ],
+      "input_contract": "Ordered same-session returns, optional known-in-advance covariates, causal quantiles",
+      "candidate_python_modules": [
+        "india_bounded_tft.py"
+      ],
+      "verified_state": "bounded_cpu_research",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "TimeMixer-style Model",
+      "family": "Time-Series",
+      "ui_role": "Challenger",
+      "ui_status": "Research",
+      "fixture_metric": "MAE 0.032",
+      "required_sources": [
+        "intraday_bars",
+        "market_calendar",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "index_breadth_vix"
+      ],
+      "input_contract": "Multi-scale observed return windows; no future context",
+      "candidate_python_modules": [
+        "india_time_mixer.py"
+      ],
+      "verified_state": "bounded_cpu_research",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Chronos-2 Adapter",
+      "family": "Time-Series",
+      "ui_role": "Candidate",
+      "ui_status": "Adapter",
+      "fixture_metric": "Not verified",
+      "required_sources": [
+        "intraday_bars",
+        "market_calendar",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "index_breadth_vix"
+      ],
+      "input_contract": "Univariate observed return sequence; licensed model weights and independent benchmarks required",
+      "candidate_python_modules": [
+        "india_chronos2_zero_shot.py"
+      ],
+      "verified_state": "licensing_and_checkpoint_unverified",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Regime HMM",
+      "family": "Regime",
+      "ui_role": "Advisory",
+      "ui_status": "Research",
+      "fixture_metric": "F1 0.76",
+      "required_sources": [
+        "index_breadth_vix",
+        "market_calendar"
+      ],
+      "optional_sources": [
+        "macro_fx_rates"
+      ],
+      "input_contract": "benchmark.NIFTY50.return_1d; breadth.NSE.net_breadth; breadth.NSE.return_dispersion; volatility.INDIA_VIX.close",
+      "candidate_python_modules": [
+        "regime_hmm.py"
+      ],
+      "verified_state": "research_advisory",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Isolation Forest",
+      "family": "Anomaly",
+      "ui_role": "Advisory",
+      "ui_status": "Research",
+      "fixture_metric": "F1 0.68",
+      "required_sources": [
+        "index_breadth_vix",
+        "market_calendar"
+      ],
+      "optional_sources": [
+        "macro_fx_rates"
+      ],
+      "input_contract": "Same four exact ordered India context features as Regime HMM; time-valid anomaly baseline",
+      "candidate_python_modules": [
+        "regime_anomaly.py",
+        "regime_hmm.py"
+      ],
+      "verified_state": "research_advisory",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Gemini Context",
+      "family": "News NLP",
+      "ui_role": "Advisory",
+      "ui_status": "Integration",
+      "fixture_metric": "Not verified",
+      "required_sources": [
+        "news_events",
+        "security_identity"
+      ],
+      "optional_sources": [
+        "model_registry_receipts"
+      ],
+      "input_contract": "Licensed and available-at news text/events, cited entity mappings, model version, timestamp and output confidence",
+      "candidate_python_modules": [
+        "india_gemini_sentiment_benchmark.py"
+      ],
+      "verified_state": "integration_not_independently_validated",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Financial NLP Challenger",
+      "family": "News NLP",
+      "ui_role": "Candidate",
+      "ui_status": "License review",
+      "fixture_metric": "Not verified",
+      "required_sources": [
+        "news_events",
+        "security_identity",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "fundamental_filings"
+      ],
+      "input_contract": "Licensed original text, published/captured timestamps, issuer resolution, event labels after horizon",
+      "candidate_python_modules": [
+        "india_financial_nlp_corpus.py"
+      ],
+      "verified_state": "licensing_review",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Static Ensemble",
+      "family": "Decision Fusion",
+      "ui_role": "Baseline",
+      "ui_status": "Research",
+      "fixture_metric": "Sharpe 1.19",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "index_breadth_vix"
+      ],
+      "input_contract": "Aligned model snapshots, fixed weights, forecast uncertainty, approved decision-time fees",
+      "candidate_python_modules": [
+        "fusion.py"
+      ],
+      "verified_state": "research_only",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Adaptive Ensemble",
+      "family": "Decision Fusion",
+      "ui_role": "Challenger",
+      "ui_status": "Research",
+      "fixture_metric": "Sharpe 1.23",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "index_breadth_vix"
+      ],
+      "optional_sources": [
+        "backtest_outcomes",
+        "costs_liquidity"
+      ],
+      "input_contract": "Time-valid regime, model quality multiplier, disagreements and source fingerprints",
+      "candidate_python_modules": [
+        "adaptive_fusion.py"
+      ],
+      "verified_state": "research_only",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Meta Decision Learner",
+      "family": "Decision Fusion",
+      "ui_role": "Candidate",
+      "ui_status": "Planned",
+      "fixture_metric": "Not verified",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "backtest_outcomes",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "index_breadth_vix"
+      ],
+      "input_contract": "Out-of-fold model scores, realized outcome labels available after horizon and cost estimates",
+      "candidate_python_modules": [],
+      "verified_state": "planned_no_independent_production_worker",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Decision-1 Research",
+      "family": "Decision Fusion",
+      "ui_role": "Candidate",
+      "ui_status": "Planned",
+      "fixture_metric": "Not verified",
+      "required_sources": [
+        "model_registry_receipts",
+        "model_features",
+        "backtest_outcomes",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "news_events"
+      ],
+      "input_contract": "Frozen multi-model votes, missingness, risk veto reasons, independent labels for research only",
+      "candidate_python_modules": [],
+      "verified_state": "planned_no_independent_production_worker",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "Quantile Forecaster",
+      "family": "Time-Series",
+      "ui_role": "Candidate",
+      "ui_status": "Research",
+      "fixture_metric": "Coverage 0.78",
+      "required_sources": [
+        "intraday_bars",
+        "market_calendar",
+        "costs_liquidity"
+      ],
+      "optional_sources": [
+        "model_features"
+      ],
+      "input_contract": "Ordered returns, quantile targets, coverage/reliability and calibrated uncertainty",
+      "candidate_python_modules": [
+        "india_bounded_tft.py",
+        "calibrated_prediction.py"
+      ],
+      "verified_state": "research_candidate",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    },
+    {
+      "name": "PPO / FinRL-X",
+      "family": "Reinforcement Learning",
+      "ui_role": "Candidate",
+      "ui_status": "Advanced R&D",
+      "fixture_metric": "Not verified",
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "portfolio_ledger",
+        "costs_liquidity",
+        "risk_execution_controls"
+      ],
+      "optional_sources": [
+        "market_depth_delivery",
+        "corporate_actions"
+      ],
+      "input_contract": "Historical causal state/action/reward, fees, position/cash simulator, episodic halts and eligibility",
+      "candidate_python_modules": [],
+      "verified_state": "advanced_rd_no_execution_authority",
+      "training_labels": "Future outcomes must be withheld until label_available_at; never delivered to inference inputs",
+      "model_authorizes_orders": false
+    }
+  ],
+  "strategy_families": [
+    {
+      "family": "Trend Following",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "SMA Cross",
+        "EMA Cross",
+        "Supertrend",
+        "ADX Trend Strength",
+        "MACD Trend",
+        "Ichimoku Cloud",
+        "Parabolic SAR",
+        "Donchian Trend",
+        "Multi-Timeframe Trend Alignment",
+        "20 EMA Pullback",
+        "Anchored VWAP Trend",
+        "Higher High Higher Low"
+      ],
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "model_features"
+      ],
+      "templates_count": 12,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Momentum",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "RSI Momentum",
+        "Relative Strength Rotation",
+        "ROC Acceleration",
+        "MACD Signal Crossover",
+        "52-Week High Momentum",
+        "Stochastic Momentum",
+        "Momentum Divergence",
+        "Momentum Ignition",
+        "Trend Continuation",
+        "TSI Momentum",
+        "Cross-Sectional Momentum"
+      ],
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "index_breadth_vix"
+      ],
+      "templates_count": 11,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Breakout",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "Opening Range Breakout",
+        "Donchian Channel Breakout",
+        "52-Week High Breakout",
+        "Volatility Breakout",
+        "Consolidation Breakout",
+        "Darvas Box",
+        "Flag Breakout",
+        "Triangle Breakout",
+        "Cup and Handle",
+        "Pivot Breakout",
+        "Range Expansion Breakout",
+        "Multi-Day High Breakout"
+      ],
+      "required_sources": [
+        "intraday_bars",
+        "market_calendar",
+        "market_depth_delivery"
+      ],
+      "templates_count": 12,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Mean Reversion",
+      "horizons": "Intraday Swing",
+      "templates": [
+        "RSI Oversold Rebound",
+        "RSI Overbought Fade",
+        "Bollinger Band Reversion",
+        "VWAP Reclaim",
+        "Z-Score Reversion",
+        "Keltner Mean Reversion",
+        "Gap Fill Reversion",
+        "Overnight Reversal",
+        "Short-Term Oversold",
+        "Distance-from-MA Reversion",
+        "Reversion after Panic"
+      ],
+      "required_sources": [
+        "intraday_bars",
+        "model_features",
+        "costs_liquidity"
+      ],
+      "templates_count": 11,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Price Action & Candlesticks",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "Support Resistance Bounce",
+        "Support Resistance Break",
+        "Inside Bar",
+        "Engulfing Pattern",
+        "Hammer Reversal",
+        "Shooting Star",
+        "Morning Star",
+        "Evening Star",
+        "Doji Context",
+        "Double Top Bottom",
+        "Head and Shoulders",
+        "Ascending Triangle",
+        "Descending Triangle",
+        "Market Structure Break",
+        "Fair Value Gap Research",
+        "Fibonacci Pullback"
+      ],
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "corporate_actions"
+      ],
+      "templates_count": 16,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Volume & Liquidity",
+      "horizons": "Intraday Swing",
+      "templates": [
+        "Volume Spike Confirmation",
+        "On-Balance Volume Trend",
+        "Accumulation Distribution",
+        "Chaikin Money Flow",
+        "Money Flow Index",
+        "Volume Profile Reversion",
+        "VWAP Band Breakout",
+        "Anchored VWAP Reclaim",
+        "Unusual Volume Detection",
+        "Liquidity Sweep Research",
+        "Delivery Volume Breakout"
+      ],
+      "required_sources": [
+        "intraday_bars",
+        "market_depth_delivery"
+      ],
+      "templates_count": 11,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Volatility",
+      "horizons": "Intraday Swing",
+      "templates": [
+        "ATR Breakout",
+        "ATR Trailing Stop",
+        "Bollinger Squeeze",
+        "Keltner Squeeze",
+        "Volatility Contraction Pattern",
+        "Historical Volatility Regime",
+        "Volatility Expansion",
+        "Range Compression",
+        "Volatility Targeting",
+        "Intraday Range Forecast"
+      ],
+      "required_sources": [
+        "daily_bars",
+        "intraday_bars",
+        "index_breadth_vix"
+      ],
+      "templates_count": 10,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Statistical Arbitrage",
+      "horizons": "Swing Research",
+      "templates": [
+        "Pairs Mean Reversion",
+        "Cointegration Spread",
+        "Sector Relative Value",
+        "Beta-Neutral Spread",
+        "Correlation Dislocation",
+        "Cross-Sectional Z-Score",
+        "Residual Momentum",
+        "Statistical Basket Rebalance",
+        "Factor Neutral Reversion"
+      ],
+      "required_sources": [
+        "daily_bars",
+        "security_identity",
+        "costs_liquidity"
+      ],
+      "templates_count": 9,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Event Driven",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "Earnings Surprise",
+        "Post Earnings Drift",
+        "Results Gap Continuation",
+        "Guidance Revision",
+        "Corporate Action Adjustment",
+        "Buyback Announcement",
+        "Dividend Event",
+        "Index Rebalance",
+        "Sector Policy Event",
+        "Management Change Event",
+        "Order Win Inflection",
+        "Pledge Disclosure Watch"
+      ],
+      "required_sources": [
+        "news_events",
+        "fundamental_filings",
+        "corporate_actions",
+        "daily_bars"
+      ],
+      "templates_count": 12,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Fundamental & Multibagger",
+      "horizons": "Delivery Long-Term Research",
+      "templates": [
+        "Quality Compounders",
+        "Earnings Acceleration",
+        "ROCE Improvement",
+        "Free Cash Flow Growth",
+        "Debt Deleveraging",
+        "GARP Growth at Reasonable Price",
+        "Undervalued Cash Flows",
+        "Operating Leverage Inflection",
+        "Capacity Expansion Inflection",
+        "Margin Expansion",
+        "Smallcap Business Inflection",
+        "Promoter Governance Screening",
+        "Capital Allocation Quality",
+        "Industry Consolidation",
+        "Fundamental Momentum",
+        "Financial Turnaround",
+        "High ROIC Reinvestment"
+      ],
+      "required_sources": [
+        "fundamental_filings",
+        "ownership_governance",
+        "daily_bars",
+        "corporate_actions"
+      ],
+      "templates_count": 17,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Factor & Portfolio",
+      "horizons": "Delivery Long-Term Research",
+      "templates": [
+        "Quality Factor",
+        "Value Factor",
+        "Low Volatility Factor",
+        "Momentum Factor",
+        "Size Factor",
+        "Multi-Factor Rank",
+        "Sector Rotation",
+        "Equal Weight Rebalance",
+        "Risk Parity",
+        "Volatility Target Portfolio",
+        "Minimum Variance",
+        "Cash Buffer Rotation",
+        "Core Satellite Allocation"
+      ],
+      "required_sources": [
+        "daily_bars",
+        "fundamental_filings",
+        "security_identity",
+        "portfolio_ledger"
+      ],
+      "templates_count": 13,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Market Regime & Macro",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "Trend Range Classifier",
+        "High Volatility Regime",
+        "Low Liquidity Avoidance",
+        "Market Breadth Shift",
+        "Sector Relative Strength",
+        "Risk-On Risk-Off",
+        "Global Market Spillover",
+        "Rate Sensitivity",
+        "Oil Price Sensitivity",
+        "FX Sensitivity",
+        "Event Volatility Gate"
+      ],
+      "required_sources": [
+        "index_breadth_vix",
+        "macro_fx_rates"
+      ],
+      "templates_count": 11,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Market Microstructure",
+      "horizons": "Intraday Research",
+      "templates": [
+        "Bid Ask Spread Filter",
+        "Order Book Imbalance",
+        "Liquidity Depth Gate",
+        "Microprice Signal Research",
+        "Trade Flow Imbalance",
+        "Market Impact Estimator",
+        "Session Opening Liquidity",
+        "Intraday Seasonality",
+        "Quote Staleness Gate"
+      ],
+      "required_sources": [
+        "market_depth_delivery",
+        "live_quotes",
+        "intraday_bars"
+      ],
+      "templates_count": 9,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "AI & Machine Learning",
+      "horizons": "Research Swing Delivery",
+      "templates": [
+        "Tabular Alpha Classification",
+        "Time-Series Forecast",
+        "Cross-Sectional ML Ranker",
+        "Static Ensemble",
+        "Adaptive Ensemble",
+        "Market Regime HMM",
+        "Isolation Forest Anomaly Gate",
+        "Financial NLP Context",
+        "Event Intelligence Ranker",
+        "Calibrated Meta Decision",
+        "Uncertainty Abstention",
+        "Contextual Bandit Research",
+        "Reinforcement Learning Research",
+        "Feature Drift Gate",
+        "Model Disagreement Gate"
+      ],
+      "required_sources": [
+        "model_features",
+        "model_registry_receipts",
+        "backtest_outcomes"
+      ],
+      "templates_count": 15,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Futures",
+      "horizons": "F&O Research",
+      "templates": [
+        "Futures Basis Carry",
+        "Futures Calendar Spread",
+        "Rollover Signal",
+        "Open Interest Trend",
+        "Price OI Divergence",
+        "Cash Futures Arbitrage Research",
+        "Futures Momentum",
+        "Futures Mean Reversion",
+        "Futures Hedge Overlay",
+        "Contract Liquidity Gate",
+        "Expiry Basis Reversion"
+      ],
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin",
+        "costs_liquidity"
+      ],
+      "templates_count": 11,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Options — Directional",
+      "horizons": "F&O Research",
+      "templates": [
+        "Long Call",
+        "Long Put",
+        "Bull Call Debit Spread",
+        "Bear Put Debit Spread",
+        "Bull Put Credit Spread",
+        "Bear Call Credit Spread",
+        "Protective Put",
+        "Covered Call",
+        "Collar",
+        "Call Ratio Spread Research",
+        "Put Ratio Spread Research"
+      ],
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin",
+        "costs_liquidity"
+      ],
+      "templates_count": 11,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Options — Volatility",
+      "horizons": "F&O Research",
+      "templates": [
+        "Long Straddle",
+        "Long Strangle",
+        "Short Straddle Research",
+        "Short Strangle Research",
+        "Iron Condor",
+        "Iron Butterfly",
+        "Long Butterfly",
+        "Calendar Spread",
+        "Diagonal Spread",
+        "IV Rank Mean Reversion",
+        "Volatility Crush Research",
+        "Gamma Scalping Research"
+      ],
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin",
+        "index_breadth_vix"
+      ],
+      "templates_count": 12,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Options — Hedging",
+      "horizons": "F&O Research",
+      "templates": [
+        "Delta Hedge",
+        "Beta Hedge with Options",
+        "Tail Risk Put Hedge",
+        "Put Spread Collar",
+        "Defined Risk Spread Roll",
+        "Expiry Risk Neutralization",
+        "Portfolio Protective Overlay",
+        "Greeks Exposure Rebalance",
+        "Skew-Based Hedge"
+      ],
+      "required_sources": [
+        "derivatives_chain",
+        "derivatives_reference_margin",
+        "portfolio_ledger"
+      ],
+      "templates_count": 9,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Short Selling",
+      "horizons": "Intraday Research",
+      "templates": [
+        "Intraday Trend Short",
+        "Bearish Breakdown",
+        "Failed Breakout Short",
+        "VWAP Rejection Short",
+        "Bearish Momentum Short",
+        "Gap Down Continuation",
+        "Overbought Short Reversion",
+        "Borrow-Eligible Positional Short Research"
+      ],
+      "required_sources": [
+        "intraday_bars",
+        "market_depth_delivery",
+        "derivatives_reference_margin"
+      ],
+      "templates_count": 8,
+      "execution": "research_only_until_independently_authorized"
+    },
+    {
+      "family": "Execution & Risk",
+      "horizons": "Intraday Swing Delivery",
+      "templates": [
+        "Stop Loss Discipline",
+        "Trailing Exit",
+        "Time Based Exit",
+        "Exposure Cap",
+        "Portfolio Correlation Gate",
+        "Position Sizing Volatility",
+        "Drawdown Kill Switch",
+        "Gap Risk Filter",
+        "Pretrade Liquidity Check",
+        "Dynamic Participation Limit",
+        "Order Slicing Research",
+        "Broker Reconciliation Gate"
+      ],
+      "required_sources": [
+        "risk_execution_controls",
+        "portfolio_ledger",
+        "costs_liquidity"
+      ],
+      "templates_count": 12,
+      "execution": "research_only_until_independently_authorized"
+    }
+  ],
+  "external_research_engines": [
+    "VectorBT",
+    "Backtesting.py",
+    "NautilusTrader",
+    "QuantConnect LEAN",
+    "Freqtrade"
+  ],
+  "counts": {
+    "routes": 43,
+    "models": 18,
+    "strategy_families": 20,
+    "strategy_templates": 232
+  },
+  "delivery_gates": [
+    "Audit all registered screens/models and 20 strategy families with CI diff checks",
+    "Procure source-specific license rights before calling private market-data source a golden source",
+    "Implement stable internal listing ID and corporate-action vintage history",
+    "Construct immutable S3 bronze/silver/gold datasets, separate hot projections",
+    "Require per-source coverage by period and per-model feature readiness",
+    "Do not turn on model scoring or LIVE trading based on catalog presence alone"
+  ]
+}

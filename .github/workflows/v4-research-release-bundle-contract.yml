@@ -1,0 +1,44 @@
+name: V80 research model release bundle safety contract (offline)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
+      - 'intelligence/tests/test_research_release_bundle.py'
+      - 'intelligence/Dockerfile.research-release'
+      - 'intelligence/Dockerfile.research-release.dockerignore'
+      - 'intelligence/.dockerignore'
+      - '.gitignore'
+      - 'scripts/tests/test_v4_research_release_bundle_contract.py'
+      - '.github/workflows/v4-research-release-bundle-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
+      - 'intelligence/tests/test_research_release_bundle.py'
+      - 'intelligence/Dockerfile.research-release'
+      - 'intelligence/Dockerfile.research-release.dockerignore'
+      - 'intelligence/.dockerignore'
+      - '.gitignore'
+      - 'scripts/tests/test_v4_research_release_bundle_contract.py'
+      - '.github/workflows/v4-research-release-bundle-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    name: Reject model leakage or unsafe image release declaration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check V80 offline Docker and staging rules
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_research_release_bundle_contract.py
+
+# No AWS credentials, Docker push, model file uploads, model promotion or order access.

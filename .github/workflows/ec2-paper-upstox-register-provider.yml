@@ -1,0 +1,77 @@
+name: MintTick PAPER - approved Upstox provider identity only
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-register-provider.json'
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-upstox-register-provider.yml'
+      - 'infra/ec2-paper/upstox_provider_register.py'
+      - 'scripts/tests/test_upstox_provider_register.py'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  register:
+    if: github.repository == 'operationReact/AiTradingSystem'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Validate no-rights identity registration code and request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/upstox_provider_register.py
+          python3 -m unittest discover -s scripts/tests \
+            -p test_upstox_provider_register.py -v
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            test "${GITHUB_REF}" = "refs/heads/dev"
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+              "infra/ec2-paper/requests/upstox-register-provider.json"
+            python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "infra/ec2-paper")
+          from upstox_provider_register import expected_request
+          p=Path("infra/ec2-paper/requests/upstox-register-provider.json")
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 2048
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+          fi
+
+      - name: Assume existing exact-account one-host SSM role
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-upstox-provider-only
+          role-duration-seconds: 900
+
+      - name: Register only Upstox EXTERNAL identity (no rights or ingestion)
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/upstox_provider_register.py runner
+
+# ONE metadata-only SQL provider UPSERT, no terms, rights, downloader, quotes,
+# market data, source billing, broker account login, LIVE/PAPER orders or AWS changes.

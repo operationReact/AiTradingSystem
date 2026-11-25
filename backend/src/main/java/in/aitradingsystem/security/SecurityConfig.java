@@ -1,0 +1,116 @@
+package in.aitradingsystem.security;
+
+import java.net.URI;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            SecurityHardeningFilter hardeningFilter,
+            ApiKeyAuthenticationFilter apiKeyFilter,
+            SessionAuthenticationFilter sessionFilter,
+            SessionCsrfFilter sessionCsrfFilter,
+            ObjectProvider<CognitoJwtAuthenticationConverter> cognitoConverter,
+            @Value("${app.security.cognito.enabled:false}") boolean cognitoEnabled,
+            CorsConfigurationSource corsSource) throws Exception {
+        http.csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsSource))
+            .headers(headers -> headers
+                .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
+                .frameOptions(frame -> frame.deny())
+                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+                .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).preload(true).maxAgeInSeconds(31536000)))
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .httpBasic(b -> b.disable())
+            .formLogin(f -> f.disable())
+            .logout(l -> l.disable())
+            .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/api/health", "/actuator/health/**", "/actuator/info", "/error",
+                    "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                // V4 governance intentionally excludes the legacy OPERATOR compatibility authority.
+                .requestMatchers("/api/admin/model-governance/**").hasRole("ADMIN")
+                // News intelligence source rights, provider readiness and pipeline health
+                // are ADMIN-only even though legacy /api/admin routes allow OPERATOR.
+                .requestMatchers("/api/admin/market-intelligence/**").hasRole("ADMIN")
+                // Admin routes must be evaluated before the generic authenticated GET rule below.
+                .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
+                    .hasAnyRole("ADMIN", "OPERATOR")
+                // Upstox browser callback carries only a one-time OAuth state,
+                // not a MintTick bearer JWT. All other broker APIs need CUSTOMER.
+                .requestMatchers(HttpMethod.GET, "/api/customer/brokers/upstox/callback").permitAll()
+                .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
+                .requestMatchers("/api/paper/**", "/api/research/**", "/api/approvals/**", "/api/backtests/**")
+                    .hasAnyRole("TRADER", "ADMIN", "OPERATOR")
+                // A valid, verified Cognito access JWT can provision an
+                // account, but has no VIEWER role until locally linked.
+                .requestMatchers("/api/auth/cognito/provision", "/api/auth/cognito/me").authenticated()
+                .requestMatchers("/api/auth/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
+                .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
+                .requestMatchers("/api/**").hasAnyRole("ADMIN", "OPERATOR")
+                .anyRequest().denyAll())
+            .addFilterBefore(hardeningFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(apiKeyFilter, SecurityHardeningFilter.class)
+            .addFilterBefore(sessionFilter, ApiKeyAuthenticationFilter.class)
+            .addFilterAfter(sessionCsrfFilter, ApiKeyAuthenticationFilter.class);
+        if (cognitoEnabled) {
+            http.oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(cognitoConverter.getObject())));
+        }
+        return http.build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsSource(@Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+        List<String> normalizedOrigins = allowedOrigins.stream().map(String::trim).filter(s -> !s.isBlank()).toList();
+        if (normalizedOrigins.isEmpty()) {
+            throw new IllegalStateException("app.cors.allowed-origins must not be empty");
+        }
+        for (String origin : normalizedOrigins) {
+            if (origin.contains("*")) {
+                throw new IllegalStateException("Wildcard CORS origins are forbidden when credentials are enabled");
+            }
+            URI parsed = URI.create(origin);
+            if (!("http".equalsIgnoreCase(parsed.getScheme()) || "https".equalsIgnoreCase(parsed.getScheme()))
+                    || parsed.getHost() == null || parsed.getPath() != null && !parsed.getPath().isEmpty()) {
+                throw new IllegalStateException("Invalid CORS origin: " + origin);
+            }
+        }
+
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(normalizedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of(
+            "Content-Type", "Authorization", ApiKeyAuthenticationFilter.HEADER, SessionAuthenticationFilter.CSRF_HEADER,
+            "Idempotency-Key", "X-Correlation-Id"));
+        config.setExposedHeaders(List.of("X-Correlation-Id"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+}

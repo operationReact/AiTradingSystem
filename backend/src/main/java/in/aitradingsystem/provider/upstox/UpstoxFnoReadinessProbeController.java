@@ -1,0 +1,205 @@
+package in.aitradingsystem.provider.upstox;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Operator-only, non-persisting F&O source acceptance probe (#1063).
+ *
+ * Shares the pre-existing Upstox Analytics source, SSM token and protected probe
+ * feature gate. Never exposes raw chain quotes, credentials, orders or permissions
+ * to retain/replay/train. Not a customer API and not a freshness assertion.
+ */
+@RestController
+@RequestMapping("/api/admin/market-data/upstox-analytics/fno")
+@ConditionalOnProperty(prefix = "minttick.upstox-analytics",
+        name = "probe-enabled", havingValue = "true")
+public class UpstoxFnoReadinessProbeController {
+    private static final String UNDERLYING = "NSE_INDEX|Nifty 50";
+    private static final ZoneId MARKET = ZoneId.of("Asia/Kolkata");
+    private static final Duration COOLDOWN = Duration.ofMinutes(15);
+
+    public record Probe(String status, String underlyingKey, LocalDate expiry,
+                        int validatedContracts, int validatedStrikes, int callsWithContract,
+                        int putsWithContract, int rowsWithCompleteGreeks,
+                        Instant observedAt, boolean exchangeQuoteTimeVerified,
+                        boolean stored, boolean displayRightsVerified,
+                        boolean modelTrainingRightsVerified, boolean liveTradingEnabled) {}
+
+    private final UpstoxAnalyticsSource source;
+    private final Clock clock;
+    private Instant retryAfter = Instant.EPOCH;
+
+    @Autowired
+    public UpstoxFnoReadinessProbeController(UpstoxAnalyticsSource source) {
+        this(source, Clock.systemUTC());
+    }
+
+    UpstoxFnoReadinessProbeController(UpstoxAnalyticsSource source, Clock clock) {
+        this.source = source;
+        this.clock = clock;
+    }
+
+    /** Existing explicit-expiry probe retained for reviewed, bounded requests. */
+    @PostMapping("/probe")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public synchronized ResponseEntity<Probe> probe(
+            @RequestParam("expiry") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate expiry) {
+        Instant now = clock.instant();
+        LocalDate today = now.atZone(MARKET).toLocalDate();
+        if (expiry == null || expiry.isBefore(today) || expiry.isAfter(today.plusDays(90))) {
+            return result("INVALID_EXPIRY", expiry, 0, 0, 0, 0, 0, now);
+        }
+        if (!source.enabled()) {
+            return result("DISABLED", expiry, 0, 0, 0, 0, 0, now);
+        }
+        if (now.isBefore(retryAfter)) {
+            return result("COOLDOWN", expiry, 0, 0, 0, 0, 0, now);
+        }
+        // Reserve rate-limit budget before contacting the Upstox provider.
+        retryAfter = now.plus(COOLDOWN);
+        return readContractsAndChain(expiry, now);
+    }
+
+    /**
+     * Resolve the nearest real provider-listed NIFTY expiry first, then prove
+     * actual CE/PE contracts and chain identities on that very same expiry.
+     * No guessed dates, quotes, user data, persistence or entitlement changes.
+     */
+    @PostMapping("/probe-nearest")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public synchronized ResponseEntity<Probe> probeNearest() {
+        Instant now = clock.instant();
+        if (!source.enabled()) {
+            return result("DISABLED", null, 0, 0, 0, 0, 0, now);
+        }
+        if (now.isBefore(retryAfter)) {
+            return result("COOLDOWN", null, 0, 0, 0, 0, 0, now);
+        }
+        // Book the whole source+contracts+chain operation under one cooldown.
+        retryAfter = now.plus(COOLDOWN);
+        try {
+            LocalDate today = now.atZone(MARKET).toLocalDate();
+            var expiries = source.currentNiftyOptionExpiries(now);
+            if (expiries == null) {
+                return result("PROVIDER_UNAVAILABLE", null, 0, 0, 0, 0, 0, now);
+            }
+            LocalDate expiry = expiries.stream()
+                .filter(date -> date != null && !date.isBefore(today)
+                    && !date.isAfter(today.plusDays(90)))
+                .distinct().sorted().findFirst().orElse(null);
+            if (expiry == null) {
+                return result("NO_LISTED_EXPIRIES", null, 0, 0, 0, 0, 0, now);
+            }
+            return readContractsAndChain(expiry, now);
+        } catch (RuntimeException ex) {
+            return result(safeFailure("EXPIRIES", ex), null, 0, 0, 0, 0, 0, now);
+        }
+    }
+
+    /** Executed only after the shared probe cooldown is reserved. */
+    private ResponseEntity<Probe> readContractsAndChain(LocalDate expiry, Instant now) {
+        try {
+            // Split contract metadata vs chain failures without exposing
+            // upstream response bodies, signed URLs or SSM credentials.
+            List<UpstoxAnalyticsSource.FnoOptionContract> contracts;
+            try {
+                contracts = source.currentFnoOptionContracts(UNDERLYING, expiry);
+            } catch (RuntimeException ex) {
+                return result(safeFailure("CONTRACTS", ex), expiry,
+                        0, 0, 0, 0, 0, now);
+            }
+            UpstoxAnalyticsSource.OptionChainSnapshot chain;
+            try {
+                chain = source.currentFnoOptionChain(UNDERLYING, expiry);
+            } catch (RuntimeException ex) {
+                return result(safeFailure("CHAIN", ex), expiry,
+                        0, 0, 0, 0, 0, now);
+            }
+            if (!"UPSTOX_ANALYTICS".equals(chain.source()) || chain.retrievedAt() == null
+                    || chain.exchangeQuoteTimeVerified()) {
+                return result("INVALID_PROVENANCE", expiry, 0, 0, 0, 0, 0, now);
+            }
+
+            Set<String> ceKeys = new HashSet<>();
+            Set<String> peKeys = new HashSet<>();
+            for (var contract : contracts) {
+                if (!UNDERLYING.equals(contract.underlyingKey())
+                        || !expiry.equals(contract.expiry())) {
+                    return result("INVALID_PROVENANCE", expiry, 0, 0, 0, 0, 0, now);
+                }
+                ("CE".equals(contract.side()) ? ceKeys : peKeys).add(contract.instrumentKey());
+            }
+
+            int calls = 0;
+            int puts = 0;
+            int greeks = 0;
+            for (var strike : chain.strikes()) {
+                if (!UNDERLYING.equals(strike.underlyingKey())
+                        || !expiry.equals(strike.expiry())) {
+                    return result("INVALID_PROVENANCE", expiry, 0, 0, 0, 0, 0, now);
+                }
+                if (ceKeys.contains(strike.call().instrumentKey())) calls++;
+                if (peKeys.contains(strike.put().instrumentKey())) puts++;
+                if (completeGreeks(strike.call()) && completeGreeks(strike.put())) greeks++;
+            }
+            boolean verified = !contracts.isEmpty() && !chain.strikes().isEmpty()
+                    && calls == chain.strikes().size() && puts == chain.strikes().size();
+            return result(verified ? "READS_VERIFIED" : "PARTIAL_DATA", expiry,
+                    contracts.size(), chain.strikes().size(), calls, puts, greeks, now);
+        } catch (RuntimeException ignored) {
+            // No upstream response, AWS exception, access token or private quote escapes.
+            return result("PROVIDER_UNAVAILABLE", expiry, 0, 0, 0, 0, 0, now);
+        }
+    }
+
+    /** Only classifies exact code strings emitted by our own Upstox source. */
+    private static String safeFailure(String phase, RuntimeException ex) {
+        String category = switch (ex.getMessage() == null ? "" : ex.getMessage()) {
+            case "UPSTOX_FNO_UNAUTHORIZED" -> "UNAUTHORIZED";
+            case "UPSTOX_FNO_FORBIDDEN" -> "FORBIDDEN";
+            case "UPSTOX_FNO_RATE_LIMITED" -> "RATE_LIMITED";
+            case "UPSTOX_FNO_NOT_FOUND" -> "NOT_FOUND";
+            case "UPSTOX_FNO_UPSTREAM_UNAVAILABLE" -> "UPSTREAM_UNAVAILABLE";
+            case "UPSTOX_FNO_UPSTREAM_REJECTED" -> "UPSTREAM_REJECTED";
+            case "UPSTOX_FNO_TRANSPORT_FAILURE" -> "TRANSPORT_FAILURE";
+            case "UPSTOX_SSM_UNAVAILABLE" -> "CREDENTIAL_UNAVAILABLE";
+            case "UPSTOX_FNO_INVALID_EXPIRY_CONTRACTS",
+                 "UPSTOX_FNO_INVALID_CONTRACTS", "UPSTOX_FNO_INVALID_CHAIN"
+                    -> "SCHEMA_INVALID";
+            case "UPSTOX_FNO_INVALID_PAYLOAD" -> "ENVELOPE_INVALID";
+            default -> null; // Do not reveal arbitrary upstream exception text.
+        };
+        return category == null ? "PROVIDER_UNAVAILABLE" : phase + "_" + category;
+    }
+
+    private static boolean completeGreeks(UpstoxAnalyticsSource.FnoOptionQuote leg) {
+        return leg.iv() != null && leg.delta() != null && leg.gamma() != null
+                && leg.theta() != null && leg.vega() != null;
+    }
+
+    private static ResponseEntity<Probe> result(String status, LocalDate expiry,
+                                                int contracts, int strikes, int calls,
+                                                int puts, int greeks, Instant observedAt) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new Probe(status, UNDERLYING, expiry, contracts, strikes, calls, puts,
+                        greeks, observedAt, false, false, false, false, false));
+    }
+}

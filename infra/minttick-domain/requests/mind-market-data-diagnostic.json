@@ -1,0 +1,9 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "read-only-market-data-diagnostic",
+  "read_only": true,
+  "symbol": "RELIANCE-EQ",
+  "exchange": "NSE",
+  "diagnostic_id": "mkt-diag-2026-11-18-live"
+}

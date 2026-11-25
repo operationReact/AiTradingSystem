@@ -1,0 +1,6 @@
+{
+  "kind": "bootstrap",
+  "target": "aitradingsystem-paper-dev",
+  "operation": "preflight",
+  "confirmation": ""
+}

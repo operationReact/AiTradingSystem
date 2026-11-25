@@ -1,0 +1,44 @@
+name: V86 private worker TLS inspection safety contract (offline)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_worker_private_tls_posture.py'
+      - 'scripts/tests/test_v4_worker_private_tls_posture.py'
+      - 'scripts/tests/test_v4_worker_private_tls_inspector_policy.py'
+      - 'infra/aws/readonly-v86-worker-tls-oidc-trust.json'
+      - 'infra/aws/readonly-v86-worker-tls-policy.json'
+      - '.github/workflows/v4-worker-private-tls-readonly-inspect.yml'
+      - '.github/workflows/v4-worker-private-tls-posture-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_worker_private_tls_posture.py'
+      - 'scripts/tests/test_v4_worker_private_tls_posture.py'
+      - 'scripts/tests/test_v4_worker_private_tls_inspector_policy.py'
+      - 'infra/aws/readonly-v86-worker-tls-oidc-trust.json'
+      - 'infra/aws/readonly-v86-worker-tls-policy.json'
+      - '.github/workflows/v4-worker-private-tls-readonly-inspect.yml'
+      - '.github/workflows/v4-worker-private-tls-posture-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-network-posture:
+    name: Reject unexpected private worker AWS trust and unsafe IAM policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run synthetic positive and adversarial ALB/ACM/DNS/ECS cases
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_worker_private_tls_posture.py
+      - name: Verify exact read-only AWS OIDC and sanitized reporting scope
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_worker_private_tls_inspector_policy.py
+
+# This CI workflow has no AWS identity, no deploy, no worker token and no broker.

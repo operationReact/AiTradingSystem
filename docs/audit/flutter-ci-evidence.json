@@ -1,0 +1,2353 @@
+{
+  "74": {
+    "workflow_runs": [
+      {
+        "id": 40810965085,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 182,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40810965085/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40810965085/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "80": {
+    "workflow_runs": []
+  },
+  "81": {
+    "workflow_runs": [
+      {
+        "id": 40813730611,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 184,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40813730611/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40813730611/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "82": {
+    "workflow_runs": [
+      {
+        "id": 40816334903,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 198,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40816334903/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40816334903/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "83": {
+    "workflow_runs": [
+      {
+        "id": 40817208202,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 201,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40817208202/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40817208202/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "84": {
+    "workflow_runs": [
+      {
+        "id": 40818409698,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 205,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40818409698/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40818409698/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "85": {
+    "workflow_runs": [
+      {
+        "id": 40820125728,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 207,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40820125728/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40820125728/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "86": {
+    "workflow_runs": [
+      {
+        "id": 40824630465,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 210,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40824630465/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40824630465/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "87": {
+    "workflow_runs": [
+      {
+        "id": 40826072295,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 212,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40826072295/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40826072295/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "88": {
+    "workflow_runs": [
+      {
+        "id": 40827868078,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 214,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40827868078/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40827868078/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "89": {
+    "workflow_runs": [
+      {
+        "id": 40830842363,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 221,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40830842363/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40830842363/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "90": {
+    "workflow_runs": [
+      {
+        "id": 40834904199,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 224,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40834904199/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40834904199/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "91": {
+    "workflow_runs": [
+      {
+        "id": 40835765205,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 226,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40835765205/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40835765205/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "92": {
+    "workflow_runs": [
+      {
+        "id": 40842783754,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 228,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40842783754/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40842783754/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "93": {
+    "workflow_runs": [
+      {
+        "id": 40850817097,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 230,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40850817097/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40850817097/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "94": {
+    "workflow_runs": [
+      {
+        "id": 40853608461,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 232,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40853608461/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40853608461/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "95": {
+    "workflow_runs": [
+      {
+        "id": 40855894438,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 234,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40855894438/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40855894438/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "96": {
+    "workflow_runs": [
+      {
+        "id": 40857018545,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 237,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40857018545/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40857018545/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "97": {
+    "workflow_runs": [
+      {
+        "id": 40859601030,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 240,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40859601030/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40859601030/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "98": {
+    "workflow_runs": [
+      {
+        "id": 40860754256,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 242,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40860754256/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40860754256/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "99": {
+    "workflow_runs": [
+      {
+        "id": 40862420700,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 250,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40862420700/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40862420700/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40862420702,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 7,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40862420702/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40862420702/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "100": {
+    "workflow_runs": [
+      {
+        "id": 40864002738,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 252,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40864002738/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40864002738/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "101": {
+    "workflow_runs": [
+      {
+        "id": 40864519699,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 254,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40864519699/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40864519699/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "102": {
+    "workflow_runs": [
+      {
+        "id": 40867047688,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 257,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40867047688/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40867047688/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "103": {
+    "workflow_runs": [
+      {
+        "id": 40895948091,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 263,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40895948091/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40895948091/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40895882120,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "run_number": 262,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40895882120/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40895882120/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "104": {
+    "workflow_runs": [
+      {
+        "id": 40897095344,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 265,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40897095344/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40897095344/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "105": {
+    "workflow_runs": [
+      {
+        "id": 40898214686,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 269,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40898214686/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40898214686/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40898164171,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "run_number": 268,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40898164171/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40898164171/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "106": {
+    "workflow_runs": [
+      {
+        "id": 40899473998,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 11,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899473998/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899473998/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 40899473891,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 273,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899473891/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899473891/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40899426538,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "run_number": 272,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899426538/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899426538/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40899426567,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 10,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899426567/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40899426567/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "107": {
+    "workflow_runs": [
+      {
+        "id": 40900490046,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 276,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40900490046/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40900490046/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40900489865,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40900489865/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40900489865/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "108": {
+    "workflow_runs": [
+      {
+        "id": 40903125143,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 278,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40903125143/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40903125143/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40903125138,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40903125138/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40903125138/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "109": {
+    "workflow_runs": [
+      {
+        "id": 40909585745,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 293,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40909585745/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40909585745/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40909585668,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 17,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40909585668/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40909585668/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "110": {
+    "workflow_runs": [
+      {
+        "id": 40911140270,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 295,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40911140270/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40911140270/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40911140497,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 18,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40911140497/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40911140497/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "111": {
+    "workflow_runs": [
+      {
+        "id": 40912316381,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 298,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40912316381/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40912316381/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40912316206,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 20,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40912316206/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40912316206/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "112": {
+    "workflow_runs": [
+      {
+        "id": 40914180328,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 22,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40914180328/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40914180328/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40914180121,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 301,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40914180121/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40914180121/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "113": {
+    "workflow_runs": [
+      {
+        "id": 40919018448,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 23,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40919018448/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40919018448/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40919018255,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 303,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40919018255/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40919018255/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "114": {
+    "workflow_runs": [
+      {
+        "id": 40920451409,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 24,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40920451409/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40920451409/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40920451411,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 305,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40920451411/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40920451411/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "115": {
+    "workflow_runs": [
+      {
+        "id": 40921781457,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 308,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40921781457/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40921781457/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40921781615,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 26,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40921781615/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40921781615/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40921781540,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 14,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40921781540/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40921781540/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "116": {
+    "workflow_runs": [
+      {
+        "id": 40929568296,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 31,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929568296/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929568296/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40929567694,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 314,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929567694/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929567694/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40929567759,
+        "name": "Phase 5 - Risk UI contract gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929567759/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929567759/logs",
+        "workflow_id": 400947772
+      },
+      {
+        "id": 40929567818,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 20,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929567818/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40929567818/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "117": {
+    "workflow_runs": [
+      {
+        "id": 40931714183,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 318,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40931714183/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40931714183/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40931714129,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 34,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40931714129/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40931714129/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "118": {
+    "workflow_runs": [
+      {
+        "id": 40932426609,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 35,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40932426609/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40932426609/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40932426695,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 320,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40932426695/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40932426695/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40932426811,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 1,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40932426811/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40932426811/logs",
+        "workflow_id": 400967074
+      }
+    ]
+  },
+  "119": {
+    "workflow_runs": [
+      {
+        "id": 40937724421,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 325,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40937724421/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40937724421/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40937724477,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 6,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40937724477/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40937724477/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40937724429,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 39,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40937724429/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40937724429/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "120": {
+    "workflow_runs": [
+      {
+        "id": 40938386119,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 8,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40938386119/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40938386119/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40938385968,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 327,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40938385968/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40938385968/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40938385867,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 40,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40938385867/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40938385867/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "121": {
+    "workflow_runs": [
+      {
+        "id": 40939044084,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 329,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939044084/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939044084/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40939044082,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 10,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939044082/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939044082/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40939044066,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 41,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939044066/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939044066/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "122": {
+    "workflow_runs": [
+      {
+        "id": 40939714441,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 42,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939714441/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939714441/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40939714479,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 331,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939714479/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939714479/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40939714532,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 12,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939714532/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40939714532/logs",
+        "workflow_id": 400967074
+      }
+    ]
+  },
+  "123": {
+    "workflow_runs": [
+      {
+        "id": 40940335932,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 14,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40940335932/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40940335932/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40940335804,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 333,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40940335804/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40940335804/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40940336051,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 43,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40940336051/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40940336051/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "124": {
+    "workflow_runs": [
+      {
+        "id": 40941372891,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 335,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40941372891/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40941372891/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40941372842,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 16,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40941372842/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40941372842/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40941372587,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 44,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40941372587/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40941372587/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "125": {
+    "workflow_runs": [
+      {
+        "id": 40942624283,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 48,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40942624283/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40942624283/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40942624152,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 21,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40942624152/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40942624152/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40942624147,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 340,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40942624147/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40942624147/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "126": {
+    "workflow_runs": [
+      {
+        "id": 40963705801,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 24,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40963705801/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40963705801/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40963705766,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 343,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40963705766/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40963705766/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40963705815,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 50,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40963705815/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40963705815/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "127": {
+    "workflow_runs": [
+      {
+        "id": 40964695443,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 30,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695443/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695443/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 40964695328,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 349,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695328/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695328/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40964695329,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 55,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695329/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695329/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40964695416,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 26,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695416/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40964695416/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "128": {
+    "workflow_runs": [
+      {
+        "id": 40965829383,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829383/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829383/logs",
+        "workflow_id": 401160240
+      },
+      {
+        "id": 40965829389,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 355,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829389/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829389/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40965829365,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 60,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829365/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829365/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40965829373,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 32,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829373/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829373/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 40965829384,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 35,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829384/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40965829384/logs",
+        "workflow_id": 400967074
+      }
+    ]
+  },
+  "129": {
+    "workflow_runs": [
+      {
+        "id": 40966385635,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 61,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966385635/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966385635/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40966385306,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 357,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966385306/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966385306/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "130": {
+    "workflow_runs": [
+      {
+        "id": 40966816212,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 359,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966816212/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966816212/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40966816294,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 62,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966816294/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40966816294/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "131": {
+    "workflow_runs": [
+      {
+        "id": 40967280392,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 63,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40967280392/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40967280392/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40967280408,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 361,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40967280408/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40967280408/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "132": {
+    "workflow_runs": [
+      {
+        "id": 40968204218,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 364,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968204218/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968204218/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40968204244,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 65,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968204244/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968204244/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "133": {
+    "workflow_runs": [
+      {
+        "id": 40968595713,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 66,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968595713/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968595713/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40968595884,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 366,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968595884/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40968595884/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "134": {
+    "workflow_runs": [
+      {
+        "id": 40976442141,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 68,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40976442141/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40976442141/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40976442107,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 369,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40976442107/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40976442107/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "135": {
+    "workflow_runs": [
+      {
+        "id": 40995092190,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 69,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40995092190/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40995092190/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 40995092101,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 371,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40995092101/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40995092101/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 40995092173,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 34,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40995092173/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/40995092173/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "136": {
+    "workflow_runs": [
+      {
+        "id": 41000089932,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 373,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41000089932/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41000089932/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41000089915,
+        "name": "Phase 7 - Approval decision regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 1,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41000089915/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41000089915/logs",
+        "workflow_id": 401356418
+      },
+      {
+        "id": 41000089950,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 70,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41000089950/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41000089950/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "137": {
+    "workflow_runs": [
+      {
+        "id": 41001298896,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 377,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001298896/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001298896/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41001298893,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 47,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001298893/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001298893/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 41001299000,
+        "name": "Phase 7 - Approval decision regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 4,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001299000/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001299000/logs",
+        "workflow_id": 401356418
+      },
+      {
+        "id": 41001298923,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 73,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001298923/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001298923/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41001299002,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 17,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001299002/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001299002/logs",
+        "workflow_id": 401160240
+      }
+    ]
+  },
+  "138": {
+    "workflow_runs": [
+      {
+        "id": 41001628340,
+        "name": "Phase 7 - Approval decision regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628340/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628340/logs",
+        "workflow_id": 401356418
+      },
+      {
+        "id": 41001628198,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 74,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628198/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628198/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41001628167,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 379,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628167/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628167/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41001628240,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 36,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628240/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41001628240/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "139": {
+    "workflow_runs": [
+      {
+        "id": 41002090496,
+        "name": "Phase 7 - Approval completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 6,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090496/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090496/logs",
+        "workflow_id": 401356418
+      },
+      {
+        "id": 41002090468,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 381,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090468/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090468/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41002090521,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 50,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090521/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090521/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 41002090426,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 38,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090426/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090426/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41002090520,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 20,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090520/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090520/logs",
+        "workflow_id": 401160240
+      },
+      {
+        "id": 41002090472,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 75,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090472/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002090472/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "140": {
+    "workflow_runs": [
+      {
+        "id": 41002962869,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 383,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002962869/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002962869/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41002962835,
+        "name": "Phase 8 - Daily performance regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 1,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002962835/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002962835/logs",
+        "workflow_id": 401372964
+      },
+      {
+        "id": 41002962774,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 76,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002962774/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41002962774/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "141": {
+    "workflow_runs": [
+      {
+        "id": 41003493542,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 77,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003493542/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003493542/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41003493486,
+        "name": "Phase 8 - Daily performance regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003493486/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003493486/logs",
+        "workflow_id": 401372964
+      },
+      {
+        "id": 41003493577,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 385,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003493577/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003493577/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "142": {
+    "workflow_runs": [
+      {
+        "id": 41003999505,
+        "name": "Phase 8 - Operations regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 1,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999505/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999505/logs",
+        "workflow_id": 401378722
+      },
+      {
+        "id": 41003999471,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 78,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999471/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999471/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41003999422,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 387,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999422/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999422/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41003999522,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 24,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999522/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999522/logs",
+        "workflow_id": 401160240
+      },
+      {
+        "id": 41003999661,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 54,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999661/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999661/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 41003999430,
+        "name": "Phase 7 - Approval completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 10,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999430/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41003999430/logs",
+        "workflow_id": 401356418
+      }
+    ]
+  },
+  "143": {
+    "workflow_runs": [
+      {
+        "id": 41005236348,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 390,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236348/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236348/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41005236280,
+        "name": "Phase 8 - Operations regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236280/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236280/logs",
+        "workflow_id": 401378722
+      },
+      {
+        "id": 41005236428,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 80,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236428/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236428/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41005236307,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 41,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236307/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236307/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41005236277,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 27,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236277/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005236277/logs",
+        "workflow_id": 401160240
+      }
+    ]
+  },
+  "144": {
+    "workflow_runs": [
+      {
+        "id": 41005608993,
+        "name": "Phase 8 - Operations regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 4,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005608993/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005608993/logs",
+        "workflow_id": 401378722
+      },
+      {
+        "id": 41005609021,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 81,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005609021/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005609021/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41005608997,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 392,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005608997/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41005608997/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "145": {
+    "workflow_runs": [
+      {
+        "id": 41006378533,
+        "name": "Phase 8 - Daily performance regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378533/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378533/logs",
+        "workflow_id": 401372964
+      },
+      {
+        "id": 41006378577,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 82,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378577/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378577/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41006378574,
+        "name": "Phase 8 - Operations regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378574/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378574/logs",
+        "workflow_id": 401378722
+      },
+      {
+        "id": 41006378630,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 394,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378630/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41006378630/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "146": {
+    "workflow_runs": [
+      {
+        "id": 41007611063,
+        "name": "Phase 8 - Completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007611063/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007611063/logs",
+        "workflow_id": 401398886
+      },
+      {
+        "id": 41007611148,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 85,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007611148/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007611148/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41007611060,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 398,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007611060/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007611060/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "147": {
+    "workflow_runs": [
+      {
+        "id": 41007958731,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 86,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958731/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958731/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41007958699,
+        "name": "Phase 8 - Completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 4,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958699/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958699/logs",
+        "workflow_id": 401398886
+      },
+      {
+        "id": 41007958730,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 400,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958730/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958730/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41007958743,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 43,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958743/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958743/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41007958767,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 1,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958767/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41007958767/logs",
+        "workflow_id": 401402805
+      }
+    ]
+  },
+  "148": {
+    "workflow_runs": [
+      {
+        "id": 41008522462,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 402,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522462/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522462/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41008522425,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 45,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522425/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522425/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41008522584,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 2,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522584/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522584/logs",
+        "workflow_id": 401402805
+      },
+      {
+        "id": 41008522381,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 87,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522381/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41008522381/logs",
+        "workflow_id": 400770348
+      }
+    ]
+  },
+  "149": {
+    "workflow_runs": [
+      {
+        "id": 41009117641,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 88,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117641/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117641/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41009117650,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 47,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117650/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117650/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41009117694,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 404,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117694/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117694/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41009117686,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 3,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117686/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41009117686/logs",
+        "workflow_id": 401402805
+      }
+    ]
+  },
+  "150": {
+    "workflow_runs": [
+      {
+        "id": 41028465403,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 42,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465403/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465403/logs",
+        "workflow_id": 401160240
+      },
+      {
+        "id": 41028465585,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 11,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465585/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465585/logs",
+        "workflow_id": 401402805
+      },
+      {
+        "id": 41028465451,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 97,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465451/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465451/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41028465592,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 416,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465592/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465592/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41028465411,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 57,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465411/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028465411/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "152": {
+    "workflow_runs": [
+      {
+        "id": 41027999053,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 96,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027999053/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027999053/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41027998952,
+        "name": "Phase 5 - Risk UI contract gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 9,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998952/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998952/logs",
+        "workflow_id": 400947772
+      },
+      {
+        "id": 41027998934,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 10,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998934/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998934/logs",
+        "workflow_id": 401402805
+      },
+      {
+        "id": 41027998991,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 414,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998991/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998991/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41027998971,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 55,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998971/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998971/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41027998959,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 69,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998959/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027998959/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 41027999011,
+        "name": "Phase 7 - Approval completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 21,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027999011/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027999011/logs",
+        "workflow_id": 401356418
+      }
+    ]
+  },
+  "153": {
+    "workflow_runs": [
+      {
+        "id": 41027725595,
+        "name": "Phase 8 - Completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 5,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725595/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725595/logs",
+        "workflow_id": 401398886
+      },
+      {
+        "id": 41027725549,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 95,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725549/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725549/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41027725663,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 67,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725663/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725663/logs",
+        "workflow_id": 400967074
+      },
+      {
+        "id": 41027725531,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 412,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725531/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41027725531/logs",
+        "workflow_id": 397903655
+      }
+    ]
+  },
+  "154": {
+    "workflow_runs": [
+      {
+        "id": 41028946751,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 98,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946751/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946751/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41028946734,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 59,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946734/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946734/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41028946730,
+        "name": "Phase 6 - PAPER accounting completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 44,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946730/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946730/logs",
+        "workflow_id": 401160240
+      },
+      {
+        "id": 41028946835,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 418,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946835/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946835/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41028946825,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 12,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946825/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41028946825/logs",
+        "workflow_id": 401402805
+      }
+    ]
+  },
+  "155": {
+    "workflow_runs": [
+      {
+        "id": 41030343869,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 14,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343869/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343869/logs",
+        "workflow_id": 401402805
+      },
+      {
+        "id": 41030344056,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 100,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030344056/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030344056/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41030343807,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 62,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343807/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343807/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41030343772,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 421,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343772/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343772/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41030343813,
+        "name": "Phase 5 - Risk UI contract gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 12,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343813/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343813/logs",
+        "workflow_id": 400947772
+      },
+      {
+        "id": 41030343746,
+        "name": "Phase 5 - Deterministic risk completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 74,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343746/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030343746/logs",
+        "workflow_id": 400967074
+      }
+    ]
+  },
+  "156": {
+    "workflow_runs": [
+      {
+        "id": 41030954066,
+        "name": "Phase 7 - Approval completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 26,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030954066/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030954066/logs",
+        "workflow_id": 401356418
+      },
+      {
+        "id": 41030948234,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 101,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948234/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948234/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41030948426,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 423,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948426/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948426/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41030948469,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 15,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948469/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948469/logs",
+        "workflow_id": 401402805
+      },
+      {
+        "id": 41030948128,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 64,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948128/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41030948128/logs",
+        "workflow_id": 400499319
+      }
+    ]
+  },
+  "157": {
+    "workflow_runs": [
+      {
+        "id": 41033878416,
+        "name": "Phase 3 - Backtest Studio completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 66,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878416/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878416/logs",
+        "workflow_id": 400499319
+      },
+      {
+        "id": 41033878427,
+        "name": "Phase 0 - Baseline validation",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 425,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878427/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878427/logs",
+        "workflow_id": 397903655
+      },
+      {
+        "id": 41033878433,
+        "name": "Phase 4 - Scenario research completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 102,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878433/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878433/logs",
+        "workflow_id": 400770348
+      },
+      {
+        "id": 41033878547,
+        "name": "Phase 8 - Completion gate",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 6,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878547/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878547/logs",
+        "workflow_id": 401398886
+      },
+      {
+        "id": 41033878373,
+        "name": "Phase 9 - Frontend contract regression",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 16,
+        "jobs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878373/jobs",
+        "logs_url": "https://api.github.com/repos/operationReact/AiTradingSystem/actions/runs/41033878373/logs",
+        "workflow_id": 401402805
+      }
+    ]
+  }
+}

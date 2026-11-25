@@ -1,0 +1,82 @@
+/* Semantic fallback: components consume names, never appearance-specific values. RGB triplets support Tailwind alpha. */
+:root {
+  --bg: 11 15 23;
+  --surface: 17 23 34;
+  --surface-2: 24 31 45;
+  --border: 39 48 66;
+  --text: 229 234 243;
+  --muted: 139 151 170;
+  --accent: 110 140 255;
+  --accent-contrast: 11 15 23;
+  --gain: 52 211 153;
+  --loss: 248 113 113;
+  --loss-contrast: 11 15 23;
+  --warn: 251 191 36;
+  --info: var(--accent);
+  --risk-low: var(--gain);
+  --risk-medium: var(--warn);
+  --risk-high: var(--loss);
+  --risk-unknown: var(--muted);
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-control: .375rem;
+  --radius-panel: .5rem;
+  --radius-dialog: .75rem;
+  --elevation-panel: none;
+  --elevation-dialog: 0 20px 50px rgb(0 0 0 / .3);
+  --font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-size-caption: .75rem;
+  --font-size-body: .875rem;
+  --font-size-heading: 1.5rem;
+  --font-weight-body: 400;
+  --font-weight-heading: 600;
+  --chart-text: var(--text);
+  --chart-axis: var(--muted);
+  --chart-grid: var(--border);
+  --chart-series-1: var(--accent);
+  --chart-series-2: var(--gain);
+  --chart-series-3: var(--warn);
+  --chart-series-4: 167 139 250;
+  --chart-series-5: 56 189 248;
+  --chart-series-6: 244 114 182;
+  --chart-series-7: var(--loss);
+  --focus-ring: var(--accent);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --motion-fast: 150ms;
+  --motion-normal: 250ms;
+  --motion-easing: cubic-bezier(.2, 0, 0, 1);
+  --experience-radius: var(--radius-panel);
+  --experience-panel-gap: var(--space-3);
+  --experience-panel-padding: var(--space-4);
+  color-scheme: dark;
+}
+:root.light {
+  --bg: 245 247 251;
+  --surface: 255 255 255;
+  --surface-2: 240 243 248;
+  --border: 220 226 235;
+  --text: 17 24 39;
+  --muted: 100 112 128;
+  --accent: 56 88 230;
+  --accent-contrast: 255 255 255;
+  --gain: 4 120 87;
+  --loss: 185 28 28;
+  --loss-contrast: 255 255 255;
+  --warn: 168 76 9;
+  --chart-series-4: 109 40 217;
+  --chart-series-5: 3 105 161;
+  --chart-series-6: 190 24 93;
+  --elevation-dialog: 0 20px 50px rgb(17 24 39 / .15);
+  color-scheme: light;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-normal: 0ms;
+  }
+}

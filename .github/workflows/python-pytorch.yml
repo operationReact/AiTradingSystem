@@ -1,0 +1,46 @@
+name: Python PyTorch challenger
+
+on:
+  pull_request:
+    paths:
+      - 'intelligence/src/aitrading_intelligence/pytorch_*.py'
+      - 'intelligence/tests/test_pytorch_*.py'
+      - 'intelligence/requirements-pytorch-cpu.txt'
+      - '.github/workflows/python-pytorch.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/pytorch_*.py'
+      - 'intelligence/tests/test_pytorch_*.py'
+      - 'intelligence/requirements-pytorch-cpu.txt'
+      - '.github/workflows/python-pytorch.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  pytorch-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU-only PyTorch 2.15
+        working-directory: intelligence
+        run: pip install -r requirements-pytorch-cpu.txt
+      - name: Install intelligence package and test tooling
+        working-directory: intelligence
+        run: pip install -e '.[dev]'
+      - name: Verify CPU-only pinned runtime
+        working-directory: intelligence
+        run: >-
+          python -c "import torch;
+          assert torch.__version__.startswith('2.15.0'), torch.__version__;
+          assert torch.version.cuda is None, torch.version.cuda"
+      - name: Lint
+        working-directory: intelligence
+        run: ruff check src tests
+      - name: Test full intelligence suite with PyTorch enabled
+        working-directory: intelligence
+        run: pytest -q

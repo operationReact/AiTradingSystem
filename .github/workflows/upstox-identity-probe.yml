@@ -1,0 +1,164 @@
+name: MintTick PAPER - verify Upstox app identity without secrets
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-identity-probe.yml'
+      - 'infra/ec2-paper/read_upstox_identity_probe.sh'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/read_upstox_identity_probe.sh'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check syntax, scope and output privacy
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/read_upstox_identity_probe.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/read_upstox_identity_probe.sh').read_text()
+          assert len(src)<5700
+          assert 'hashlib.sha256(key.encode()).hexdigest()' in src
+          assert 'hmac.compare_digest' in src
+          assert "['aws','ssm','get-parameters'" in src
+          assert 'capture_output=True' in src
+          assert 'MINTTICK_UPSTOX_IDENTITY_' in src
+          assert 'api.minttick.com/api/customer/brokers/upstox/callback' in src
+          assert 'print(result.stdout)' not in src
+          start=src.index("python3 - <<'PY'")+len("python3 - <<'PY'")
+          end=src.rfind("PY")
+          compile(src[start:end], 'upstox-identity-probe', 'exec')
+          PY
+  inspect:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require exact reviewed two-file squash release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 2
+          actual="$(git diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort)"
+          expected="$(printf '.github/workflows/upstox-identity-probe.yml\ninfra/ec2-paper/read_upstox_identity_probe.sh' | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          bash -n infra/ec2-paper/read_upstox_identity_probe.sh
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-upstox-identity-probe
+      - name: Verify exact existing PAPER EC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Execute read-only SSM identity probe and print fixed statuses only
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          script=Path('infra/ec2-paper/read_upstox_identity_probe.sh').read_bytes()
+          assert len(script)<5700
+          encoded=base64.b64encode(script).decode('ascii')
+          command="printf '%s' '"+encoded+"' | base64 -d | bash"
+          path=Path(os.environ['RUNNER_TEMP'])/'upstox-probe-command.json'
+          path.write_text(json.dumps({'commands':[command]}))
+          path.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command \
+            --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/upstox-probe-command.json" \
+            --region "$AWS_REGION" --comment 'Read-only Upstox identity verification' \
+            --query 'Command.CommandId' --output text)"
+          rm -f "$RUNNER_TEMP/upstox-probe-command.json"
+          for attempt in $(seq 1 35); do
+            aws ssm get-command-invocation --region "$AWS_REGION" \
+              --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --output json > "$RUNNER_TEMP/upstox-probe-result.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          try: doc=json.loads((Path(os.environ['RUNNER_TEMP'])/'upstox-probe-result.json').read_text())
+          except (OSError,ValueError):
+              print('PENDING');raise SystemExit
+          status=doc.get('Status')
+          if status!='Success':
+              print(status if status in ('Failed','TimedOut','Cancelled') else 'PENDING')
+              raise SystemExit
+          values={}
+          allowed={
+             'KEY_MATCH':{'YES','NO','UNKNOWN'},
+             'SECRET_PRESENT':{'YES','NO','UNKNOWN'},
+             'CALLBACK_MATCH':{'YES','NO','UNKNOWN'},
+             'OAUTH_FLAG':{'ENABLED','NOT_CONFIRMED','UNKNOWN'},
+             'BACKEND_RELOADED':{'YES','NO','UNKNOWN'}
+          }
+          for line in doc.get('StandardOutputContent','').splitlines():
+              if not line.startswith('MINTTICK_UPSTOX_IDENTITY_'): continue
+              raw=line.removeprefix('MINTTICK_UPSTOX_IDENTITY_').split(': ',1)
+              if len(raw)!=2:continue
+              k,v=raw
+              if k in allowed and v in allowed[k] and k not in values:values[k]=v
+          for k in allowed:
+              if k in values:print(k+':'+values[k])
+          if len(values)!=len(allowed):
+              print('INCOMPLETE')
+          elif (values['KEY_MATCH']=='YES' and values['SECRET_PRESENT']=='YES'
+                and values['CALLBACK_MATCH']=='YES' and values['OAUTH_FLAG']=='ENABLED'
+                and values['BACKEND_RELOADED']=='YES'):
+              print('VERIFIED')
+          else:
+              print('NEEDS_CORRECTION')
+          PY
+          )"
+            case "$result" in
+              *VERIFIED)
+                printf '%s\n' "$result"
+                echo 'Verified SSM values and backend restart chronology; owner OAuth still required'
+                exit 0;;
+              *NEEDS_CORRECTION|*INCOMPLETE)
+                printf '%s\n' "$result"
+                echo 'Upstox configuration requires correction; no credential values exposed' >&2
+                exit 1;;
+              Failed|TimedOut|Cancelled)
+                echo "Read-only SSM probe failed: $result" >&2
+                exit 1;;
+            esac
+            sleep 5
+          done
+          echo 'Upstox SSM diagnostic timed out without evidence' >&2
+          exit 1

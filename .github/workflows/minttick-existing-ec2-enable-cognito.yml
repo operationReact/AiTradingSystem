@@ -1,0 +1,94 @@
+name: MintTick - enable Cognito on existing private PAPER EC2 (SSM only)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/enable-cognito.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      REQUEST: infra/ec2-paper/requests/enable-cognito.json
+      INSTANCE_ID: i-09c01b470fb39b85a
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify one-file request and reviewed SSM script
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$REQUEST"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x = json.loads(Path('infra/ec2-paper/requests/enable-cognito.json').read_text())
+          assert x == {
+              'application': 'MintTick', 'environment': 'paper',
+              'aws_account': '098859530205', 'region': 'ap-south-1',
+              'instance_id': 'i-09c01b470fb39b85a',
+              'operation': 'enable-private-cognito',
+              'authorization': 'USER_APPROVED_EXISTING_EC2_COGNITO'}
+          PY
+          bash -n infra/ec2-paper/enable_private_cognito.sh
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-private-cognito-${{ github.run_id }}
+      - name: Verify correct running host and nightly cost stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Execute reviewed SSM script, check status only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, pathlib, os
+          data = pathlib.Path('infra/ec2-paper/enable_private_cognito.sh').read_bytes()
+          assert 100 < len(data) < 12000
+          cmd = "printf '%s' '" + base64.b64encode(data).decode() + "' | base64 -d | bash"
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'cognito-ssm.json'
+          p.write_text(json.dumps({'commands': [cmd]}))
+          p.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command \
+            --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/cognito-ssm.json" \
+            --comment 'MintTick exact-host private Cognito opt-in' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/cognito-ssm.json"
+          status=''
+          for i in $(seq 1 70); do
+            status="$(aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || true)"
+            if [ "$status" = Success ]; then
+              echo 'Existing private PAPER EC2 Cognito activation passed'
+              exit 0
+            fi
+            case "$status" in Failed|TimedOut|Cancelled) echo 'SSM activation rejected' >&2; exit 1;; esac
+            sleep 8
+          done
+          echo "SSM activation not confirmed" >&2
+          exit 1

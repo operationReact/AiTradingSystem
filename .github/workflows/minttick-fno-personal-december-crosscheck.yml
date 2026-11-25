@@ -1,0 +1,195 @@
+name: MintTick F&O personal December NSE vs Upstox EOD crosscheck
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-personal-december-crosscheck.yml'
+      - 'infra/ec2-paper/fno_personal_nse_december_compare.py'
+      - 'scripts/tests/test_fno_personal_nse_december_compare.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-personal-december-crosscheck.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test 321 daily duplicate comparisons and secure source parsing
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_personal_nse_december_compare.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_personal_nse_december_compare.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('infra/ec2-paper/fno_personal_nse_december_compare.py').read_text()
+          for required in ('nsearchives.nseindia.com','mode=ro','PRAGMA query_only=ON',
+                           'NoRedirect','nseArchivesRequested','providerConflicts'):
+              assert required in script
+          for forbidden in ('placeOrder','submitOrder','DELETE FROM','INSERT INTO',
+                            'put-parameter','start-instances','get-parameter'):
+              assert forbidden not in script
+          PY
+
+  crosscheck:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Exact owner-personal bounded source request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-personal-december-crosscheck.json'
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('infra/ec2-paper/requests/fno-personal-december-crosscheck.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())=={
+              "kind":"minttick-personal-nse-fo-december-crosscheck-v1",
+              "comparison_revision":5,
+              "operation":"in-memory-nse-udiff-vs-upstox-private-december-2025",
+              "account":"098859530205",
+              "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "period":"2025-12-10_to_2025-12-30",
+              "underlying":"NSE_INDEX|Nifty 50",
+              "max_nse_archive_gets":15,
+              "max_upstox_metadata_gets":2,
+              "private_cache_read_only":True,
+              "no_orders":True,
+              "no_persistence":True,
+              "no_data_export":True,
+              "no_auth_bypass":True
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-personal-fno-dec-nse-crosscheck
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Run source comparison on existing host, print only aggregate fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from verify_ssm_release import verify_aws
+          from fno_private_bulk_ops import _aws,INSTANCE
+          verify_aws()
+          source=Path('infra/ec2-paper/fno_personal_nse_december_compare.py').read_bytes()
+          assert 8000<len(source)<20000
+          digest=hashlib.sha256(source).hexdigest()
+          sha=os.environ['GITHUB_SHA']
+          assert re.fullmatch('[0-9a-f]{40}',sha)
+          url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+sha+'/infra/ec2-paper/fno_personal_nse_december_compare.py'
+          remote=("set -eu\numask 077\n"
+                  "tmp=$(mktemp /tmp/minttick-fno-dec-crosscheck.XXXXXX)\n"
+                  "trap 'rm -f \"$tmp\"' EXIT\n"
+                  "curl --fail --silent --show-error --max-time 25 --proto '=https' --tlsv1.2 -o \"$tmp\" '"+url+"'\n"
+                  "printf '%s  %s\\n' '"+digest+"' \"$tmp\" | sha256sum -c - >/dev/null\n"
+                  "PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 \"$tmp\"\n")
+          sent=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                    '--instance-ids',INSTANCE,'--timeout-seconds','480',
+                    '--comment','MintTick personal daily FNO NSE EOD source crosscheck',
+                    '--parameters',json.dumps({'commands':[remote]}))
+          cid=(sent.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_DEC_CROSSCHECK_BAD_SSM_ID')
+          for _ in range(102):
+              time.sleep(5)
+              result=_aws('ssm','get-command-invocation','--command-id',cid,
+                          '--instance-id',INSTANCE)
+              state=result.get('Status')
+              if state in ('Success','Failed','TimedOut','Cancelled'):
+                  if state!='Success':
+                      raise SystemExit('FNO_DEC_CROSSCHECK_HOST_FAILED')
+                  raw=result.get('StandardOutputContent') or ''
+                  matches=[x[len('MINTTICK_FNO_NSE_DEC_COMPARE_V1:'):] for x in raw.splitlines()
+                           if x.startswith('MINTTICK_FNO_NSE_DEC_COMPARE_V1:')]
+                  if len(matches)!=1 or len(matches[0])>2000:
+                      raise SystemExit('FNO_DEC_CROSSCHECK_REPORT_MISSING')
+                  report=json.loads(matches[0])
+                  if (report.get('status') not in ('CROSSCHECK_COMPLETE','CROSSCHECK_PARTIAL')
+                      or report.get('scope')!='DEC_2025_NIFTY_SELECTED_23_CONTRACTS'
+                      or report.get('priceRowsExported') is not False
+                      or report.get('privateDataPersisted') is not False
+                      or report.get('backtestingApproved') is not False
+                      or report.get('nseArchivesRequested')!=15
+                      or report.get('providerMetadataGets')!=2
+                      or report.get('privateUpstoxCandleRows')!=643
+                      or report.get('privateContractDays')!=322):
+                      raise SystemExit('FNO_DEC_CROSSCHECK_UNTRUSTED')
+                  personal=report.get('personalResearchDaily')
+                  if (report.get('researchDataPersisted') is not False
+                      or not isinstance(personal,dict)
+                      or set(personal)!={'total','upstoxMonths','nseDecember',
+                                          'excludedDecember','uniqueDailyKeys'}
+                      or personal['upstoxMonths']!=3608
+                      or type(personal['excludedDecember']) is not int
+                      or personal['excludedDecember'] not in (0,1)
+                      or personal['nseDecember']!=322-personal['excludedDecember']
+                      or personal['total']!=3930-personal['excludedDecember']
+                      or personal['uniqueDailyKeys']!=personal['total']):
+                      raise SystemExit('FNO_DEC_CROSSCHECK_BAD_CANONICAL')
+                  metrics=report.get('metrics')
+                  allowed={'duplicates','providerConflicts','providerIdenticalPairs',
+                    'matchedNSEContractDays','missingNSEContractDays',
+                    'midnightAllSixMatch','openingAllSixMatch',
+                    'midnightOHLCMatch','openingOHLCMatch',
+                    'midnightCloseMatch','openingCloseMatch',
+                    'midnightVolumeMatch','openingVolumeMatch',
+                    'midnightNormalizedVolumeMatch','openingNormalizedVolumeMatch',
+                    'midnightOpenMatch','midnightHighMatch','midnightLowMatch',
+                    'midnightOIMatch','openingOIMatch',
+                    'midnightOnlyFullMatch','openingOnlyFullMatch',
+                    'bothFullMatch','neitherFullMatch'}
+                  if (not isinstance(metrics,dict) or set(metrics)!=allowed
+                      or any(type(x) is not int or not 0<=x<=643 for x in metrics.values())
+                      or metrics['duplicates']!=321
+                      or metrics['providerConflicts']!=316
+                      or metrics['providerIdenticalPairs']!=5
+                      or metrics['matchedNSEContractDays']+metrics['missingNSEContractDays']!=322):
+                      raise SystemExit('FNO_DEC_CROSSCHECK_INVALID_METRICS')
+                  print('FNO NSE DECEMBER CROSSCHECK: '+report['status']+
+                        '; NSEArchivesFetched='+str(report['nseArchivesFetched'])+
+                        '; missingArchives='+str(report['nseArchiveDaysNotFound'])+
+                        '; UpstoxContracts=23; contractDates=322; duplicates=321; '
+                        'exported=false; stored=false; tradingReady=false',flush=True)
+                  print('FNO PERSONAL DAILY CANDIDATE: total='+str(personal['total'])+
+                        '; originalNonDec=3608; NSEDecember='+str(personal['nseDecember'])+
+                        '; NSEExcluded='+str(personal['excludedDecember'])+
+                        '; duplicateDailyKeys=0; persistence=false; tradingApproved=false',flush=True)
+                  for key in sorted(allowed):
+                      print('FNO NSE METRIC: '+key+'='+str(metrics[key]),flush=True)
+                  break
+              if state not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_DEC_CROSSCHECK_INVALID_SSM_STATUS')
+          else:
+              raise SystemExit('FNO_DEC_CROSSCHECK_TIMEOUT')
+          PY
+
+# Personal research source comparison only, no market-data exports or orders.

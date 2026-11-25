@@ -1,0 +1,12 @@
+{
+  "kind": "minttick-upstox-external-provider-identity-v1",
+  "operation": "register-upstox-metadata-only-no-rights",
+  "environment": "PAPER",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "backend_release": "4084238ffac0206a8acfbdaa24f9ad06d0a67554",
+  "provider_code": "UPSTOX",
+  "legal_name": "Upstox Securities Private Limited",
+  "authorization": "OWNER_REQUESTED_UPSTOX_METADATA_REGISTRATION_2026_11_14"
+}

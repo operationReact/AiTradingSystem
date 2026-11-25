@@ -1,0 +1,173 @@
+name: MintTick - activate empty official cash equity catalogue on existing EC2
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/activate_cash_equity_catalogue.sh'
+      - '.github/workflows/minttick-catalogue-activate.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/activate-cash-equity-catalogue.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate existing-host market-only import contract
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/activate_cash_equity_catalogue.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path("infra/ec2-paper/activate_cash_equity_catalogue.sh").read_text()
+          for required in (
+              "TRADING_MODE: PAPER", "APP_API_KEY=", "ALREADY_ACTIVE",
+              "http://127.0.0.1:8080/api/instruments/import",
+              "instrument_catalogue_state", "MINTTICK_CASH_EQUITY_INSTRUMENTS",
+              "before>0", "after<1", "MINTTICK_CATALOGUE_BLOCKER"):
+              assert required in text, f"Missing essential market-only guard: {required}"
+          for forbidden in ("placeOrder", "place-order", "RunInstances",
+              "start-instances", "stop-instances", "ANGELONE_PASSWORD",
+              "UPSTOX_CLIENT_SECRET", "api.minttick.com/api/instruments/import"):
+              assert forbidden not in text, f"Unsafe operation in import script: {forbidden}"
+          import base64
+          assert len(text.encode()) < 5500, "SSM script exceeds reviewed size"
+          assert len(base64.b64encode(text.encode())) < 8192, "SSM command too large"
+          embedded=text.split("python3 - \"$root\" <<'PY'")[1].split(chr(10)+"PY")[0]
+          compile(embedded,"minttick-catalogue-import","exec")
+          PY
+      - name: Compile embedded SSM response parser
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path(".github/workflows/minttick-catalogue-activate.yml").read_text()
+          start=source.rfind("          import json,os,re")
+          end=source.index(chr(10)+"          PY",start)
+          code=chr(10).join(line[10:] for line in source[start:end].splitlines())
+          compile(code,"minttick-catalogue-ssm-response","exec")
+          PY
+  activate:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file authenticated market catalogue activation
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/activate-cash-equity-catalogue.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/ec2-paper/requests/activate-cash-equity-catalogue.json").read_text())
+          assert actual=={
+              "application":"MintTick", "environment":"paper",
+              "aws_account":"098859530205", "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "operation":"activate-empty-cash-equity-catalogue",
+              "authorization":"USER_APPROVED_MINTTICK_MARKET_DATA_REPAIR_2026-11-08",
+          }, "Unapproved market catalogue request"
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-market-catalogue-${{ github.run_id }}
+      - name: Verify exact running EC2, identity and nightly stop before SSM
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"infra/ec2-paper")
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Import official instruments through protected localhost operator API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          code=Path("infra/ec2-paper/activate_cash_equity_catalogue.sh").read_bytes()
+          assert 100 < len(code) < 5500 and len(base64.b64encode(code)) < 8192
+          command="printf '%s' '"+base64.b64encode(code).decode()+"' | base64 -d | bash"
+          target=Path(os.environ["RUNNER_TEMP"])/"catalogue-ssm.json"
+          target.write_text(json.dumps({"commands":[command]}))
+          target.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/catalogue-ssm.json" \
+            --comment 'MintTick official cash-equity catalogue activation, localhost only' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/catalogue-ssm.json"
+          for attempt in $(seq 1 55); do
+            aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/catalogue-result.json" 2>/dev/null || true
+            state="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              result=json.loads((Path(os.environ["RUNNER_TEMP"])/"catalogue-result.json").read_text())
+          except (ValueError,OSError):
+              print("Pending");raise SystemExit
+          status=result.get("Status","Pending")
+          output=result.get("StandardOutputContent","")
+          if not isinstance(output,str): output=""
+          marker=re.search(r"(?m)^MINTTICK_CATALOGUE_IMPORT: (SUCCESS|ALREADY_ACTIVE)$",output)
+          count=re.search(r"(?m)^MINTTICK_CASH_EQUITY_INSTRUMENTS: ([1-9][0-9]{0,5})$",output)
+          if status=="Success" and marker and count:
+              print("VERIFIED")
+          elif status in ("Success","Failed","TimedOut","Cancelled"):
+              err=result.get("StandardErrorContent","")
+              if not isinstance(err,str): err=""
+              both=output+"\n"+err
+              stage=re.search(r"(?m)^MINTTICK_CATALOGUE_BLOCKER: (HOST_PREFLIGHT|PREIMPORT_DB|OPERATOR_KEY|BACKEND_HTTP|BACKEND_RESPONSE|POSTIMPORT_DB)$",both)
+              reason=re.search(r"(?m)^MINTTICK_CATALOGUE_ERROR: (SOURCE_[A-Z_]+|IMPORT_FAILED)$",both)
+              http=re.search(r"(?m)^MINTTICK_CATALOGUE_HTTP_STATUS: HTTP_([4-5][0-9]{2})$",both)
+              safe="Failed"+("_"+stage.group(1) if stage else "")
+              if reason: safe+="_"+reason.group(1)
+              elif http: safe+="_HTTP_"+http.group(1)
+              print(safe if stage or reason or http else "INVALID")
+          else:
+              print(status)
+          PY
+          )"
+            if [[ "$state" == VERIFIED ]]; then
+              echo 'PASS: official cash equity instrument catalogue is activated and non-empty'
+              exit 0
+            fi
+            case "$state" in Failed*|TimedOut|Cancelled|INVALID)
+              echo "BLOCKED: market catalogue activation not verified; safe diagnostic: $state" >&2
+              exit 2;;
+            esac
+            sleep 6
+          done
+          echo 'BLOCKED: market catalogue activation timed out' >&2
+          exit 2
+
+# No AWS resource mutations, broker secrets, customer data or real-money order paths.

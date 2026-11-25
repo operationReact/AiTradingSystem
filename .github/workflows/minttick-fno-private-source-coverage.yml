@@ -1,0 +1,208 @@
+name: MintTick F&O - owner private source coverage and weekday diagnostics
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-source-coverage.yml'
+      - 'infra/ec2-paper/fno_private_source_coverage.py'
+      - 'scripts/tests/test_fno_private_source_coverage.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-private-source-coverage.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline source metadata structure and coverage tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_private_source_coverage.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_source_coverage.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('infra/ec2-paper/fno_private_source_coverage.py').read_text()
+          assert 'PRAGMA query_only=ON' in source
+          assert 'MAX_CONTRACTS' not in source or 'MAX_CONTRACTS=23' in source
+          assert 'provider.calls>25' in source
+          assert 'dataRetentionRightsVerified' in source and 'priceIndependentVerified' in source
+          for forbidden in ('placeOrder','submitOrder','DELETE FROM',
+                            'UPDATE fno_','INSERT INTO','with-decryption',
+                            'put-parameter','start-instances'):
+              assert forbidden not in source
+          PY
+
+  verify:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Authorize one exact scope-limited metadata audit
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-private-source-coverage.json'
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('infra/ec2-paper/requests/fno-private-source-coverage.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())=={
+            "kind":"minttick-owner-private-fno-source-coverage-v1",
+            "audit_revision":2,
+            "operation":"metadata-replay-and-readonly-calendar-candidates",
+            "account":"098859530205",
+            "region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "scope":"12-completed-nifty-expiry-months-daily",
+            "owner_permission_expires":"2026-11-28",
+            "max_provider_gets":25,
+            "no_orders":True,
+            "no_redistribution":True,
+            "private_cache_read_only":True,
+            "no_market_price_export":True
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-private-coverage
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Verify source-selected contract coverage and weekday gap candidates
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from verify_ssm_release import verify_aws
+          from fno_private_bulk_ops import _aws,INSTANCE
+          verify_aws()
+          raw=Path('infra/ec2-paper/fno_private_source_coverage.py').read_bytes()
+          assert 5000<len(raw)<20000
+          digest=hashlib.sha256(raw).hexdigest()
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch('[0-9a-f]{40}',commit)
+          url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+commit+'/infra/ec2-paper/fno_private_source_coverage.py'
+          script=("set -eu\numask 077\n"
+                  "tmp=$(mktemp /tmp/minttick-fno-coverage.XXXXXX)\n"
+                  "trap 'rm -f \"$tmp\"' EXIT\n"
+                  "curl --fail --silent --show-error --max-time 25 --proto '=https' "
+                  "--tlsv1.2 -o \"$tmp\" '"+url+"'\n"
+                  "printf '%s  %s\\n' '"+digest+"' \"$tmp\" | sha256sum -c - >/dev/null\n"
+                  "PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 \"$tmp\"\n")
+          sent=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                    '--instance-ids',INSTANCE,'--timeout-seconds','420',
+                    '--comment','MintTick owner-private selected FNO metadata coverage and calendar',
+                    '--parameters',json.dumps({'commands':[script]}))
+          cid=(sent.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_COVERAGE_INVALID_COMMAND')
+          for attempt in range(92):
+              time.sleep(5)
+              result=_aws('ssm','get-command-invocation','--command-id',cid,
+                          '--instance-id',INSTANCE)
+              status=result.get('Status')
+              if status in ('Success','Failed','TimedOut','Cancelled'):
+                  if status!='Success':
+                      raise SystemExit('FNO_COVERAGE_HOST_FAILED')
+                  output=result.get('StandardOutputContent') or ''
+                  lines=[line[len('MINTTICK_FNO_COVERAGE_V1:'):] for line in output.splitlines()
+                         if line.startswith('MINTTICK_FNO_COVERAGE_V1:')]
+                  if len(lines)!=1 or len(lines[0])>6500:
+                      raise SystemExit('FNO_COVERAGE_INVALID_RECEIPT')
+                  data=json.loads(lines[0])
+                  if (data.get('source')!='UPSTOX_PRIVATE_EXPIRED_NIFTY_CATALOGUE'
+                      or data.get('catalogue') not in ('MATCHED','MISMATCH')
+                      or data.get('metadataGets')!=25
+                      or any(data.get(k) is not False for k in (
+                          'priceIndependentVerified','exchangeSessionCalendarVerified',
+                          'dataRetentionRightsVerified'))):
+                      raise SystemExit('FNO_COVERAGE_INVALID_SOURCE')
+                  totals=('matchedSelectedContracts','missingSelectedContracts',
+                          'unexpectedSelectedContracts','untypedContracts',
+                          'futures','CE','PE')
+                  if any(type(data.get(k)) is not int or not 0<=data[k]<=276 for k in totals):
+                      raise SystemExit('FNO_COVERAGE_INVALID_COUNTS')
+                  months=data.get('calendar')
+                  expected=['2025-11','2025-12']+[f'2026-{m:02d}' for m in range(1,11)]
+                  if not isinstance(months,list) or [x.get('month') for x in months]!=expected:
+                      raise SystemExit('FNO_COVERAGE_INVALID_CALENDAR')
+                  cols=('contracts','expectedWeekdaySlots','missingWeekdayCandidates',
+                        'nsePublishedHolidaySlots','nseHolidayMissingSlots',
+                        'remainingWeekdayGapCandidates',
+                        'commonEmptyWeekdays','partialWeekdayGapSlots',
+                        'observedUniqueDays','weekendRows','dailyDateDuplicates',
+                        'nonMidnightRows')
+                  for month in months:
+                      if (set(month)!=set(cols)|{'month'}
+                          or any(type(month[k]) is not int or not 0<=month[k]<=10000
+                                 for k in cols)):
+                          raise SystemExit('FNO_COVERAGE_INVALID_MONTH')
+                  for month in months:
+                      if (month['nseHolidayMissingSlots'] > month['nsePublishedHolidaySlots']
+                          or month['nsePublishedHolidaySlots'] > month['expectedWeekdaySlots']
+                          or month['remainingWeekdayGapCandidates'] !=
+                              month['missingWeekdayCandidates']-month['nseHolidayMissingSlots']):
+                          raise SystemExit('FNO_COVERAGE_UNTRUSTED_HOLIDAY_COUNTS')
+                  selected=data.get('expirySelected')
+                  if not isinstance(selected,list) or len(selected)!=12:
+                      raise SystemExit('FNO_COVERAGE_INVALID_METADATA')
+                  for entry in selected:
+                      if (entry.get('month') not in expected or any(
+                          type(entry.get(k)) is not int or not 0<=entry[k]<=30
+                          for k in ('futures','calls','CE','PE','selectedContractMatches'))):
+                          raise SystemExit('FNO_COVERAGE_UNTRUSTED_METADATA')
+                  print('FNO SOURCE COVERAGE: catalogue='+data['catalogue']+
+                        '; metadataGets=25; matches='+str(data['matchedSelectedContracts'])+
+                        '; missing='+str(data['missingSelectedContracts'])+
+                        '; unexpected='+str(data['unexpectedSelectedContracts'])+
+                        '; FUT='+str(data['futures'])+'; CE='+str(data['CE'])+
+                        '; PE='+str(data['PE'])+'; priceIndependentVerified=false; '
+                        'exchangeCalendarVerified=false; retainedDataRightsVerified=false',flush=True)
+                  for m in months:
+                      print('FNO CALENDAR CANDIDATE: month='+m['month']+
+                            '; contracts='+str(m['contracts'])+
+                            '; weekdays='+str(m['expectedWeekdaySlots'])+
+                            '; weekdayGapCandidates='+str(m['missingWeekdayCandidates'])+
+                            '; nsePublishedHolidaySlots='+str(m['nsePublishedHolidaySlots'])+
+                            '; nseHolidayMissingSlots='+str(m['nseHolidayMissingSlots'])+
+                            '; unexplainedWeekdayGapCandidates='+str(m['remainingWeekdayGapCandidates'])+
+                            '; commonEmptyWeekdays='+str(m['commonEmptyWeekdays'])+
+                            '; partialWeekdayGapSlots='+str(m['partialWeekdayGapSlots'])+
+                            '; observedUniqueDays='+str(m['observedUniqueDays'])+
+                            '; weekendRows='+str(m['weekendRows'])+
+                            '; duplicateDays='+str(m['dailyDateDuplicates'])+
+                            '; nonMidnightRows='+str(m['nonMidnightRows']),flush=True)
+                  if data['catalogue']!='MATCHED':
+                      raise SystemExit('FNO_SOURCE_CATALOGUE_MISMATCH')
+                  break
+              if status not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_COVERAGE_UNEXPECTED_STATUS')
+          else:
+              raise SystemExit('FNO_COVERAGE_TIMED_OUT')
+          PY
+
+# Only fixed private research scope with existing SSM/EC2 permissions.
+# Weekday gaps include holidays and illiquid no-trade sessions; no certified missing bars.

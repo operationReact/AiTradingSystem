@@ -98,7 +98,7 @@ def describe() -> str:
     return state
 
 
-def verify_schedule() -> None:
+def verify_schedule() -> str:
     data = aws_json("scheduler", "get-schedule", "--name", SCHEDULE,
                     "--group-name", "default")
     target = data.get("Target", {})
@@ -106,14 +106,16 @@ def verify_schedule() -> None:
         actual_ids = json.loads(target.get("Input", "null"))
     except (TypeError, ValueError) as exc:
         raise ControlError("Nightly stop target is malformed") from exc
-    if (data.get("State") != "ENABLED"
+    if (data.get("State") not in ("ENABLED", "DISABLED")
         or data.get("ScheduleExpression") != "cron(0 22 * * ? *)"
         or data.get("ScheduleExpressionTimezone") != "Asia/Kolkata"
         or target.get("Arn") != STOP_ACTION
         or target.get("RoleArn") != STOP_ROLE
         or actual_ids != {"InstanceIds": [INSTANCE]}):
         raise ControlError("10 PM IST stop schedule missing or unsafe")
-    print("Daily 22:00 Asia/Kolkata stop schedule: ENABLED and exact-target verified", flush=True)
+    state = data["State"]
+    print(f"Daily 22:00 Asia/Kolkata stop schedule: {state} and exact-target verified", flush=True)
+    return state
 
 
 def apply(operation: str) -> tuple[str, str]:
@@ -147,11 +149,14 @@ def apply(operation: str) -> tuple[str, str]:
                 raise ControlError("Instance moved opposite to requested direction after submission")
         elif state == ("stopped" if operation == "start" else "running"):
             if operation == "start":
-                # A valid stop schedule is mandatory before an EC2 start.
-                verify_schedule()
+                # Verify the exact schedule identity, but allow its owner-approved
+                # DISABLED state so a continuous history host can be restarted.
+                stop_state = verify_schedule()
                 hour = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).hour
-                if hour >= 22:
-                    print("WARNING: starting after 22 IST; next automatic stop is tomorrow at 22 IST",flush=True)
+                if stop_state == "ENABLED":
+                    print("WARNING: nightly 22 IST stop remains ENABLED; continuous history will stop", flush=True)
+                    if hour >= 22:
+                        print("WARNING: next automatic stop is tomorrow at 22 IST", flush=True)
             api_action = "start-instances" if operation == "start" else "stop-instances"
             try:
                 aws_json("ec2", api_action, "--instance-ids", INSTANCE)

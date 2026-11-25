@@ -1,0 +1,13 @@
+{
+  "account": "098859530205",
+  "instance_id": "i-09c01b470fb39b85a",
+  "kind": "minttick-owner-private-fno-three-gaps-v1",
+  "max_provider_gets": 3,
+  "no_orders": true,
+  "no_price_export": true,
+  "no_redistribution": true,
+  "operation": "read-only-three-source-candle-requests",
+  "owner_permission_expires": "2026-11-28",
+  "private_cache_read_only": true,
+  "region": "ap-south-1"
+}

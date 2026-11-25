@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="MintTick Local Web (AWS Backend)" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--web-port=5173 --dart-define=API_BASE_URL=https://api.minttick.com --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 --dart-define=MINTTICK_COGNITO_USER_POOL_ID=ap-south-1_jz2T8qbiY --dart-define=MINTTICK_COGNITO_CLIENT_ID=6jm18v2mdpcfraip92hrjhqjnd --dart-define=MINTTICK_AUTH_ONLY_TEST=false" />
+    <option name="filePath" value="$PROJECT_DIR$/apps/trading_client/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>

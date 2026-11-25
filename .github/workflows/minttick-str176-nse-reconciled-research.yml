@@ -1,0 +1,70 @@
+name: MintTick STR176 independent NSE cohort reconciliation (NO ORDERS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-nse-reconciled-research.yml'
+      - 'infra/ec2-paper/str176_nse_reconciled_research.py'
+      - 'infra/ec2-paper/str176_expanded_upstox_research.py'
+      - 'infra/ec2-paper/fno_personal_nse_december_compare.py'
+      - 'scripts/tests/test_str176_nse_reconciled_research.py'
+      - 'docs/architecture/str176-nse-reconciled-research.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/str176-nse-reconciled-readonly.json'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test independent source identity, unit, quarantine and receipt contracts
+        run: |
+          python3 -m py_compile infra/ec2-paper/str176_nse_reconciled_research.py
+          python3 -m unittest discover -s scripts/tests -p 'test_str176*.py' -v
+          python3 -m unittest discover -s scripts/tests -p test_fno_personal_nse_december_compare.py -v
+          git diff --check
+  host-proof:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Strict one-file no-order owner-host request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+            'infra/ec2-paper/requests/str176-nse-reconciled-readonly.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from str176_nse_reconciled_research import EXACT,REQUEST
+          assert REQUEST.is_file() and not REQUEST.is_symlink() and REQUEST.stat().st_size<1024
+          assert json.loads(REQUEST.read_text())==EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-str176-nse-source-readonly
+      - name: Evaluate original Upstox plus independently reconciled NSE cohort
+        run: python3 infra/ec2-paper/str176_nse_reconciled_research.py runner
+# 49 Upstox GETs + at most 66 fixed-range official NSE archives, all read-only.
+# No 404/absent archive is assumed to be a holiday. No orders or auto-certification.

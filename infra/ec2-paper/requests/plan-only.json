@@ -1,0 +1,8 @@
+{
+  "kind": "ec2-paper-plan",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "target": "aitradingsystem-paper-ec2",
+  "operation": "plan-only",
+  "confirmation": "REVIEW_PAPER_EC2_PLAN_NO_APPLY"
+}

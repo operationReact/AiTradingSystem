@@ -1,0 +1,12 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "run-one-controlled-paper-mind-cycle",
+  "account_scope": "dedicated-verification-customer",
+  "instrument_symbol": "RELIANCE-EQ",
+  "exchange": "NSE",
+  "interval": "FIVE_MINUTE",
+  "idempotency_key": "mind-verify-paper-cycle-2026-11-17-02",
+  "max_new_orders": 1,
+  "authorization": "USER_APPROVED_PAPER_MIND_VERIFICATION_CYCLE_2026-11-17"
+}

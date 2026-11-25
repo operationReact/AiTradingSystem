@@ -1,0 +1,2 @@
+// Platform wrapper is regenerated and validated with Flutter 3.47 in CI.
+// This checked-in marker establishes the required iOS project root; generated Xcode files are produced by `flutter create` before build validation.

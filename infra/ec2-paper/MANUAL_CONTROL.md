@@ -1,3 +1,9 @@
+# Release reconciliation note (24 Nov 2026)
+
+The historical main-branch runbook below is retained for lineage, not as current host evidence. The candidate script allows the existing exact stop schedule in ENABLED or DISABLED state (dev behavior retained) and the same-instance ARM fallback types from main. The current schedule, deployed application, storage size, IAM role and Terraform/SSM compatibility must be independently inspected. No resize, start, stop, CloudFormation update or deployment is authorized by this document. Production promotion remains gated by #1931.
+
+---
+
 # Manual EC2 Start / Stop / Status — AI Trading PAPER
 
 In [GitHub Actions](https://github.com/operationReact/AiTradingSystem/actions/workflows/paper-ec2-manual-control.yml), select **PAPER EC2 - manual Start / Stop / Check status**, **Run workflow**, branch **main**, then choose:

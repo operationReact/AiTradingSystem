@@ -1,0 +1,14 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "publish-stable-signed-android-cloudfront",
+  "source_run_id": 43981767136,
+  "source_artifact_id": 14284181318,
+  "source_sha": "4feb32d67e55c6a74d7a93531d40859aaab4dcf6",
+  "expected_apk_sha256": "fedea96374ac6bcb26b410a0ea23ef787a0fd6faa693098c242c4707de1895fb",
+  "expected_signer_sha256": "7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
+  "bucket": "minttick-web-098859530205-us-east-1",
+  "object_key": "downloads/MintTick-dev-4feb32d67e55.apk",
+  "authorization": "USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-17",
+  "publication_attempt": 1
+}

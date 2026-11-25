@@ -1,0 +1,11 @@
+{
+    "kind": "minttick-gemini-runtime-preflight-v1",
+    "account": "098859530205",
+    "region": "ap-south-1",
+    "instance_id": "i-09c01b470fb39b85a",
+    "read_only": true,
+    "provider_calls": false,
+    "secret_export": false,
+    "orders": false
+}
+

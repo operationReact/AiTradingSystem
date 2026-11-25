@@ -1,0 +1,113 @@
+name: Upstox sandbox F&O User-Agent fixed one-shot acceptance
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-fno-sandbox-ua-verified-once.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: minttick-upstox-sandbox-ua-fixed-single-run-20261123
+  cancel-in-progress: false
+
+jobs:
+  non-funded-only-acceptance:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-time merged header fix and no unrelated changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-fno-sandbox-ua-verified-once.yml
+          test "$(git diff-tree --no-commit-id --diff-filter=A --name-only -r HEAD)" = "$p"
+          expected="$(printf '%s\n' "$p" 'scripts/tests/test_upstox_fno_sandbox_lifecycle.py' 'scripts/upstox_fno_sandbox_lifecycle.py')"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$expected"
+      - name: Run User-Agent regression and existing zero-network safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/upstox_fno_sandbox_lifecycle.py scripts/upstox_fno_sandbox_ssm.py
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
+      - name: Assume exact sandbox SSM reader role (dev OIDC subject)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox-ua-fixed-${{ github.run_id }}
+      - name: Confirm corrected User-Agent bypasses 403 before one simulated FUT order
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+          sys.path.insert(0, 'scripts')
+          import upstox_fno_sandbox_lifecycle as probe
+          import upstox_fno_sandbox_ssm as ssm
+
+          if probe.SANDBOX != 'https://api-sandbox.upstox.com':
+              raise RuntimeError('SANDBOX_URL_NOT_OFFICIAL_SDK')
+          if probe.SANDBOX_USER_AGENT != 'MintTick-Upstox-Sandbox/1.0':
+              raise RuntimeError('SANDBOX_UA_NOT_EXPECTED')
+
+          token = ssm.load_sandbox_token()
+          # Deliberately unsupported GET: safe test of the exact final client UA.
+          # Never attempt an order when the edge still says 403.
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+          opener = urllib.request.build_opener(NoRedirect())
+          req = urllib.request.Request(
+              probe.SANDBOX + '/v3/order/place', method='GET',
+              headers={'Authorization': 'Bearer ' + token,
+                       'Accept': 'application/json',
+                       'Content-Type': 'application/json',
+                       'User-Agent': probe.SANDBOX_USER_AGENT}
+          )
+          try:
+              with opener.open(req, timeout=8) as resp:
+                  status = resp.status
+          except urllib.error.HTTPError as e:
+              status = e.code
+          except (OSError, urllib.error.URLError, TimeoutError):
+              print('SANDBOX_UA_PREFLIGHT:TRANSPORT_FAILURE')
+              raise SystemExit(2)
+
+          print('SANDBOX_UA_PREFLIGHT_HTTP:' + str(status))
+          if status != 400:
+              print('SANDBOX_UA_PREFLIGHT:NOT_ACCEPTED_NO_ORDER_REQUEST')
+              raise SystemExit(2)
+          print('SANDBOX_UA_PREFLIGHT:LEGACY_403_GONE')
+          print('SANDBOX_ORDER_INSTRUMENT:OFFICIAL_NSE_FO_TEST_FUT')
+          print('SANDBOX_REAL_ORDER_HOST_REQUESTS:ZERO')
+          try:
+              # One simulated Upstox FUT request, then modify/cancel only if ACKs
+              # match. No retry on timeout, 4XX/5XX, or unknown outcome.
+              result = probe.run_cycle(
+                  probe.sandbox_transport(token),
+                  'NSE_FO|36702', 50, '100.05', '0.05')
+          except probe.SandboxError as exc:
+              print('SANDBOX_ORDER_RESULT:BLOCKED:' + str(exc))
+              raise SystemExit(1)
+          finally:
+              token = None
+
+          print('SANDBOX_ORDER_RESULT:' + json.dumps(result, sort_keys=True))
+          if not all(result.get(k) is True for k in ('placed','modified','cancelled')):
+              raise RuntimeError('SANDBOX_LIFECYCLE_UNVERIFIED')
+          print('SANDBOX_LIFECYCLE:PLACE_MODIFY_CANCEL_VERIFIED')
+          print('SANDBOX_REAL_MONEY_ORDERS:ZERO')
+          PY

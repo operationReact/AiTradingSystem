@@ -1,0 +1,48 @@
+name: Flutter visual golden regression
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/flutter-visual-goldens.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-goldens:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Reconcile generated Flutter web wrapper
+        run: |
+          rm -rf web
+          flutter create --platforms=web --project-name trading_client .
+      - run: flutter pub get
+      - name: Generate initial baselines or compare committed baselines
+        run: |
+          set -euo pipefail
+          if [ -f test/goldens/overview_neon_dark_390x844.png ] && [ -f test/goldens/overview_neon_dark_1440x900.png ]; then
+            echo 'Committed visual baselines found; running regression comparison.'
+            flutter test test/visual_golden_test.dart
+          else
+            echo 'Initial visual baselines not yet committed; generating review artifacts.'
+            flutter test test/visual_golden_test.dart --update-goldens
+          fi
+      - name: Upload visual baselines/evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p09-w09-flutter-goldens
+          path: apps/trading_client/test/goldens/*.png
+          if-no-files-found: error
+          retention-days: 14

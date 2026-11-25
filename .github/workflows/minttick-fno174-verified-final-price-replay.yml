@@ -1,0 +1,66 @@
+name: MintTick F&O - STR-174 original finalized price and OI historical replay
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno174-verified-final-price-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno174VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno174VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStore.java'
+      - 'docs/architecture/fno-str174-original-final-price-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno174-verified-final-price-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno174VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno174VerifiedHistoricalReplayServiceTest.java'
+
+permissions:
+  contents: read
+
+jobs:
+  str174-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Reproduce strict original as-of final-price OI history via actual evaluator
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno174VerifiedHistoricalReplayServiceTest,FnoFuturesPriceOiDivergenceV1Test,FnoVerifiedFinalPriceOiSessionStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno174VerifiedHistoricalReplayServiceTest.xml
+      - name: Assert no quote substitution, future publication or broker-order route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno174VerifiedHistoricalReplayService.java').read_text()
+          for good in ('readExactContract(', 'FnoFuturesPriceOiDivergenceV1.evaluate(',
+                       'finalPriceFirstAvailableAt()', 'finalizedOiFirstAvailableAt()',
+                       'verifiedExchangeCloseAt()', 'calendar.isTradingDay(',
+                       'false,false,false,false'):
+              assert good in src,good
+          for forbidden in ('placeOrder','submitOrder','market_candle',
+                            'fno_closing_snapshot','MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED',
+                            'put-parameter'):
+              assert forbidden not in src,forbidden
+          PY
+      - name: Report fixture-only evidence and missing actual real-data replay
+        if: always()
+        shell: bash
+        run: |
+          echo 'STR-174 source-joined final price/OI and actual evaluator path tested on fictional fixtures.'
+          echo 'No original host source rows, after-cost OOS market E2E, PAPER ledger or broker LIVE execution verified.'

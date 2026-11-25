@@ -1,0 +1,94 @@
+name: MintTick F&O43 deployed backend readiness (read-only)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno43-deployed-readiness.yml'
+      - 'infra/ec2-paper/fno43_deployed_readiness_audit.py'
+      - 'scripts/tests/test_fno43_deployed_readiness_audit.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno43-deployed-readiness.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact read-only source and bounded evidence parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno43_deployed_readiness_audit.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno43_deployed_readiness_audit.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("infra/ec2-paper/fno43_deployed_readiness_audit.py")
+          s=p.read_text()
+          for required in ('i-09c01b470fb39b85a', 'api/admin/research/fno-43/',
+                           '"readiness", "source-evidence"', 'method="GET"',
+                           'X-API-Key', 'MINTTICK_FNO43_DEPLOYED_READINESS:',
+                           'orders=false;customerAuth=false;privateData=false'):
+              assert required in s, required
+          for forbidden in ('--with-decryption', 'api.upstox.com', 'submitOrder',
+                            'placeOrder', 'start-instances', 'stop-instances',
+                            'put-parameter', 'method="POST"', 'DELETE FROM',
+                            'UPDATE customer_', 'print(keys)', 'print(raw)'):
+              assert forbidden not in s, forbidden
+          PY
+
+  deployed-readonly:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require one approved request file and exact expected payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=infra/ec2-paper/requests/fno43-deployed-readiness.json
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$p"
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"infra/ec2-paper")
+          from fno43_deployed_readiness_audit import expected_request
+          p=Path("infra/ec2-paper/requests/fno43-deployed-readiness.json")
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1500
+          assert json.loads(p.read_text())==expected_request()
+          PY
+      - name: Assume existing exact EC2 SSM operator role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-fno43-readonly-audit
+      - name: Read only deployed readiness and source-evidence, output aggregates
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 infra/ec2-paper/fno43_deployed_readiness_audit.py runner
+
+# This workflow never enables LIVE/PAPER rights or places orders. Only
+# reviewed exact one-file request commits can reach the deployed EC2.

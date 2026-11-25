@@ -1,0 +1,34 @@
+name: V76 dormant Python worker Terraform safety contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_dormant_worker_terraform.py'
+      - '.github/workflows/v4-dormant-worker-terraform-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_dormant_worker_terraform.py'
+      - '.github/workflows/v4-dormant-worker-terraform-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-dormant-boundary:
+    name: No worker launch or LIVE/capital enablement
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check dormant worker safety contracts
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_dormant_worker_terraform.py
+
+# No AWS credentials or runtime traffic.

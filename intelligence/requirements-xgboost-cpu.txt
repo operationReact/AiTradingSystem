@@ -1,0 +1,4 @@
+# Optional, isolated CPU-only V4-03 research dependency.
+# XGBoost 3.2.0 supports the repository's pinned Python 3.11 runtime.
+# Do not add this heavy package to production intelligence dependencies.
+xgboost-cpu==3.2.0

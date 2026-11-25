@@ -1,0 +1,195 @@
+name: MintTick - verified backend-connected Android release
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-connected-android.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/android-connected.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-verified-connected-apk-dev
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify connected release retains all app security gates
+        run: |
+          set -euo pipefail
+          test -f scripts/verify_minttick_live_api.py
+          test -f .github/workflows/phase11-android-apk.yml
+          python3 -m py_compile scripts/verify_minttick_live_api.py
+          python3 - <<'PY'
+          from pathlib import Path
+          apk=Path(".github/workflows/phase11-android-apk.yml").read_text()
+          client=Path("apps/trading_client/lib/src/presentation/welcome_page.dart").read_text()
+          assert "workflow_dispatch:" in apk
+          assert "Verify live HTTPS account API before packaging device APK" in apk
+          assert "MINTTICK_AUTH_ONLY_TEST" in apk
+          assert "MintTickCustomerAccountApi().provision()" in client
+          assert "widget.provisionAccount" in client
+          assert "MintTickIdentity.current.signIn" in client
+          assert "flutter build apk --release" in apk
+          assert "sha256sum" in apk
+          # The dispatch workflow may ship only stable-signed APKs.
+          gradle=Path("apps/trading_client/android/app/build.gradle.kts").read_text()
+          assert "MINTTICK_REQUIRE_STABLE_SIGNING" in gradle
+          assert 'signingConfigs.getByName("minttickRelease")' in gradle
+          for marker in (
+              "MINTTICK_ANDROID_KEYSTORE_BASE64",
+              "secrets.MINTTICK_ANDROID_STORE_PASSWORD",
+              "vars.MINTTICK_ANDROID_CERT_SHA256",
+              "Confirm APK is signed by the pinned permanent certificate",
+              "apksigner",
+              "--build-number",
+              "MINTTICK_REQUIRE_STABLE_SIGNING: 'true'",
+              "MINTTICK_REQUIRE_STABLE_SIGNING: 'false'",
+              "if: github.event_name == 'pull_request'",
+              "if: github.event_name != 'pull_request'",
+              "Build CI-only debug-signed configured APK without release credentials",
+          ):
+              assert marker in apk, f"Missing Android signing gate: {marker}"
+          PY
+
+  release-apk:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    # Invoke the workflow from this exact dev commit, not an unregistered
+    # workflow_dispatch endpoint on the unrelated default branch.
+    # The called workflow revalidates the exact one-file approval, live HTTPS
+    # Cognito gate, Flutter tests and pinned permanent Android certificate.
+    uses: ./.github/workflows/phase11-android-apk.yml
+    secrets: inherit
+
+  # Never recycle the hard-coded November 16 synthetic APK. Only the artifact
+  # from this exact successful dev commit may be publicly advertised.
+  publish-direct-signed-apk:
+    needs: release-apk
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WEB_BUCKET: minttick-web-098859530205-us-east-1
+      CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download current stable-signed APK and verify pinned certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          artifact="MintTick-Connected-Android-Test-$GITHUB_SHA"
+          mkdir -p source
+          for attempt in 1 2 3 4 5 6; do
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                --name "$artifact" --dir source; then
+              break
+            fi
+            if test "$attempt" -eq 6; then
+              echo 'No stable-signed APK artifact from current release commit' >&2
+              exit 2
+            fi
+            sleep 8
+          done
+          test -s source/app-release.apk
+          test -s source/app-release.apk.sha256
+          test -s source/app-release.apk.signer.sha256
+          expected="$(cut -d' ' -f1 source/app-release.apk.sha256)"
+          actual="$(sha256sum source/app-release.apk | cut -d' ' -f1)"
+          test "${#expected}" -eq 64 && test "$expected" = "$actual"
+          cert="$(printf '%s' "$CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          receipt="$(tr -d '\r\n' < source/app-release.apk.signer.sha256 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "${#cert}" -eq 64 && test "$receipt" = "$cert"
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk"
+          verifier="$(find "$sdk/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          test -x "$verifier"
+          python3 scripts/verify_apk_signer.py "$verifier" source/app-release.apk "$CERT_SHA256" \
+            "$RUNNER_TEMP/independently-verified-signer.sha256"
+          independent="$(tr -d '\r\n' < "$RUNNER_TEMP/independently-verified-signer.sha256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "$independent" = "$cert"
+          echo 'PASS: this dev APK matches release byte digest and pinned signer'
+      - name: Check current GitHub OIDC claims without exposing JWT
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os
+          from urllib.request import Request, urlopen
+          expected = {
+              "repo:operationReact/AiTradingSystem:ref:refs/heads/dev",
+              "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
+          }
+          assert os.environ["GITHUB_REF"] == "refs/heads/dev"
+          assert os.environ["GITHUB_REPOSITORY"] == "operationReact/AiTradingSystem"
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+          bearer = os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
+          separator = "&" if "?" in url else "?"
+          request = Request(url + separator + "audience=sts.amazonaws.com",
+                            headers={"Authorization": "Bearer " + bearer})
+          with urlopen(request, timeout=20) as response:
+              token = json.load(response)["value"]
+          payload = token.split(".")[1]
+          claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+          # Never log the JWT, authorization header or the full token payload.
+          subject = claims.get("sub")
+          print("GitHub OIDC subject: " + str(subject))
+          assert claims.get("aud") == "sts.amazonaws.com"
+          assert str(claims.get("repository_id")) == "1433875172"
+          assert str(claims.get("repository_owner_id")) == "215111824"
+          assert subject in expected, "Unexpected OIDC identity; fail closed"
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-web-github-publish
+          aws-region: us-east-1
+          role-session-name: minttick-new-apk-${{ github.run_id }}
+      - name: Publish and independently download immutable HTTPS APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
+          test "$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query 'Stacks[0].StackStatus' --output text)" = CREATE_COMPLETE
+          bucket="$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue|[0]" --output text)"
+          test "$bucket" = "$WEB_BUCKET"
+          short="${GITHUB_SHA:0:12}"
+          object="downloads/MintTick-dev-$short.apk"
+          url="https://www.minttick.com/$object"
+          sha="$(sha256sum source/app-release.apk | cut -d' ' -f1)"
+          size="$(stat -c '%s' source/app-release.apk)"
+          test "$size" -gt 1000000
+          aws s3 cp source/app-release.apk "s3://$bucket/$object" \
+            --content-type 'application/vnd.android.package-archive' \
+            --content-disposition "attachment; filename=MintTick-dev-$short.apk" \
+            --cache-control 'public,max-age=300,immutable' \
+            --metadata "sha256=$sha,release=$GITHUB_SHA" --only-show-errors
+          test "$(aws s3api head-object --bucket "$bucket" --key "$object" \
+            --query ContentLength --output text)" = "$size"
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
+            --max-time 180 --output "$RUNNER_TEMP/downloaded.apk" "$url"
+          test "$(stat -c '%s' "$RUNNER_TEMP/downloaded.apk")" = "$size"
+          test "$(sha256sum "$RUNNER_TEMP/downloaded.apk" | cut -d' ' -f1)" = "$sha"
+          printf 'DIRECT_VERIFIED_APK=%s\nAPK_SHA256=%s\nAPK_BYTES=%s\n' \
+            "$url" "$sha" "$size" >> "$GITHUB_STEP_SUMMARY"
+          echo 'PASS: direct CloudFront HTTPS APK verified byte-for-byte'

@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1.7
+# PAPER-only ARM64 runtime. Maven package is architecture-independent Java
+# bytecode; build runs on runner architecture so QEMU is not needed for Maven.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY pom.xml .
+COPY src ./src
+RUN mvn --batch-mode --no-transfer-progress -DskipTests package
+
+# Buildx selects linux/arm64 for the EC2 t4g.medium runtime.
+FROM eclipse-temurin:21-jre-jammy
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx1024m -XX:ActiveProcessorCount=2 -Djava.security.egd=file:/dev/./urandom"
+WORKDIR /app
+RUN useradd --system --uid 10001 --create-home appuser
+COPY --from=build /workspace/target/*.jar /app/app.jar
+USER 10001
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","/app/app.jar"]

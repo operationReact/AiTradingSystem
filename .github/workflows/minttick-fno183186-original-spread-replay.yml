@@ -1,0 +1,86 @@
+name: MintTick F&O - STR-183/186 original debit-credit spread historical replay (NO ORDERS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno183186-original-spread-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183186VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183186VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchServiceTest.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFnoSpreadHistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFnoSpreadHistoricalReplayControllerTest.java'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno183186-original-spread-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183186VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDebitSpreadResearchService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchService.java'
+
+permissions:
+  contents: read
+
+jobs:
+  original-debit-credit-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Verify source joined V107/V108 original two-leg as-of and actual evaluators
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno183186VerifiedHistoricalReplayServiceTest,AdminFnoSpreadHistoricalReplayControllerTest,FnoDebitSpreadResearchServiceTest,FnoCreditSpreadResearchServiceTest,FnoVerifiedNiftyDebitSpreadSourceStoreTest,FnoVerifiedNiftyCreditSpreadSourceStoreTest,FnoBullCallDebitSpreadV1Test,FnoBearPutDebitSpreadV1Test,FnoBullPutCreditSpreadV1Test,FnoBearCallCreditSpreadV1Test' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno183186VerifiedHistoricalReplayServiceTest.xml
+      - name: Audit genuine original as-of sources and no broker order path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path("backend/src/main/java/in/aitradingsystem")
+          replay=(base/"tradingrooms/Fno183186VerifiedHistoricalReplayService.java").read_text()
+          debit=(base/"marketdata/FnoVerifiedNiftyDebitSpreadSourceStore.java").read_text()
+          credit=(base/"marketdata/FnoVerifiedNiftyCreditSpreadSourceStore.java").read_text()
+          controller=(base/"tradingrooms/AdminFnoSpreadHistoricalReplayController.java").read_text()
+          assert "debit.evaluateOne(id,at):credit.evaluateOne(id,at)" in replay
+          for contract in ("FnoBullCallDebitSpreadV1.STRATEGY_ID",
+                           "FnoBearPutDebitSpreadV1.STRATEGY_ID",
+                           "FnoBullPutCreditSpreadV1.STRATEGY_ID",
+                           "FnoBearCallCreditSpreadV1.STRATEGY_ID"):
+              assert contract in replay,contract
+          for source in (debit,credit):
+              for required in ("MODEL_INFERENCE",
+                               "e.captured_at <= ?",
+                               "e.lower_first_observed_at <= ?",
+                               "e.higher_first_observed_at <= ?",
+                               "fee_rights.receipt_status = 'VERIFIED'"):
+                  assert required in source,required
+          assert "nse_fo_broker_credit_spread_margin" in credit
+          assert "hasAnyRole('ADMIN', 'OPERATOR')" in controller
+          for forbidden in ("submitOrder","placeOrder","aws ssm","with-decryption",
+                            "start-instances","MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"):
+              assert forbidden not in replay,forbidden
+          PY
+      - name: Truthful research-only receipt
+        if: always()
+        shell: bash
+        run: |
+          echo 'Four original source to STR-183/184/185/186 evaluator connections: synthetic/mock CI.'
+          echo 'Original V107/V108 host rows and out-of-sample fills not independently audited.'
+          echo '43/43 typed dispatch does not certify 43/43 historical market E2E.'
+          echo 'No paper or LIVE broker orders, no source usage rights changes.'

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="MintTick AI trading research and PAPER trading platform">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0B0F1A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MintTick">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="minttick-mark.svg">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <title>MintTick — AI Trading Platform</title>
+  <style>
+    #ats-offline-guard {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(4, 8, 18, 0.96);
+      color: white;
+      font: 600 18px/1.4 system-ui, sans-serif;
+      text-align: center;
+    }
+    html.ats-offline #ats-offline-guard { display: flex; }
+  </style>
+</head>
+<body>
+  <div id="ats-offline-guard" role="alert" aria-live="assertive">
+    Offline — trading actions unavailable
+  </div>
+  <script>
+    // Fail closed while offline: the overlay intercepts all interaction with the trading client.
+    const syncConnectivityState = () => {
+      document.documentElement.classList.toggle('ats-offline', !navigator.onLine);
+    };
+    window.addEventListener('online', syncConnectivityState);
+    window.addEventListener('offline', syncConnectivityState);
+    syncConnectivityState();
+  </script>
+  <script>
+    {{flutter_bootstrap_js}}
+  </script>
+</body>
+</html>

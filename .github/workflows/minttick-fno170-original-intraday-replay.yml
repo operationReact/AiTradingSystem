@@ -1,0 +1,82 @@
+name: MintTick F&O - STR-170 original intraday cash-futures as-of replay
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno170-original-intraday-replay.yml'
+      - 'backend/src/main/resources/db/migration/V125__fno_verified_intraday_cash_futures_basis_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/Fno170VerifiedIntradayPairStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/Fno170VerifiedIntradayPairStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno170VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno170VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno170HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno170HistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-str170-original-intraday-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno170-original-intraday-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno170VerifiedHistoricalReplayService.java'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: STR-170 exact original L1 source and evaluator as-of cases
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno170VerifiedHistoricalReplayServiceTest,Fno170VerifiedIntradayPairStoreTest,AdminFno170HistoricalReplayControllerTest,FnoFuturesBasisCarryV1Test' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno170VerifiedHistoricalReplayServiceTest.xml
+      - name: Research source cannot silently authorize real money or retroactive EOD quotes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno170VerifiedHistoricalReplayService.java').read_text()
+          sql=Path('backend/src/main/java/in/aitradingsystem/marketdata/Fno170VerifiedIntradayPairStore.java').read_text()
+          ddl=Path('backend/src/main/resources/db/migration/V125__fno_verified_intraday_cash_futures_basis_source.sql').read_text()
+          for keyword in ('FnoFuturesBasisCarryV1.evaluate(', 'isInsideCashSession',
+                          'isInsideFnoSession','stock borrow NEVER inferred',
+                          'spotFirstObservedAt()', 'futuresFirstObservedAt()'):
+              assert keyword in src,keyword
+          for keyword in ('nse_eq_intraday_bidask','nse_fo_intraday_bidask',
+                          'nse_fo_contract_listing','nse_eq_futures_basis_costs',
+                          "spot_rights.receipt_status='VERIFIED'",
+                          "future_rights.receipt_status='VERIFIED'",
+                          "cost_rights.receipt_status='VERIFIED'",
+                          's.spot_first_observed_at<=?',
+                          's.futures_first_observed_at<=?',
+                          's.captured_at<=?'):
+              assert keyword in sql,keyword
+          assert ddl.count('REFERENCES')>=6
+          assert 'BEFORE UPDATE OR DELETE' in ddl
+          for forbidden in ('INSERT INTO fno_verified_intraday_cash_futures_basis_source',
+                            'UPDATE fno_verified_intraday_cash_futures_basis_source'):
+              assert forbidden not in ddl,forbidden
+          for forbidden in ('placeOrder(', 'submitOrder(', 'sendOrder(',
+                            'aws ssm','with-decryption','fno_verified_expiry_basis_pair_evidence'):
+              assert forbidden not in src,forbidden
+          PY
+      - name: This is synthetic CI, not accepted historical market E2E
+        if: always()
+        run: |
+          echo 'STR-170 source and evaluator: fictional data only in CI.'
+          echo 'Original provider records, licensed source research use, and after-cost OOS unverified.'
+          echo 'Independent historical E2E remains 0/43. No broker orders.'

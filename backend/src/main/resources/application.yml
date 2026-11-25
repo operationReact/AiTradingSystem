@@ -1,5 +1,9 @@
 server:
   port: 8080
+  max-http-request-header-size: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:16384}
+  tomcat:
+    max-http-form-post-size: ${SERVER_MAX_HTTP_FORM_POST_SIZE:1048576}
+    max-swallow-size: ${SERVER_MAX_SWALLOW_SIZE:1048576}
 spring:
   application:
     name: ai-trading-system
@@ -7,24 +11,238 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/aitrading}
     username: ${SPRING_DATASOURCE_USERNAME:aitrading}
     password: ${SPRING_DATASOURCE_PASSWORD:change_me_locally}
+    hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_POOL_SIZE:10}
+      connection-timeout: 5000
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jackson2:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+  http:
+    converters:
+      preferred-json-mapper: jackson2
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ai-trading-system
 app:
-  trading-mode: PAPER
+  trading-mode: ${TRADING_MODE:PAPER}
+  research:
+    artifact-worker:
+      # Never opt in by accident; this client has no trading/order authority.
+      enabled: ${AI_RESEARCH_WORKER_CLIENT_ENABLED:false}
+      base-url: ${AI_RESEARCH_WORKER_URL:}
+      # Required for any non-loopback HTTPS origin. Independently pinned by
+      # V83 Terraform to the private ACM DNS hostname when the TLS opt-in runs.
+      trusted-host: ${AI_RESEARCH_WORKER_TRUSTED_HOST:}
+      token: ${AI_RESEARCH_WORKER_TOKEN:}
+    worker-readiness:
+      # Independent ADMIN-only read-only worker inventory opt-in.
+      # This cannot enable scoring, trading or prove source-data rights.
+      enabled: ${AI_RESEARCH_WORKER_READINESS_ENABLED:false}
+  security:
+    # Legacy operator key for local/dev and automation compatibility only. Empty rejects all API-key auth.
+    api-key: ${APP_API_KEY:}
+    cognito:
+      # Disabled until Terraform provisions the pool and values are wired.
+      enabled: ${MINTTICK_COGNITO_ENABLED:false}
+      region: ${MINTTICK_COGNITO_REGION:ap-south-1}
+      issuer: ${MINTTICK_COGNITO_ISSUER:}
+      client-id: ${MINTTICK_COGNITO_CLIENT_ID:}
+    # Disabled by default. This temporary bridge converts a valid legacy key into a server-side session for local/dev testing.
+    dev-session-bootstrap-enabled: ${APP_DEV_SESSION_BOOTSTRAP_ENABLED:false}
+    # Trust X-Forwarded-For only behind a controlled reverse proxy that overwrites the header.
+    trust-forwarded-for: ${APP_SECURITY_TRUST_FORWARDED_FOR:false}
+    # Reject declared request bodies larger than 1 MiB before controller processing.
+    max-request-bytes: ${APP_SECURITY_MAX_REQUEST_BYTES:1048576}
+    rate-limit:
+      window-seconds: ${APP_SECURITY_RATE_LIMIT_WINDOW_SECONDS:60}
+      auth-requests-per-window: ${APP_SECURITY_AUTH_REQUESTS_PER_WINDOW:10}
+      sensitive-requests-per-window: ${APP_SECURITY_SENSITIVE_REQUESTS_PER_WINDOW:60}
+    session:
+      # Server-side opaque sessions expire after 8h by default and never persist raw tokens.
+      ttl-seconds: ${APP_SESSION_TTL_SECONDS:28800}
+      # Production default is Secure; local HTTP development may explicitly override to false.
+      cookie-secure: ${APP_SESSION_COOKIE_SECURE:true}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  paper:
+    intraday-close:
+      enabled: ${PAPER_INTRADAY_CLOSE_ENABLED:false}
+      cutoff: ${PAPER_INTRADAY_CLOSE_CUTOFF:15:10}
+      poll-ms: ${PAPER_INTRADAY_CLOSE_POLL_MS:60000}
   risk:
     default-capital: 80000
     risk-per-trade-percent: 0.25
     max-daily-drawdown-percent: 1.0
     max-open-positions: 3
+    fee-rate: 0.0005
+    slippage-rate: 0.001
+    signal-max-age-minutes: 30
+  strategy:
+    fast-period: ${STRATEGY_FAST_PERIOD:5}
+    slow-period: ${STRATEGY_SLOW_PERIOD:20}
+    target-risk-reward: ${STRATEGY_TARGET_RISK_REWARD:2}
+    stop-buffer-percent: ${STRATEGY_STOP_BUFFER_PERCENT:0.5}
+    max-signal-age-minutes: ${STRATEGY_MAX_SIGNAL_AGE_MINUTES:1440}
+  market-data:
+    # Switching broker data requires only another MarketDataProvider implementation.
+    provider: ${MARKET_DATA_PROVIDER:ANGEL_ONE}
+    # Required only when MARKET_DATA_PROVIDER=ANGEL_ONE_LAMBDA; not a secret.
+    lambda-function-name: ${MARKET_DATA_LAMBDA_FUNCTION_NAME:}
+    max-range-days: 366
+    max-chunks-per-run: 5
+    board:
+      # Customer Markets board: demand-driven intraday FULL refresh of official index members
+      # (<= 800 NSE stocks in 50-token batches), only while the cash session is open.
+      intraday-refresh:
+        enabled: ${MARKET_BOARD_INTRADAY_REFRESH_ENABLED:true}
+        interval-seconds: ${MARKET_BOARD_INTRADAY_REFRESH_INTERVAL_SECONDS:90}
+    official-sources:
+      # Scheduler is opt-in. The direct NIFTY 50 constituent CSV is stable and verified; historical
+      # endpoints stay empty unless explicitly configured because NSE has changed those routes over time.
+      constituents-url: ${OFFICIAL_NIFTY50_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv}
+      # Official cap-segment lists. Each ingested list replaces its market_universe_member universe and
+      # drives the customer Markets board's large/mid/small/micro cap segments and sector heat map.
+      nifty100-constituents-url: ${OFFICIAL_NIFTY100_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_nifty100list.csv}
+      midcap150-constituents-url: ${OFFICIAL_MIDCAP150_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv}
+      smallcap250-constituents-url: ${OFFICIAL_SMALLCAP250_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_niftysmallcap250list.csv}
+      microcap250-constituents-url: ${OFFICIAL_MICROCAP250_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv}
+      index-history-endpoint: ${OFFICIAL_INDEX_HISTORY_ENDPOINT:}
+      vix-history-endpoint: ${OFFICIAL_VIX_HISTORY_ENDPOINT:}
+      nse-bootstrap-url: ${OFFICIAL_NSE_BOOTSTRAP_URL:https://www.nseindia.com/}
+      history-lookback-days: ${OFFICIAL_SOURCE_HISTORY_LOOKBACK_DAYS:14}
+      sector-indices: ${OFFICIAL_SECTOR_INDICES:}
+      connect-timeout-ms: ${OFFICIAL_SOURCE_CONNECT_TIMEOUT_MS:5000}
+      request-timeout-ms: ${OFFICIAL_SOURCE_REQUEST_TIMEOUT_MS:15000}
+      max-attempts: ${OFFICIAL_SOURCE_MAX_ATTEMPTS:2}
+      retry-backoff-ms: ${OFFICIAL_SOURCE_RETRY_BACKOFF_MS:250}
+      user-agent: ${OFFICIAL_SOURCE_USER_AGENT:AiTradingSystem/1.0 research-market-data}
+      scheduler:
+        enabled: ${OFFICIAL_SOURCE_SCHEDULER_ENABLED:false}
+        cron: ${OFFICIAL_SOURCE_SCHEDULER_CRON:0 30 16 * * MON-FRI}
+        zone: ${OFFICIAL_SOURCE_SCHEDULER_ZONE:Asia/Kolkata}
+        max-requests-per-run: ${OFFICIAL_SOURCE_MAX_REQUESTS_PER_RUN:25}
+  news:
+    retention-days: ${NEWS_RETENTION_DAYS:90}
+    # Source-backed RSS receipt → immutable event ledger projection. Does not
+    # call an AI provider, infer an issuer, or authorize orders. Off until all
+    # source rights, provenance and runtime gates have been reviewed.
+    event-ledger:
+      enabled: ${NEWS_EVENT_LEDGER_ENABLED:false}
+      interval-ms: ${NEWS_EVENT_LEDGER_INTERVAL_MS:300000}
+    ingestion:
+      enabled: ${NEWS_INGESTION_ENABLED:false}
+      interval-ms: ${NEWS_INGESTION_INTERVAL_MS:900000}
+      sources: ${NEWS_INGESTION_SOURCES:moneycontrol,economic-times}
+      watchlist: ${NEWS_WATCHLIST:RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,ITC}
+      max-payload-bytes: ${NEWS_MAX_PAYLOAD_BYTES:1048576}
+      max-items-per-source: ${NEWS_MAX_ITEMS_PER_SOURCE:50}
+      max-articles-per-run: ${NEWS_MAX_ARTICLES_PER_RUN:100}
+      max-summaries-per-run: ${NEWS_MAX_SUMMARIES_PER_RUN:20}
+    summarization:
+      enabled: ${NEWS_SUMMARIZATION_ENABLED:false}
+    # Advisory as-of news context on research candidates (#1809). Off by default: no candidate
+    # changes, and no news is read during scans, unless explicitly enabled.
+    mind-context:
+      enabled: ${NEWS_MIND_CONTEXT_ENABLED:false}
+    # Bridge from approved RSS ingestion (news_item) into the analyzer store (news_articles).
+    # Fail-closed: off by default, and nothing is published unless its source id is listed. The
+    # list is only an operator allowlist. The stored default-deny source policy
+    # independently gates INGEST, RETAIN, DISPLAY and NLP_TRANSFER uses.
+    analyzer-bridge:
+      enabled: ${NEWS_ANALYZER_BRIDGE_ENABLED:false}
+      approved-sources: ${NEWS_ANALYZER_APPROVED_SOURCES:}
+      interval-ms: ${NEWS_ANALYZER_BRIDGE_INTERVAL_MS:900000}
+    # Scheduled analysis over articles without an analysis, with bounded retries. Off by default and
+    # requires a server-side provider credential (NEWS_ANALYSIS_PROVIDER plus its API key).
+    analysis-scheduler:
+      enabled: ${NEWS_ANALYSIS_SCHEDULER_ENABLED:false}
+      max-per-run: ${NEWS_ANALYSIS_SCHEDULER_MAX_PER_RUN:20}
+      interval-ms: ${NEWS_ANALYSIS_SCHEDULER_INTERVAL_MS:900000}
+    cors-allowed-origins: ${NEWS_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    provider: ${NEWS_ANALYSIS_PROVIDER:NONE}
+    gemini-model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+    claude-model: ${CLAUDE_MODEL:claude-haiku-5.5}
+    gemini-api-key: ${GEMINI_API_KEY:}
+    claude-api-key: ${ANTHROPIC_API_KEY:}
+    connect-timeout-ms: 5000
+    read-timeout-ms: 30000
+    max-attempts: 2
   providers:
     gemini-enabled: false
-    angel-one-enabled: false
+    # Platform-owned OAuth app; exact HTTPS callback URL registered in Upstox.
+    upstox:
+      client-id: ${UPSTOX_CLIENT_ID:}
+      client-secret: ${UPSTOX_CLIENT_SECRET:}
+      redirect-uri: ${UPSTOX_REDIRECT_URI:}
+    angel-one:
+      api-key: ${ANGELONE_API_KEY:}
+      client-code: ${ANGELONE_CLIENT_CODE:}
+      password: ${ANGELONE_PASSWORD:}
+      totp-secret: ${ANGELONE_TOTP_SECRET:}
+      base-url: ${ANGELONE_BASE_URL:https://apiconnect.angelone.in}
+      connect-timeout-ms: 5000
+      read-timeout-ms: 10000
+      session-max-age-seconds: 21600
+      login-min-interval-ms: 5000
+      quote-min-interval-ms: 1000
+      session-retry-max-wait-ms: 6000
+      instrument-master-url: ${ANGELONE_INSTRUMENT_MASTER_URL:https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json}
+      instrument-master-max-bytes: 52428800
+      instrument-master-max-rows: 500000
+      instrument-search-max-page-size: 100
+      instrument-master-max-rejected-percent: 5
+      instrument-master-min-retained-percent: 80
+minttick:
+  upstox-analytics:
+    # Admin probe is independent of normal customer broker login and disabled by default.
+    probe-enabled: ${MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED:false}
+  golden-source:
+    s3:
+      # D20-04B is storage-only and remains fully inert unless explicitly enabled.
+      # No collector, provider, model access or paid cloud resource is enabled here.
+      enabled: ${MINTTICK_GOLDEN_S3_ENABLED:false}
+      bucket: ${MINTTICK_GOLDEN_S3_BUCKET:}
+      expected-owner: ${MINTTICK_GOLDEN_S3_EXPECTED_OWNER:}
+      kms-key-arn: ${MINTTICK_GOLDEN_S3_KMS_KEY_ARN:}
+      prefix: golden-source/bronze/v1/
+  bse-security-master:
+    # Explicit operator refresh is available. Automation remains disabled
+    # until official BSE source access is verified in the production environment.
+    cron: ${BSE_SECURITY_MASTER_CRON:-}
+  owner-feed:
+    enabled: ${OWNER_FEED_ENABLED:false}
+    user-id: ${OWNER_FEED_USER_ID:f3122ced-5304-4f06-9a4d-3edeccbe07c1}
+    ws-token-cap: ${OWNER_FEED_WS_TOKEN_CAP:1000}
+    universe-limit: ${OWNER_FEED_UNIVERSE_LIMIT:3000}
+    # REST FULL post-close batches are independent from the 3,000 WebSocket shard ceiling.
+    postclose-universe-limit: ${OWNER_FEED_POSTCLOSE_UNIVERSE_LIMIT:6000}
+    postclose-poll-ms: ${OWNER_FEED_POSTCLOSE_POLL_MS:5000}
+    poll-ms: ${OWNER_FEED_POLL_MS:10000}
+    # Private historical bootstrap only, off by default until source access is confirmed.
+    history-backfill-enabled: ${OWNER_HISTORY_BACKFILL_ENABLED:false}
+    # Separate private table and exact-owner API; not the shared history worker.
+    private-intraday-enabled: ${OWNER_PRIVATE_INTRADAY_ENABLED:false}
+    private-intraday-poll-ms: ${OWNER_PRIVATE_INTRADAY_POLL_MS:20000}
+    history-backfill-poll-ms: ${OWNER_HISTORY_BACKFILL_POLL_MS:2000}
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

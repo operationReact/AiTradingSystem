@@ -1,0 +1,84 @@
+name: MintTick - owner-confirmed Upstox NIFTY F&O LIVE execution policy
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-upstox-fno-live-execution-activate.yml'
+      - 'infra/ec2-paper/activate_upstox_fno_live_execution.py'
+      - 'scripts/tests/test_activate_upstox_fno_live_execution.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-fno-live-execution-activate.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact owner request, rollback and no-order boundaries
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/activate_upstox_fno_live_execution.py
+          python3 -m unittest discover -s scripts/tests \
+            -p test_activate_upstox_fno_live_execution.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("infra/ec2-paper/activate_upstox_fno_live_execution.py").read_text()
+          assert 'UPSTOX_FNO_LIVE_POLICY:ENABLED_CONFIRMED' in s
+          assert 'UPSTOX_FNO_LIVE_ORDERS:NOT_SUBMITTED' in s
+          assert 'ROLLBACK_UNVERIFIED' in s
+          assert 'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED' in s
+          assert 'BROKER_SOURCE_OR_RIGHTS_NOT_READY' in s
+          for forbidden in ('submitOrder','placeOrder','/orders','--with-decryption',
+                            'docker compose down','reconcileOrder','update-order'):
+              assert forbidden not in s, forbidden
+          PY
+
+  activate:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Enforce exact reviewed one-file explicit owner activation
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+            'infra/ec2-paper/requests/upstox-fno-live-execution-activate.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"infra/ec2-paper")
+          from activate_upstox_fno_live_execution import EXACT_REQUEST
+          f=Path('infra/ec2-paper/requests/upstox-fno-live-execution-activate.json')
+          assert f.is_file() and not f.is_symlink() and f.stat().st_size<1500
+          assert json.loads(f.read_text())==EXACT_REQUEST
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-owner-live-fno-activation
+      - name: Activate reversible manual-only LIVE policy with independent source and license gates
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/activate_upstox_fno_live_execution.py runner

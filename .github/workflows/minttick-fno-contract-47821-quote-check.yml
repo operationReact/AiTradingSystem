@@ -1,0 +1,87 @@
+name: MintTick - exact NIFTY F&O real Upstox quote and chain read-only probe
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-contract-47821-quote-check.yml'
+      - 'infra/ec2-paper/fno_contract_47821_probe.py'
+      - 'scripts/tests/test_fno_contract_47821_probe.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-contract-47821-quote-check.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact-contract no-order two-GET probe
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_contract_47821_probe.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_contract_47821_probe.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/fno_contract_47821_probe.py')
+          s=p.read_text()
+          assert 6000 < len(s) < 14500
+          assert 'NSE_FO%7C47821' in s and 'expiry_date=2026-12-01' in s
+          assert 'https://api.upstox.com/v3/market-quote/quotes?' in s
+          assert 'https://api.upstox.com/v2/option/chain?' in s
+          assert 'method="GET"' in s
+          for forbidden in ('placeOrder','submitOrder','put-parameter',
+                 'start-instances','stop-instances','persist_quote',
+                 'print(token)','print(raw)','print(body)'):
+              assert forbidden not in s, forbidden
+          PY
+
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exactly one approved static diagnostic request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-contract-47821-quote-check.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_contract_47821_probe import expected_request
+          p=Path('infra/ec2-paper/requests/fno-contract-47821-quote-check.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-fno-exact-readonly-quote
+      - name: Send exact one-host fixed two-GET diagnostic through SSM
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_contract_47821_probe.py runner
+
+# This workflow cannot place orders, deploy, persist quotes or change flags.
+# It emits only boolean field-presence and HTTP-status receipts.

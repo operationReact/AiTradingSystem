@@ -1,0 +1,15 @@
+{
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "read-only-angelone-sequential-daily-depth",
+  "instrument": "RELIANCE-EQ",
+  "interval": "ONE_DAY",
+  "phase": 4,
+  "from_date": "2023-04-15",
+  "through_date": "2026-11-10",
+  "window_calendar_days": 1306,
+  "store_data": false,
+  "trading_enabled": false
+}

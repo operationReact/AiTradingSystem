@@ -1,0 +1,71 @@
+name: MintTick F&O STR-180 original cash-futures basis historical replay
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno180-original-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno180HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno180HistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-str180-original-historical-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno180-original-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno180HistoricalReplayController.java'
+
+permissions:
+  contents: read
+
+jobs:
+  original-str180-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Compile and run actual STR-180 source-to-evaluator synthetic regression
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress             '-Dtest=Fno180VerifiedHistoricalReplayServiceTest,AdminFno180HistoricalReplayControllerTest,FnoExpiryBasisReversionV1Test,FnoVerifiedExpiryBasisPairStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno180VerifiedHistoricalReplayServiceTest.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno180HistoricalReplayControllerTest.xml
+      - name: Enforce research-only original V105 source, GET role gate and no synthetic backtest promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('backend/src/main/java/in/aitradingsystem/tradingrooms')
+          service=(root/'Fno180VerifiedHistoricalReplayService.java').read_text()
+          route=(root/'AdminFno180HistoricalReplayController.java').read_text()
+          for term in ('FnoVerifiedExpiryBasisPairStore','FnoExpiryBasisReversionV1.evaluate',
+                       'spotFinalFirstAvailableAt()', 'futuresFinalFirstAvailableAt()',
+                       'calendar.isTradingDay', 'false,false,false,false'):
+              assert term in service or term in route,term
+          for term in ('@GetMapping("/expiry-basis-replay")',
+                       '@PreAuthorize("hasAnyRole(', 'CacheControl.noStore()'):
+              assert term in route,term
+          assert route.count('false,false,false,false') == 1
+          for bad in ('@PostMapping','submitOrder','placeOrder','put-parameter',
+                      'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert bad not in service+route,bad
+          PY
+      - name: Truthful results
+        if: always()
+        run: |
+          echo 'Actual Java STR-180 source adapter and evaluator: FICTIONAL tests only.'
+          echo 'Original V105 table was created empty; no authorized historical source rows proven here.'
+          echo 'Independently accepted market historical E2E remains 0/43.'

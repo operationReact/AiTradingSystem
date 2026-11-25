@@ -1,0 +1,96 @@
+name: Phase 7 - Approval completion gate
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/execution/**'
+      - 'backend/src/main/java/in/aitradingsystem/paper/**'
+      - 'backend/src/test/java/in/aitradingsystem/paper/**'
+      - 'backend/src/test/java/in/aitradingsystem/support/**'
+      - 'backend/src/main/java/in/aitradingsystem/api/Approval*'
+      - 'backend/src/test/java/in/aitradingsystem/execution/**'
+      - 'backend/src/test/java/in/aitradingsystem/api/Approval*'
+      - 'frontend/src/pages/ApprovalsPage.jsx'
+      - 'frontend/src/components/ApprovalPolicySettings.jsx'
+      - 'frontend/e2e/approvals.spec.mjs'
+      - 'docs/phase7-approval-completion-contract.md'
+      - '.github/workflows/phase7-approval-gate.yml'
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  approval-decision-evidence:
+    name: P7 expiry + same-decision concurrency + audit + policy + readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run PostgreSQL approval decision and component regressions
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Dtest=PaperApprovalWorkflowIT,PaperTradeApiIT,PaperOrderApiIT,Phase6RestartPersistenceIT,ApprovalControllerTest,ApprovalPolicyEvaluatorTest,ExecutionPolicySchemaIT,ExecutionPolicyServiceIT,OrderApprovalSchemaIT,OrderApprovalConcurrencyIT,ExecutionReadinessServiceIT
+          test
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p07-approval-decision-evidence
+          path: backend/target/surefire-reports
+          retention-days: 14
+
+  browser-approval-evidence:
+    name: P7 Pro + Clear confirmation, expiry, retry and blocked-execution UI
+    # Playwright 1.55 does not support the ubuntu26.04 image currently selected
+    # by ubuntu-latest; pin the supported runner so browser tests actually run.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Install pinned gate-only browser and accessibility tools
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start frontend
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/ats-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/approvals >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/ats-vite.log
+          exit 1
+      - name: Run approval UI contract tests in both experiences
+        run: npx playwright test e2e/approvals.spec.mjs --reporter=line
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p07-completion-browser-evidence
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14

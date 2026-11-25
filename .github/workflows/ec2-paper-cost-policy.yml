@@ -1,0 +1,101 @@
+name: EC2 PAPER 4GB cost and scheduled stop contract (no AWS access)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/**'
+      - 'docs/operations/archived-actions/**'
+      - 'scripts/tests/test_ec2_paper_cost_policy.py'
+      - 'scripts/tests/test_ec2_paper_preflight_contract.py'
+      - 'scripts/tests/test_ec2_paper_oidc_claims.py'
+      - 'scripts/tests/test_ec2_paper_plan_only.py'
+      - 'scripts/tests/test_ec2_paper_locked_apply.py'
+      - 'scripts/tests/test_ec2_paper_partial_resume.py'
+      - 'scripts/tests/test_ec2_paper_tainted_resume.py'
+      - 'scripts/tests/test_ec2_paper_sg_tainted_resume.py'
+      - 'scripts/tests/test_ec2_paper_stopped_host_finish.py'
+      - 'scripts/tests/test_ec2_paper_schedule_group_recovery.py'
+      - 'scripts/tests/test_ec2_paper_manual_control.py'
+      - 'scripts/tests/test_ec2_paper_application_runtime.py'
+      - 'scripts/tests/test_ec2_paper_ssm_release.py'
+      - 'scripts/tests/test_ec2_paper_workflow_archive.py'
+      - 'scripts/tests/test_ec2_paper_al2023_docker_bootstrap.py'
+      - '.github/workflows/ec2-paper-approved-provision.yml'
+      - '.github/workflows/ec2-paper-partial-resume.yml'
+      - '.github/workflows/ec2-paper-tainted-vpc-resume.yml'
+      - '.github/workflows/ec2-paper-sg-tainted-resume.yml'
+      - '.github/workflows/ec2-paper-existing-host-finish.yml'
+      - '.github/workflows/ec2-paper-group-trust-repair.yml'
+      - '.github/workflows/ec2-paper-ssm-readiness.yml'
+      - '.github/workflows/ec2-paper-ssm-app-deploy.yml'
+      - '.github/workflows/paper-ec2-manual-control.yml'
+      - '.github/workflows/ec2-paper-plan-only.yml'
+      - '.github/workflows/ec2-paper-readonly-preflight.yml'
+      - '.github/workflows/ec2-paper-cost-policy.yml'
+      - '.github/workflows/lightsail-paper-bootstrap.yml'
+      - '.github/workflows/lightsail-paper-app-deploy.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/**'
+      - 'docs/operations/archived-actions/**'
+      - 'scripts/tests/test_ec2_paper_cost_policy.py'
+      - 'scripts/tests/test_ec2_paper_application_runtime.py'
+      - 'scripts/tests/test_ec2_paper_al2023_docker_bootstrap.py'
+      - '.github/workflows/ec2-paper-cost-policy.yml'
+      - '.github/workflows/lightsail-paper-bootstrap.yml'
+      - '.github/workflows/lightsail-paper-app-deploy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  no-cloud-cost-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+      - name: Source safety and automatic stop regression
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_cost_policy.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_preflight_contract.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_oidc_claims.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_plan_only.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_locked_apply.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_partial_resume.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_tainted_resume.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_sg_tainted_resume.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_stopped_host_finish.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_schedule_group_recovery.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_manual_control.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_ssm_release.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_progress.py -v
+          python3 -m unittest discover -s scripts/tests -p 'test_lightsail_paper_*.py' -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_workflow_archive.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_al2023_docker_bootstrap.py -v
+          python3 -m json.tool infra/ec2-paper/bootstrap/state-preflight.cfn.json > /dev/null
+          bash -n infra/ec2-paper/bootstrap.sh
+          bash -n infra/ec2-paper/bootstrap_repair_v2.sh
+          bash -n infra/ec2-paper/run_paper.sh
+          bash -n infra/ec2-paper/ssm_preflight.sh
+          bash -n infra/ec2-paper/ssm_apply_release.sh
+      - name: Validate isolated Terraform without backend, OIDC or an AWS account session
+        working-directory: infra/ec2-paper
+        env:
+          AWS_ACCESS_KEY_ID: ""
+          AWS_SECRET_ACCESS_KEY: ""
+          AWS_SESSION_TOKEN: ""
+        run: |
+          set -euo pipefail
+          terraform fmt -diff -check -recursive
+          terraform init -backend=false -input=false -no-color
+          terraform validate -no-color
+          echo "No AWS resources, credentials, Terraform remote state or billable EC2 instance created"

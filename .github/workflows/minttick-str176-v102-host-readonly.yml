@@ -1,0 +1,98 @@
+name: MintTick STR-176 actual V102 historical source evidence (NO ORDERS)
+
+# PR is offline fake-source/code acceptance only. The exact PAPER instance
+# is queried only after a separate, single-file reviewed dev request.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-str176-v102-host-readonly.yml'
+      - 'infra/ec2-paper/str176_v102_source_probe.py'
+      - 'scripts/tests/test_str176_v102_source_probe.py'
+      - 'docs/architecture/fno-43-historical-operator-probe.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/str176-v102-readonly.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python compile + independent no-network local acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/str176_v102_source_probe.py
+          python3 -m unittest discover -s scripts/tests -p 'test_str176_v102_source_probe.py' -v
+      - name: Audit hardcoded read-only host query and no-order contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/str176_v102_source_probe.py').read_text()
+          for needed in ('BEGIN READ ONLY;', 'fno_verified_completed_ohlcv_oi_session',
+                         "h.receipt_status = 'VERIFIED'",
+                         "oi.receipt_status = 'VERIFIED'",
+                         'MINTTICK_STR176_V102_READONLY:',
+                         '"independentHistoricalCertified": 0',
+                         '"brokerOrders": False', '"writes": False'):
+              assert needed in p,needed
+          for forbidden in ('submitOrder(', 'placeOrder(', 'start-instances',
+                            'stop-instances', 'put-parameter', '--with-decryption',
+                            'aws s3 cp', 'DO $$'):
+              assert forbidden not in p,forbidden
+          PY
+
+  host-proof:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require one reviewed exact read-only request file
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=infra/ec2-paper/requests/str176-v102-readonly.json
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$request"
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from str176_v102_source_probe import EXACT
+          p=Path('infra/ec2-paper/requests/str176-v102-readonly.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1024
+          assert json.loads(p.read_text()) == EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-str176-original-v102-readonly
+      - name: Measure original V102 source + independent rights and calendar eligibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 infra/ec2-paper/str176_v102_source_probe.py runner
+
+# A successful job never establishes historical STR-176 E2E or changes rights.

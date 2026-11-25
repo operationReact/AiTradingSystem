@@ -1,0 +1,85 @@
+name: MintTick - verify real customer FNO board assembly on EC2 (read-only)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-customer-board-audit.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFnoCustomerBoardAuditController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFnoCustomerBoardAuditControllerTest.java'
+      - 'infra/ec2-paper/fno_customer_board_audit.py'
+      - 'scripts/tests/test_fno_customer_board_audit.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-customer-board-audit.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate source and sanitized response contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_customer_board_audit.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_customer_board_audit.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_customer_board_audit.py').read_text()
+          assert 5000<len(src)<11000
+          assert 'customer-board-audit' in src and 'NSE_FO|47821' in src
+          assert 'method="GET"' in src
+          for illegal in ('placeOrder','submitOrder','put-parameter','start-instances',
+                          'stop-instances','print(keys)','print(token)','print(raw)',
+                          'print(data)','--with-decryption','market-quote/quotes?'):
+              assert illegal not in src, illegal
+          PY
+
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exactly one reviewed request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-customer-board-audit.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_customer_board_audit import expected_request
+          p=Path('infra/ec2-paper/requests/fno-customer-board-audit.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-fno-customer-board-audit
+      - name: Read-only localhost admin customer assembly check on exact EC2
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_customer_board_audit.py runner
+
+# One fixed authenticated operator GET only; no orders, secrets or quote payloads.

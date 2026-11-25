@@ -1,0 +1,99 @@
+name: EC2 PAPER Terraform plan-only approval gate (read-only AWS)
+
+on:
+  # Default main cannot manually dispatch a dev-only OIDC workflow.
+  # A separately approved request file must be committed on dev.
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/plan-only.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: paper-ec2-readonly-terraform-plan
+  cancel-in-progress: false
+
+jobs:
+  terraform-plan:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AWS_REGION: ap-south-1
+      STATE_BUCKET_REGION: us-east-1
+      AWS_ACCOUNT: "098859530205"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate exact dev-only PAPER plan request before AWS identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$STATE_BUCKET_REGION" = "us-east-1"
+          test "$AWS_ACCOUNT" = "098859530205"
+          python3 infra/ec2-paper/verify_readonly_plan.py request \
+            infra/ec2-paper/requests/plan-only.json
+          echo "Review-only; no account mutation, lockfile or EC2 provisioning"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Obtain strictly read-only GitHub OIDC role in corrected account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-plan
+          aws-region: ap-south-1
+          role-duration-seconds: 900
+          role-session-name: paper-ec2-plan-${{ github.run_id }}
+
+      - name: Verify account and load isolated versioned S3 remote state
+        working-directory: infra/ec2-paper
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          # Terraform backend region is the real S3 bucket location in N.
+          # Virginia, independent of the Mumbai AWS provider region.
+          # The read-only preflight already verified S3 versioning and block-public-access.
+          # The plan role deliberately has only S3 List/GetObject permissions,
+          # not GetBucketVersioning. Recheck account and backend identity, not IAM.
+          test "$(aws s3api get-bucket-location \
+            --bucket aitrading-paper-tfstate-098859530205-ap-south-1 \
+            --region "$STATE_BUCKET_REGION" \
+            --output json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("LocationConstraint"))')" = "None"
+          terraform fmt -check
+          terraform init -input=false -no-color \
+            -backend-config=backend.hcl
+          terraform validate -no-color
+
+      - name: Produce and validate review-only plan without state writes or refresh
+        working-directory: infra/ec2-paper
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/paper-ec2-plan"
+          mkdir -m 0700 "$work"
+          cleanup() {
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+          # -lock=false is REQUIRED because the role cannot write the
+          # S3 native lockfile; no apply will ever execute in this job.
+          # -refresh=false avoids interpreting this as a verified real
+          # environment drift audit; only intended IaC changes are reviewed.
+          terraform plan -input=false -no-color -lock=false -refresh=false \
+            -var="approve_paid_provision=PROVISION_PAPER_EC2_4GB" \
+            -out="$work/plan.tfplan"
+          terraform show -json "$work/plan.tfplan" > "$work/plan.json"
+          python3 verify_readonly_plan.py plan "$work/plan.json"
+          echo "Terraform plan structure accepted; AWS state and resources UNCHANGED"
+
+# No Terraform apply, AWS resource creation/stop, S3 PutObject, state lock writes,
+# SSH access, ECR push, broker orders, secrets or capital authorization.

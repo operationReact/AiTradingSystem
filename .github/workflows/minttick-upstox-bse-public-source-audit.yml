@@ -1,0 +1,30 @@
+name: MintTick - read-only Upstox BSE public reference schema audit
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/diagnose_upstox_bse_source_shape.py'
+      - '.github/workflows/minttick-upstox-bse-public-source-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require aggregate-only fixed-origin public source audit
+        run: |
+          python3 -m py_compile scripts/diagnose_upstox_bse_source_shape.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/diagnose_upstox_bse_source_shape.py').read_text()
+          assert len(s)<4500
+          assert 'https://assets.upstox.com/market-quote/instruments/exchange/BSE.json.gz' in s
+          for unsafe in ('APP_API_KEY','--with-decryption','print(row)','print(symbol)','placeOrder','os.environ'):
+              assert unsafe not in s
+          PY
+      - name: Inspect public Upstox BSE source shape without logging symbols or identities
+        run: python3 scripts/diagnose_upstox_bse_source_shape.py

@@ -1,0 +1,15 @@
+{
+  "kind": "minttick-owner-private-fno-canonical-cache-v1",
+  "operation": "persist-canonical-daily-research-to-expiring-private-sqlite",
+  "region": "ap-south-1",
+  "account": "098859530205",
+  "instance_id": "i-09c01b470fb39b85a",
+  "scope": "12-month-23-selected-nifty-contracts-daily",
+  "canonical_rows": 3929,
+  "private_cache_expires_no_later": "2026-11-28",
+  "no_orders": true,
+  "no_market_data_export": true,
+  "no_auth_bypass": true,
+  "no_new_aws_resources": true,
+  "not_customer_facing": true
+}

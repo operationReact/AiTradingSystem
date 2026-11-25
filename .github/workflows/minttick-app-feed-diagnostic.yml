@@ -1,0 +1,130 @@
+name: MintTick PAPER - read-only application feed SSM format diagnostic
+
+# Read-only: checks the four application Angel One SSM inputs by format only and prints PASS/FAIL.
+# No value, length or digest is printed. No writes, no broker calls, no order path.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/diagnose_app_feed_ssm.sh'
+      - '.github/workflows/minttick-app-feed-diagnostic.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/app-feed-ssm-diagnostic.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate the read-only diagnostic contract
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/diagnose_app_feed_ssm.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path("infra/ec2-paper/diagnose_app_feed_ssm.sh").read_text()
+          assert "get-parameters" in text and "--with-decryption" in text
+          for forbidden in ("put-parameter","delete-parameter","send-command","update-function","sts assume","print(value","print(found"):
+              assert forbidden not in text, forbidden
+          assert "print(\"MINTTICK_APP_FEED_SSM: \"" in text
+          print("PASS: read-only diagnostic contract")
+          PY
+
+  diagnose:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file read-only diagnostic request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/app-feed-ssm-diagnostic.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/ec2-paper/requests/app-feed-ssm-diagnostic.json").read_text())
+          assert actual=={
+              "application":"MintTick", "environment":"paper",
+              "aws_account":"098859530205", "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "operation":"read-only-app-feed-ssm-format-diagnostic", "read_only":True, "run":2,
+              "authorization":"USER_APPROVED_READ_ONLY_DIAGNOSTIC_2026-11-18",
+          }, "Unapproved diagnostic request"
+          print("PASS: exact read-only diagnostic request")
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-app-feed-diag-${{ github.run_id }}
+      - name: Verify exact running EC2 before SSM
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"infra/ec2-paper")
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Run the read-only diagnostic on the exact host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          code=Path("infra/ec2-paper/diagnose_app_feed_ssm.sh").read_bytes()
+          assert 100 < len(code) < 6000 and len(base64.b64encode(code)) < 8192
+          command="printf '%s' '"+base64.b64encode(code).decode()+"' | base64 -d | bash"
+          target=Path(os.environ["RUNNER_TEMP"])/"diag-ssm.json"
+          target.write_text(json.dumps({"commands":[command]}))
+          target.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" --parameters "file://$RUNNER_TEMP/diag-ssm.json" \
+            --comment 'MintTick read-only application feed SSM format diagnostic' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/diag-ssm.json"
+          for attempt in $(seq 1 60); do
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --output json > "$RUNNER_TEMP/diag-result.json" 2>/dev/null || true
+            status="$(python3 -c "import json,os;from pathlib import Path;print(json.loads((Path(os.environ['RUNNER_TEMP'])/'diag-result.json').read_text()).get('Status','Pending'))" 2>/dev/null || echo Pending)"
+            case "$status" in Success|Failed|TimedOut|Cancelled) break;; esac
+            sleep 5
+          done
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              result=json.loads((Path(os.environ["RUNNER_TEMP"])/"diag-result.json").read_text())
+          except (ValueError,OSError):
+              raise SystemExit("no result")
+          output=result.get("StandardOutputContent","") if isinstance(result.get("StandardOutputContent",""),str) else ""
+          for line in output.splitlines():
+              if re.match(r"^MINTTICK_APP_FEED_SSM: [A-Z_0-9]{2,40}=[A-Z_0-9]{2,40}$", line):
+                  print(line)
+          print("SSM_STATUS:", result.get("Status"))
+          PY

@@ -1,0 +1,154 @@
+name: MintTick - one-time private owner account link
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/link_sole_test_owner.sh'
+      - '.github/workflows/minttick-private-test-owner-link.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/link-sole-test-owner.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact reviewed host code without AWS access
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/link_sole_test_owner.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('infra/ec2-paper/link_sole_test_owner.sh').read_text()
+          marker="python3 - <<'PY'"+chr(10)
+          assert script.count(marker)==1
+          python=script.split(marker,1)[1].rsplit(chr(10)+'PY',1)[0]
+          compile(python,'owner-link-repair','exec')
+          assert 'MINTTICK_ANGEL_ONE_OWNER_SUB' in script
+          assert 'u.role=\'CUSTOMER\'' in script
+          assert len(script.encode())<6000
+          PY
+
+  link:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require single explicit private-test owner request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/link-sole-test-owner.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          document=json.loads(Path('infra/ec2-paper/requests/link-sole-test-owner.json').read_text())
+          assert document == {
+            "application":"MintTick",
+            "environment":"dev-paper",
+            "aws_account":"098859530205",
+            "region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "operation":"link-sole-active-cognito-test-owner",
+            "authorization":"USER_REQUESTED_SINGLE_OWNER_SSM_2026-11-08"
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-private-owner-link-${{ github.run_id }}
+      - name: Verify exact running PAPER host, identity and scheduled stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Execute only reviewed, categorical one-owner repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          data=Path('infra/ec2-paper/link_sole_test_owner.sh').read_bytes()
+          assert 100<len(data)<6000
+          encoded=base64.b64encode(data).decode('ascii')
+          assert len(encoded)<8192
+          command="printf '%s' '"+encoded+"' | base64 -d | bash"
+          p=Path(os.environ['RUNNER_TEMP'])/'owner-link-command.json'
+          p.write_text(json.dumps({"commands":[command]}))
+          p.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/owner-link-command.json" \
+            --comment 'MintTick approved one-time single-customer dev owner binding' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/owner-link-command.json"
+          test -n "$command_id"
+          for attempt in $(seq 1 65); do
+            aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/owner-status.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          try:
+              value=json.loads((Path(os.environ['RUNNER_TEMP'])/'owner-status.json').read_text())
+          except (ValueError,OSError):
+              print('PENDING')
+              raise SystemExit
+          status=value.get('Status','PENDING')
+          if status=='Success':
+              lines=value.get('StandardOutputContent','').splitlines()
+              if 'OWNER_LINK: REPAIRED_AND_BACKEND_READY' in lines:
+                  print('REPAIRED')
+              elif 'OWNER_LINK: ALREADY_VALID' in lines:
+                  print('VALID')
+              else:
+                  print('INCOMPLETE')
+          else:
+              print(status if status in {'Pending','InProgress','Delayed','Failed','TimedOut','Cancelled'} else 'FAILED')
+          PY
+            )"
+            if [[ "$result" == REPAIRED || "$result" == VALID ]]; then
+              echo "PASS: private Cognito owner binding verified; no identity or SSM secrets exported"
+              exit 0
+            fi
+            case "$result" in Failed|TimedOut|Cancelled|INCOMPLETE)
+              echo 'BLOCKED: private owner link did not meet strict single-customer requirements' >&2
+              exit 2;;
+            esac
+            sleep 6
+          done
+          echo 'BLOCKED: private owner link diagnostic exceeded bounded window' >&2
+          exit 2

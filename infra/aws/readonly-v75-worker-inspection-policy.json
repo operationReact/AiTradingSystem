@@ -1,0 +1,71 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CheckCaller",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "InspectKnownCluster",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeClusters"
+      ],
+      "Resource": "arn:aws:ecs:us-east-1:816344830716:cluster/ai-trading-system"
+    },
+    {
+      "Sid": "InspectWorkerService",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeServices"
+      ],
+      "Resource": "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-research-worker"
+    },
+    {
+      "Sid": "ListTasksInKnownCluster",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:ListTasks"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnEquals": {
+          "ecs:cluster": "arn:aws:ecs:us-east-1:816344830716:cluster/ai-trading-system"
+        }
+      }
+    },
+    {
+      "Sid": "DescribeWorkerTaskOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeTasks"
+      ],
+      "Resource": "arn:aws:ecs:us-east-1:816344830716:task/ai-trading-system/*",
+      "Condition": {
+        "ArnEquals": {
+          "ecs:cluster": "arn:aws:ecs:us-east-1:816344830716:cluster/ai-trading-system"
+        }
+      }
+    },
+    {
+      "Sid": "DescribeTaskDefinitionMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeTaskDefinition"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DescribeWorkerRepositoryImage",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeImages"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:816344830716:repository/ai-trading-system-research-worker"
+    }
+  ]
+}

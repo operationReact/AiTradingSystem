@@ -1,0 +1,9 @@
+{
+  "authorization": "OWNER_APPROVED_FNO_V3_READONLY_SOCKET_2026_11_18",
+  "aws_account": "098859530205",
+  "expected_backend_release": "4ecc90348b56f5aa696d23b68ed32950eb82fa38",
+  "expiry": "2026-11-23",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "one-shot-private-upstox-fno-v3-socket-evidence",
+  "region": "ap-south-1"
+}

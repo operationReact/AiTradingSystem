@@ -1,0 +1,455 @@
+package in.aitradingsystem.tradingrooms;
+
+import in.aitradingsystem.marketdata.MarketSessionCalendar;
+import in.aitradingsystem.provider.upstox.UpstoxAnalyticsSource;
+import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
+import in.aitradingsystem.user.CustomerIdentityStore;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.Duration;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+/**
+ * Customer read-only F&O Markets discovery, independent of broker connection,
+ * room creation, paper funds or LIVE execution consent. The app-wide SSM
+ * source provides listed identities and rights-gated live V3 observations.
+ * No public/anonymous/analytics-token order route exists in this controller.
+ */
+@RestController
+@RequestMapping("/api/customer/markets/fno")
+public final class CustomerFnoDiscoveryController {
+    static final String UNDERLYING = CustomerPaperFnoMarketController.UNDERLYING;
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+
+    private final CustomerIdentityStore identities;
+    private final UpstoxAnalyticsSource source;
+    private final ObjectProvider<UpstoxFnoV3LiveFeedService> feed;
+    private final CustomerFnoExpiryCatalog expiryCatalog;
+    private final MarketSessionCalendar sessionCalendar;
+    private final Clock clock;
+    private final boolean feedConfigured;
+    private final boolean displayRightsVerified;
+    private final boolean contractDiscoveryVerified;
+    private final boolean restLastPriceRightsVerified;
+    private volatile RestPriceCache restPriceCache;
+    private record RestPriceCache(LocalDate expiry, Instant obtainedAt,
+        java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> values) {}
+    private static final Duration CONTRACT_CACHE_TTL = Duration.ofSeconds(60);
+    private static final int MAX_CACHED_EXPIRIES = 8;
+    // Each selected expiry gets its own 60-second bounded cache entry.
+    // A single shared entry causes repeated V2 provider GETs when customers
+    // switch expiries or when the same expiry is polled by several clients.
+    private final java.util.LinkedHashMap<LocalDate, ContractMetadata> metadataByExpiry =
+        new java.util.LinkedHashMap<>(MAX_CACHED_EXPIRIES, 0.75f, true);
+    private volatile CustomerFnoLastTradeSnapshotStore lastTrades;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLastTrades(CustomerFnoLastTradeSnapshotStore snapshotStore) {
+        this.lastTrades = snapshotStore;
+    }
+
+    private record ContractMetadata(LocalDate expiry, Instant receivedAt,
+        List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
+        UpstoxAnalyticsSource.OptionChainSnapshot chain) {}
+
+    public CustomerFnoDiscoveryController(CustomerIdentityStore identities,
+            UpstoxAnalyticsSource source,
+            ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            CustomerFnoExpiryCatalog expiryCatalog,
+            MarketSessionCalendar sessionCalendar, Environment env) {
+        this.identities = identities;
+        this.source = source;
+        this.feed = feed;
+        this.expiryCatalog = expiryCatalog;
+        this.sessionCalendar = sessionCalendar;
+        this.clock = Clock.systemUTC();
+        this.feedConfigured = env.getProperty(
+            "minttick.upstox-fno.v3-feed-enabled", Boolean.class, false);
+        this.displayRightsVerified = env.getProperty(
+            "minttick.upstox-fno.display-rights-verified", Boolean.class, false);
+        // Expiry/contract-identity listing has its own permission. Display rights
+        // imply it; prices, OI, IV and Greeks still require displayRightsVerified.
+        this.contractDiscoveryVerified = displayRightsVerified || env.getProperty(
+            "minttick.upstox-fno.contract-discovery-verified", Boolean.class, false);
+        this.restLastPriceRightsVerified = displayRightsVerified && env.getProperty(
+            "minttick.upstox-fno.rest-last-price-display-rights-verified",
+            Boolean.class, false);
+    }
+
+    public record Capability(boolean displayRightsVerified, boolean feedConfigured,
+                             boolean sourceReady, boolean marketOpen,
+                             String status, String streamState,
+                             int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt,
+                             boolean contractDiscoveryVerified,
+                             int freshDisplayQuotes, Instant latestFreshDisplayTradeAt,
+                             int subscribedInstruments) {
+        // Compatibility with existing tests; legacy counts represent depth-qualified
+        // observations, NOT every exchange-timed LTP.
+        public Capability(boolean displayRightsVerified, boolean feedConfigured,
+                boolean sourceReady, boolean marketOpen,
+                String status, String streamState,
+                int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt,
+                boolean contractDiscoveryVerified) {
+            this(displayRightsVerified, feedConfigured, sourceReady, marketOpen,
+                status, streamState, freshExchangeTimedQuotes,
+                latestFreshExchangeTradeAt, contractDiscoveryVerified, 0, null, 0);
+        }
+    }
+
+    @GetMapping("/capability")
+    public ResponseEntity<Capability> capability(Authentication auth) {
+        requireCustomer(auth);
+        return noStore(internalCapability());
+    }
+
+    Capability internalCapability() {
+        boolean sourceReady = source.enabled();
+        boolean open = sessionCalendar.isInsideFnoSession(clock.instant());
+        var stream = feed.getIfAvailable();
+        var liveStatus = feedConfigured && stream != null ? stream.status() : null;
+        // The existing status counter is depth-qualified (PAPER bid+ask).
+        // A valid exchange-timed V3 LTP must remain visible even if there is
+        // no executable two-sided depth. These are distinct capabilities.
+        int fresh = open && liveStatus != null ? liveStatus.freshExchangeTimedQuotes() : 0;
+        var display = displayRightsVerified && sourceReady && open &&
+                feedConfigured && stream != null
+            ? stream.eligibleDisplaySnapshot()
+            : List.<UpstoxFnoV3LiveFeedService.DisplayQuote>of();
+        int freshDisplay = display.size();
+        Instant latestDisplayTrade = display.stream()
+            .map(UpstoxFnoV3LiveFeedService.DisplayQuote::exchangeAt)
+            .filter(java.util.Objects::nonNull)
+            .max(Instant::compareTo).orElse(null);
+        String status = !displayRightsVerified
+                ? (contractDiscoveryVerified
+                    ? "CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED"
+                    : "DISPLAY_RIGHTS_NOT_VERIFIED")
+            : !sourceReady ? "FNO_CONTRACT_SOURCE_UNAVAILABLE"
+            : !open ? "MARKET_CLOSED"
+            : !feedConfigured || stream == null ? "FNO_V3_FEED_UNAVAILABLE"
+            : freshDisplay > 0 || fresh > 0 ? "LIVE_QUOTES"
+            : "CONNECTED".equals(liveStatus.state())
+                 || "CONNECTED_AWAITING_TICKS".equals(liveStatus.state())
+                    ? "WAITING_FOR_QUOTES" : "FEED_DISCONNECTED";
+        return new Capability(displayRightsVerified, feedConfigured,
+            sourceReady, open, status,
+            liveStatus == null ? "UNAVAILABLE" : liveStatus.state(),
+            displayRightsVerified ? fresh : 0,
+            displayRightsVerified && open && fresh > 0
+                ? liveStatus.latestFreshExchangeTradeAt() : null,
+            contractDiscoveryVerified,
+            displayRightsVerified ? freshDisplay : 0,
+            displayRightsVerified ? latestDisplayTrade : null,
+            displayRightsVerified && open && liveStatus != null
+                ? liveStatus.subscriptions() : 0);
+    }
+
+    @GetMapping("/expiries")
+    public ResponseEntity<CustomerPaperFnoMarketController.Expiries> expiries(
+            Authentication auth) {
+        // Expiry dates only: no prices, OI, IV or Greeks, so discovery permission suffices.
+        requireDiscovery(auth);
+        return noStore(internalExpiries());
+    }
+
+    CustomerPaperFnoMarketController.Expiries internalExpiries() {
+        if (!contractDiscoveryVerified) throw new ResponseStatusException(HttpStatus.CONFLICT,"F&O discovery permission unverified");
+        CustomerFnoExpiryCatalog.Listing listing =
+            expiryCatalog.listing(clock.instant());
+        if (listing == null || !listing.usable()) {
+            String status = listing == null ?
+                CustomerFnoExpiryCatalog.Listing.BLOCKED : listing.status();
+            return new CustomerPaperFnoMarketController.Expiries(
+                UNDERLYING, status, null, List.of());
+        }
+        var valid = CustomerPaperFnoMarketController.validExpiries(
+            listing.expiries(), clock.instant().atZone(IST).toLocalDate());
+        return new CustomerPaperFnoMarketController.Expiries(
+            UNDERLYING, valid.isEmpty() ? "NO_LISTED_EXPIRIES" : "VERIFIED",
+            listing.observedAt(), valid);
+    }
+
+    @GetMapping("/market")
+    public ResponseEntity<CustomerPaperFnoMarketController.Market> market(
+            @RequestParam("expiry") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)
+            LocalDate expiry, Authentication auth) {
+        requireDisplay(auth);
+        return noStore(internalMarket(expiry));
+    }
+
+    CustomerPaperFnoMarketController.Market internalMarket(LocalDate expiry) {
+        if (!displayRightsVerified) throw new ResponseStatusException(HttpStatus.CONFLICT,"F&O quote rights unverified");
+        Instant now = clock.instant();
+        LocalDate today = now.atZone(IST).toLocalDate();
+        if (expiry == null || expiry.isBefore(today) ||
+                expiry.isAfter(today.plusDays(90))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Invalid listed NIFTY option expiry");
+        }
+        if (!source.enabled()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "F&O contract source unavailable");
+        }
+        var stream = feed.getIfAvailable();
+        boolean open = sessionCalendar.isInsideFnoSession(now);
+        // Market discovery must remain available to owners with verified display
+        // rights even while AUTO is STOPPED or the V3 feed is unconfigured.
+        // Never start/take over a socket; without V3 the board is read-only
+        // (NO_FRESH_QUOTES) and only independently sourced V2 chain metadata
+        // may appear, with no live or PAPER execution eligibility.
+        var liveStream = open && feedConfigured ? stream : null;
+        // REST chain is a contract-identity source only; NEVER use its
+        // prices, timestamps, Greeks or OI as executable V3 observations.
+        // Repeated 5-second customer polling only reads fresh V3 observations.
+        // Contract identity is held in memory for <=60 seconds, never prices.
+        var metadata = metadataFor(expiry, now);
+        var contracts = metadata.contracts();
+        var chain = metadata.chain();
+        if (chain == null || !"UPSTOX_ANALYTICS".equals(chain.source()) ||
+                chain.retrievedAt() == null || chain.exchangeQuoteTimeVerified()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "F&O source provenance unavailable");
+        }
+        var liveStrikes = CustomerPaperFnoMarketController.selectDiscovery(
+            contracts, chain, liveStream, liveStream != null && open);
+        boolean fresh = liveStrikes.stream().anyMatch(s ->
+            s.call().quoteFresh() || s.put().quoteFresh());
+        // Order eligibility is never restored by retained snapshots.
+        var strikes = withLastVerifiedTrades(liveStrikes, expiry, now, !open,
+            chain.strikes().getFirst().underlyingSpotPrice());
+        String status = !open ? "MARKET_CLOSED" :
+            fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
+        // This market board has NO execution capability and NO paper rights.
+        var base = CustomerPaperFnoMarketController.marketResponse(
+            expiry, chain.retrievedAt(), status, true, false, strikes,
+            chain.strikes().isEmpty() ? null
+                : chain.strikes().getFirst().underlyingSpotPrice());
+        // Keep V2 chain indicators separate from source-verified V3 last trades.
+        // Neither this map nor its HTTP retrieval time authorizes order fills.
+        return new CustomerPaperFnoMarketController.Market(
+            base.underlyingKey(), base.expiry(), base.source(), base.status(),
+            base.snapshotAt(), base.exchangeSpotTimeVerified(),
+            base.displayRightsVerified(), base.trainingRightsVerified(),
+            base.liveOrderEnabled(), base.strikes(), base.underlyingReferenceSpot(),
+            chainSnapshotIndicators(strikes, chain));
+    }
+
+    /** Provider V2 chain values are non-executable reference observations.
+     * Only keys already confirmed by both the listed-contract and chain
+     * identity join can enter this separate UI-only map.
+     */
+    static java.util.Map<String, CustomerPaperFnoMarketController.ChainSnapshotIndicator>
+            chainSnapshotIndicators(
+            List<CustomerPaperFnoMarketController.Strike> strikes,
+            UpstoxAnalyticsSource.OptionChainSnapshot chain) {
+        var verified = strikes.stream()
+            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
+            .filter(java.util.Objects::nonNull)
+            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
+            .collect(java.util.stream.Collectors.toSet());
+        var result = new java.util.HashMap<String,
+            CustomerPaperFnoMarketController.ChainSnapshotIndicator>();
+        for (var strike : chain.strikes()) {
+            for (var quote : new UpstoxAnalyticsSource.FnoOptionQuote[] {
+                    strike.call(), strike.put()}) {
+                if (quote == null || !verified.contains(quote.instrumentKey())) continue;
+                result.put(quote.instrumentKey(), new
+                    CustomerPaperFnoMarketController.ChainSnapshotIndicator(
+                    positive(quote.ltp()), positive(quote.bidPrice()),
+                    positive(quote.askPrice()), quote.openInterest(),
+                    quote.volume(), quote.previousOpenInterest(),
+                    quote.iv(), quote.delta(), quote.theta(), quote.gamma(),
+                    quote.vega(), quote.closePrice()));
+            }
+        }
+        return java.util.Map.copyOf(result);
+    }
+
+    private static java.math.BigDecimal positive(java.math.BigDecimal value) {
+        return value != null && value.signum() > 0 ? value : null;
+    }
+
+    private List<CustomerPaperFnoMarketController.Strike> withLastVerifiedTrades(
+            List<CustomerPaperFnoMarketController.Strike> current,
+            LocalDate expiry, Instant now, boolean marketClosed,
+            java.math.BigDecimal referenceSpot) {
+        if (current.isEmpty()) return current;
+        var keys = prioritizeLastTradeKeys(current, referenceSpot);
+        var lastByKey = new java.util.HashMap<String,
+            CustomerFnoLastTradeSnapshotStore.LastTrade>();
+        var store = lastTrades;
+        if (store != null) {
+            try {
+                lastByKey.putAll(store.latestAll(keys));
+            } catch (RuntimeException snapshotUnavailable) {
+                // An unavailable read-only snapshot table must not suppress
+                // separately authorized Upstox REST last trades or listed contracts.
+                // Never treat an absent snapshot as a fresh/executable quote.
+            }
+        }
+
+        // REST full quotes contain actual last-trade times, including previous
+        // session values. Independent permission is mandatory, and REST data
+        // NEVER becomes a fill/order bid, ask or quoteFresh=true.
+        if (marketClosed && restLastPriceRightsVerified) {
+            var cached = restPriceCache;
+            java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> rest;
+            if (cached != null && cached.expiry().equals(expiry)
+                    && !now.isBefore(cached.obtainedAt())
+                    && now.isBefore(cached.obtainedAt().plusSeconds(60))) {
+                rest = cached.values();
+            } else {
+                try {
+                    var requestKeys = keys.stream()
+                        .filter(key -> !lastByKey.containsKey(key))
+                        .limit(500).toList();
+                    var last = requestKeys.isEmpty()
+                        ? java.util.Map.<String, UpstoxAnalyticsSource.ListedLastTrade>of()
+                        : source.listedFnoLastTrades(requestKeys);
+                    var converted = new java.util.HashMap<String,
+                        CustomerFnoLastTradeSnapshotStore.LastTrade>();
+                    last.forEach((key, quote) -> converted.put(key,
+                        new CustomerFnoLastTradeSnapshotStore.LastTrade(
+                            quote.ltp(), quote.previousClose(), quote.openInterest(),
+                            quote.exchangeAt(), quote.observedAt())));
+                    rest = java.util.Map.copyOf(converted);
+                    restPriceCache = new RestPriceCache(expiry, now, rest);
+                } catch (RuntimeException notAvailable) {
+                    // No synthetic fallback and no upstream secrets in UI.
+                    rest = java.util.Map.of();
+                }
+            }
+            rest.forEach(lastByKey::putIfAbsent);
+        }
+        if (lastByKey.isEmpty()) return current;
+        return current.stream().map(row ->
+            new CustomerPaperFnoMarketController.Strike(row.strikePrice(),
+                lastVerifiedLeg(row.call(), lastByKey),
+                lastVerifiedLeg(row.put(), lastByKey))).toList();
+    }
+
+    /**
+     * Quote requests have a bounded upstream budget. Choose the strikes nearest
+     * Upstox's underlying spot first, rather than the lowest 32 strikes in the
+     * sorted chain; retain the original chain order in the API response.
+     * Source identity and CE/PE keys have already passed contract validation.
+     */
+    static List<String> prioritizeLastTradeKeys(
+            List<CustomerPaperFnoMarketController.Strike> strikes,
+            java.math.BigDecimal referenceSpot) {
+        var nearest = new java.util.ArrayList<>(strikes);
+        if (referenceSpot != null && referenceSpot.signum() > 0) {
+            nearest.sort(java.util.Comparator.comparing(
+                row -> row.strikePrice().subtract(referenceSpot).abs()));
+        }
+        return nearest.stream()
+            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
+            .filter(java.util.Objects::nonNull)
+            .filter(leg -> !leg.quoteFresh())
+            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
+            .distinct().toList();
+    }
+
+    private static CustomerPaperFnoMarketController.Leg lastVerifiedLeg(
+            CustomerPaperFnoMarketController.Leg leg,
+            java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> lastByKey) {
+        if (leg == null || leg.quoteFresh()) return leg;
+        var last = lastByKey.get(leg.instrumentKey());
+        if (last == null) return leg;
+        return new CustomerPaperFnoMarketController.Leg(
+            leg.instrumentKey(), leg.tradingSymbol(), leg.side(), leg.lotSize(),
+            leg.tickSize(), null, null,
+            last.exchangeAt(), last.observedAt(), false, false,
+            last.ltp(), last.previousClose(), last.openInterest(),
+            null, null, null, null, null);
+    }
+
+    /**
+     * Per-expiry LRU of bounded read-only V2 chain reference snapshots and
+     * listed identities. The original provider retrievedAt is preserved;
+     * these are never V3 exchange ticks or order quotes. Source rights are
+     * enforced on every request BEFORE this cache is consulted.
+     *
+     * MAX_CACHED_EXPIRIES bounds memory independently of client concurrency
+     * and avoids re-fetching each expiry on every change of tab.
+     */
+    private synchronized ContractMetadata metadataFor(LocalDate expiry, Instant now) {
+        var existing = metadataByExpiry.get(expiry);
+        if (existing != null && !now.isBefore(existing.receivedAt()) &&
+                now.isBefore(existing.receivedAt().plus(CONTRACT_CACHE_TTL))) {
+            return existing;
+        }
+        metadataByExpiry.remove(expiry);
+        var contracts = CustomerPaperFnoMarketController.providerRead(
+            () -> source.currentFnoOptionContracts(UNDERLYING, expiry));
+        var chain = CustomerPaperFnoMarketController.providerRead(
+            () -> source.currentFnoOptionChain(UNDERLYING, expiry));
+        if (contracts == null || contracts.isEmpty() || contracts.size() > 1024 ||
+                chain == null || !"UPSTOX_ANALYTICS".equals(chain.source()) ||
+                chain.retrievedAt() == null || chain.exchangeQuoteTimeVerified() ||
+                chain.strikes() == null || chain.strikes().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Verified listed F&O contract metadata unavailable");
+        }
+        var result = new ContractMetadata(expiry, now,
+            List.copyOf(contracts), chain);
+        metadataByExpiry.put(expiry, result);
+        if (metadataByExpiry.size() > MAX_CACHED_EXPIRIES) {
+            metadataByExpiry.remove(metadataByExpiry.keySet().iterator().next());
+        }
+        return result;
+    }
+
+    private void requireDisplay(Authentication auth) {
+        requireCustomer(auth);
+        if (!displayRightsVerified) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Customer F&O display rights not verified");
+        }
+    }
+
+    private void requireDiscovery(Authentication auth) {
+        requireCustomer(auth);
+        if (!contractDiscoveryVerified) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Customer F&O contract discovery not verified");
+        }
+    }
+
+    private UUID requireCustomer(Authentication auth) {
+        if (!(auth instanceof JwtAuthenticationToken jwt) ||
+                jwt.getAuthorities().stream().noneMatch(
+                    a -> "ROLE_CUSTOMER".equals(a.getAuthority()))) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                "Customer login required");
+        }
+        return identities.find("cognito",
+                jwt.getToken().getIssuer().toString(),
+                jwt.getToken().getSubject())
+            .filter(a -> "ACTIVE".equals(a.status()) &&
+                "CUSTOMER".equals(a.role()))
+            .map(CustomerIdentityStore.CustomerAccount::id)
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "Customer account not linked"));
+    }
+
+    private static <T> ResponseEntity<T> noStore(T body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+    }
+}

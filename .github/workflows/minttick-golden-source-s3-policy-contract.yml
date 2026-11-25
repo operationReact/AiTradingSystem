@@ -1,0 +1,45 @@
+name: MintTick Golden Source review-only S3 policy contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-golden-source/**'
+      - 'scripts/tests/test_golden_source_s3_policy_contract.py'
+      - '.github/workflows/minttick-golden-source-s3-policy-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-golden-source/**'
+      - 'scripts/tests/test_golden_source_s3_policy_contract.py'
+      - '.github/workflows/minttick-golden-source-s3-policy-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  policy-review:
+    name: Offline Golden Source IAM policy and Terraform validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate no managed resources or overly broad permissions
+        run: |
+          python3 -m unittest discover -s scripts/tests \
+            -p test_golden_source_s3_policy_contract.py -v
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Terraform formatting only
+        working-directory: infra/minttick-golden-source
+        run: terraform fmt -check -diff -recursive
+      - name: Download local policy rendering provider without state or cloud
+        working-directory: infra/minttick-golden-source
+        run: terraform init -backend=false
+      - name: Validate review-only Terraform policy contract
+        working-directory: infra/minttick-golden-source
+        run: terraform validate
+# No terraform plan/apply, no AWS creds, no OIDC, no bucket/KMS provisioning.

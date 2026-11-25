@@ -1,0 +1,41 @@
+name: V78 strict PAPER research worker startup safety
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_startup_gate.py'
+      - 'intelligence/tests/test_research_startup_gate.py'
+      - 'intelligence/Dockerfile'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_worker_strict_boot_template.py'
+      - '.github/workflows/v4-worker-strict-boot-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_startup_gate.py'
+      - 'intelligence/tests/test_research_startup_gate.py'
+      - 'intelligence/Dockerfile'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_worker_strict_boot_template.py'
+      - '.github/workflows/v4-worker-strict-boot-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-boot:
+    name: Refuse unverified PAPER worker startup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check Docker and Terraform strict bootstrap guarantees
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_worker_strict_boot_template.py
+
+# Actual Python/pytest model tests run in the existing intelligence quality CI.
+# No AWS access, credential reads, trading authorization or worker startup.

@@ -1,0 +1,51 @@
+name: MintTick - Golden Source all-listing and model source preflight
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/golden_source_fleet_preflight.py'
+      - 'scripts/tests/test_golden_source_fleet_preflight.py'
+      - 'docs/architecture/minttick-mind-golden-fleet-preflight-d20-05c.md'
+      - 'docs/architecture/mintick-mind-golden-source-requirements.v1.json'
+      - '.github/workflows/minttick-golden-fleet-preflight.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/golden_source_fleet_preflight.py'
+      - 'scripts/tests/test_golden_source_fleet_preflight.py'
+      - 'docs/architecture/mintick-mind-golden-source-requirements.v1.json'
+      - '.github/workflows/minttick-golden-fleet-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run finite synthetic fleet and all-model dependency tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests \
+            -p test_golden_source_fleet_preflight.py -v
+          python3 scripts/golden_source_fleet_preflight.py > "$RUNNER_TEMP/golden-fleet-preflight.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'golden-fleet-preflight.json').read_text())
+          assert r['schema']=='minttick.golden.fleet-readiness-preflight.v1'
+          assert r['execution']=='OFFLINE_PLANNING_ONLY'
+          assert r['planning']['listing_episodes_supplied']==0
+          assert r['data_families_total']==24
+          assert len(r['models'])==18
+          assert r['strategy_templates_total']==232
+          assert not r['eligible_to_start_bulk_source_download']
+          assert not r['eligible_to_publish_model_features']
+          print('PASS: offline requirements audited, no paid calls or source entitlements')
+          PY
+# No id-token, AWS credentials, SSM, source API, cloud writes, models or orders.

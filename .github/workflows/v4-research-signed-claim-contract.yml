@@ -1,0 +1,39 @@
+name: V85 offline research source Ed25519 signature safety contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_context_signature.py'
+      - 'intelligence/tests/test_research_context_signature.py'
+      - 'intelligence/pyproject.toml'
+      - 'scripts/tests/test_v4_research_signed_claim_contract.py'
+      - '.github/workflows/v4-research-signed-claim-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_context_signature.py'
+      - 'intelligence/tests/test_research_context_signature.py'
+      - 'intelligence/pyproject.toml'
+      - 'scripts/tests/test_v4_research_signed_claim_contract.py'
+      - '.github/workflows/v4-research-signed-claim-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-release-is-blocked:
+    name: Require independent signer key and no capital authority
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify no private signing keys, bypass or release permissions
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_research_signed_claim_contract.py
+
+# Python model quality CI uses dev extras and ephemeral signer test keys only.
+# No AWS credentials, model weights, signing keys or image pushes in this flow.

@@ -1,0 +1,45 @@
+name: Mind F&O customer research read-only runtime contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/mind/check_fno_research_runtime.py'
+      - 'scripts/mind/check_fno_capability_runtime.py'
+      - 'scripts/mind/check_fno_market_snapshot.py'
+      - 'scripts/mind/check_fno_flutter_market_contract.py'
+      - 'scripts/mind/test_check_fno_research_runtime.py'
+      - 'scripts/mind/test_check_fno_capability_runtime.py'
+      - 'scripts/mind/test_check_fno_market_snapshot.py'
+      - 'scripts/mind/test_check_fno_flutter_market_contract.py'
+      - '.github/workflows/mind-fno-research-runtime-contract.yml'
+      - '.github/workflows/mind-live-verify.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/mind/check_fno_research_runtime.py'
+      - 'scripts/mind/check_fno_capability_runtime.py'
+      - 'scripts/mind/check_fno_market_snapshot.py'
+      - 'scripts/mind/check_fno_flutter_market_contract.py'
+      - 'scripts/mind/test_check_fno_research_runtime.py'
+      - 'scripts/mind/test_check_fno_capability_runtime.py'
+      - 'scripts/mind/test_check_fno_market_snapshot.py'
+      - 'scripts/mind/test_check_fno_flutter_market_contract.py'
+      - '.github/workflows/mind-fno-research-runtime-contract.yml'
+permissions:
+  contents: read
+jobs:
+  no-network-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run sanitized F&O research response unit tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py scripts/mind/check_fno_market_snapshot.py scripts/mind/check_fno_flutter_market_contract.py
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_research_runtime.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_capability_runtime.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_market_snapshot.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_flutter_market_contract.py' -v

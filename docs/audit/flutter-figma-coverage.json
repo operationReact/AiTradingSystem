@@ -1,0 +1,552 @@
+[
+  {
+    "phase": 0,
+    "sectionId": "23:3",
+    "variants": [
+      "23:6",
+      "23:71",
+      "23:132",
+      "23:197",
+      "23:258",
+      "23:319",
+      "23:376",
+      "23:437"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P0 / Workspace Setup &amp; Environment",
+      "Neon Futuristic Light / Mobile / P0 / Workspace Setup &amp; Environment",
+      "Neon Futuristic Dark / Desktop / P0 / Workspace Setup &amp; Environment",
+      "Neon Futuristic Dark / Mobile / P0 / Workspace Setup &amp; Environment",
+      "Clean Modern Light / Desktop / P0 / Workspace Setup &amp; Environment",
+      "Clean Modern Light / Mobile / P0 / Workspace Setup &amp; Environment",
+      "Clean Modern Dark / Desktop / P0 / Workspace Setup &amp; Environment",
+      "Clean Modern Dark / Mobile / P0 / Workspace Setup &amp; Environment"
+    ]
+  },
+  {
+    "phase": 1,
+    "sectionId": "23:494",
+    "variants": [
+      "23:497",
+      "23:562",
+      "23:623",
+      "23:688",
+      "23:749",
+      "23:810",
+      "23:867",
+      "23:928"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P1 / Market Data &amp; Instrument Master",
+      "Neon Futuristic Light / Mobile / P1 / Market Data &amp; Instrument Master",
+      "Neon Futuristic Dark / Desktop / P1 / Market Data &amp; Instrument Master",
+      "Neon Futuristic Dark / Mobile / P1 / Market Data &amp; Instrument Master",
+      "Clean Modern Light / Desktop / P1 / Market Data &amp; Instrument Master",
+      "Clean Modern Light / Mobile / P1 / Market Data &amp; Instrument Master",
+      "Clean Modern Dark / Desktop / P1 / Market Data &amp; Instrument Master",
+      "Clean Modern Dark / Mobile / P1 / Market Data &amp; Instrument Master"
+    ]
+  },
+  {
+    "phase": 2,
+    "sectionId": "23:985",
+    "variants": [
+      "23:988",
+      "23:1053",
+      "23:1114",
+      "23:1179",
+      "23:1240",
+      "23:1301",
+      "23:1358",
+      "23:1419"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P2 / Strategy Catalogue &amp; Configuration",
+      "Neon Futuristic Light / Mobile / P2 / Strategy Catalogue &amp; Configuration",
+      "Neon Futuristic Dark / Desktop / P2 / Strategy Catalogue &amp; Configuration",
+      "Neon Futuristic Dark / Mobile / P2 / Strategy Catalogue &amp; Configuration",
+      "Clean Modern Light / Desktop / P2 / Strategy Catalogue &amp; Configuration",
+      "Clean Modern Light / Mobile / P2 / Strategy Catalogue &amp; Configuration",
+      "Clean Modern Dark / Desktop / P2 / Strategy Catalogue &amp; Configuration",
+      "Clean Modern Dark / Mobile / P2 / Strategy Catalogue &amp; Configuration"
+    ]
+  },
+  {
+    "phase": 3,
+    "sectionId": "23:1476",
+    "variants": [
+      "23:1479",
+      "23:1544",
+      "23:1605",
+      "23:1670",
+      "23:1731",
+      "23:1792",
+      "23:1849",
+      "23:1910"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P3 / Backtest Studio",
+      "Neon Futuristic Light / Mobile / P3 / Backtest Studio",
+      "Neon Futuristic Dark / Desktop / P3 / Backtest Studio",
+      "Neon Futuristic Dark / Mobile / P3 / Backtest Studio",
+      "Clean Modern Light / Desktop / P3 / Backtest Studio",
+      "Clean Modern Light / Mobile / P3 / Backtest Studio",
+      "Clean Modern Dark / Desktop / P3 / Backtest Studio",
+      "Clean Modern Dark / Mobile / P3 / Backtest Studio"
+    ]
+  },
+  {
+    "phase": 4,
+    "sectionId": "23:1967",
+    "variants": [
+      "23:1970",
+      "23:2035",
+      "23:2096",
+      "23:2161",
+      "23:2222",
+      "23:2283",
+      "23:2340",
+      "23:2401"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P4 / Research Workspace &amp; Gemini Evidence",
+      "Neon Futuristic Light / Mobile / P4 / Research Workspace &amp; Gemini Evidence",
+      "Neon Futuristic Dark / Desktop / P4 / Research Workspace &amp; Gemini Evidence",
+      "Neon Futuristic Dark / Mobile / P4 / Research Workspace &amp; Gemini Evidence",
+      "Clean Modern Light / Desktop / P4 / Research Workspace &amp; Gemini Evidence",
+      "Clean Modern Light / Mobile / P4 / Research Workspace &amp; Gemini Evidence",
+      "Clean Modern Dark / Desktop / P4 / Research Workspace &amp; Gemini Evidence",
+      "Clean Modern Dark / Mobile / P4 / Research Workspace &amp; Gemini Evidence"
+    ]
+  },
+  {
+    "phase": 5,
+    "sectionId": "23:2458",
+    "variants": [
+      "23:2461",
+      "23:2526",
+      "23:2587",
+      "23:2652",
+      "23:2713",
+      "23:2774",
+      "23:2831",
+      "23:2892"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P5 / Risk Policy Administration",
+      "Neon Futuristic Light / Mobile / P5 / Risk Policy Administration",
+      "Neon Futuristic Dark / Desktop / P5 / Risk Policy Administration",
+      "Neon Futuristic Dark / Mobile / P5 / Risk Policy Administration",
+      "Clean Modern Light / Desktop / P5 / Risk Policy Administration",
+      "Clean Modern Light / Mobile / P5 / Risk Policy Administration",
+      "Clean Modern Dark / Desktop / P5 / Risk Policy Administration",
+      "Clean Modern Dark / Mobile / P5 / Risk Policy Administration"
+    ]
+  },
+  {
+    "phase": 6,
+    "sectionId": "23:2949",
+    "variants": [
+      "23:2952",
+      "23:3017",
+      "23:3078",
+      "23:3143",
+      "23:3204",
+      "23:3265",
+      "23:3322",
+      "23:3383"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Neon Futuristic Light / Mobile / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Neon Futuristic Dark / Desktop / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Neon Futuristic Dark / Mobile / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Clean Modern Light / Desktop / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Clean Modern Light / Mobile / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Clean Modern Dark / Desktop / P6 / Portfolio, Positions &amp; Reconciliation",
+      "Clean Modern Dark / Mobile / P6 / Portfolio, Positions &amp; Reconciliation"
+    ]
+  },
+  {
+    "phase": 7,
+    "sectionId": "23:3440",
+    "variants": [
+      "23:3443",
+      "23:3508",
+      "23:3569",
+      "23:3634",
+      "23:3695",
+      "23:3756",
+      "23:3813",
+      "23:3874"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P7 / Trading Modes &amp; Automation Policy",
+      "Neon Futuristic Light / Mobile / P7 / Trading Modes &amp; Automation Policy",
+      "Neon Futuristic Dark / Desktop / P7 / Trading Modes &amp; Automation Policy",
+      "Neon Futuristic Dark / Mobile / P7 / Trading Modes &amp; Automation Policy",
+      "Clean Modern Light / Desktop / P7 / Trading Modes &amp; Automation Policy",
+      "Clean Modern Light / Mobile / P7 / Trading Modes &amp; Automation Policy",
+      "Clean Modern Dark / Desktop / P7 / Trading Modes &amp; Automation Policy",
+      "Clean Modern Dark / Mobile / P7 / Trading Modes &amp; Automation Policy"
+    ]
+  },
+  {
+    "phase": 8,
+    "sectionId": "23:3931",
+    "variants": [
+      "23:3934",
+      "23:3999",
+      "23:4060",
+      "23:4125",
+      "23:4186",
+      "23:4247",
+      "23:4304",
+      "23:4365"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P8 / Orders, Trade History &amp; Notifications",
+      "Neon Futuristic Light / Mobile / P8 / Orders, Trade History &amp; Notifications",
+      "Neon Futuristic Dark / Desktop / P8 / Orders, Trade History &amp; Notifications",
+      "Neon Futuristic Dark / Mobile / P8 / Orders, Trade History &amp; Notifications",
+      "Clean Modern Light / Desktop / P8 / Orders, Trade History &amp; Notifications",
+      "Clean Modern Light / Mobile / P8 / Orders, Trade History &amp; Notifications",
+      "Clean Modern Dark / Desktop / P8 / Orders, Trade History &amp; Notifications",
+      "Clean Modern Dark / Mobile / P8 / Orders, Trade History &amp; Notifications"
+    ]
+  },
+  {
+    "phase": 9,
+    "sectionId": "23:4422",
+    "variants": [
+      "23:4425",
+      "23:4490",
+      "23:4551",
+      "23:4616",
+      "23:4677",
+      "23:4738",
+      "23:4795",
+      "23:4856"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P9 / Appearance &amp; Interaction System",
+      "Neon Futuristic Light / Mobile / P9 / Appearance &amp; Interaction System",
+      "Neon Futuristic Dark / Desktop / P9 / Appearance &amp; Interaction System",
+      "Neon Futuristic Dark / Mobile / P9 / Appearance &amp; Interaction System",
+      "Clean Modern Light / Desktop / P9 / Appearance &amp; Interaction System",
+      "Clean Modern Light / Mobile / P9 / Appearance &amp; Interaction System",
+      "Clean Modern Dark / Desktop / P9 / Appearance &amp; Interaction System",
+      "Clean Modern Dark / Mobile / P9 / Appearance &amp; Interaction System"
+    ]
+  },
+  {
+    "phase": 10,
+    "sectionId": "23:4913",
+    "variants": [
+      "23:4916",
+      "23:4981",
+      "23:5042",
+      "23:5107",
+      "23:5168",
+      "23:5229",
+      "23:5286",
+      "23:5347"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P10 / Security &amp; Account Protection",
+      "Neon Futuristic Light / Mobile / P10 / Security &amp; Account Protection",
+      "Neon Futuristic Dark / Desktop / P10 / Security &amp; Account Protection",
+      "Neon Futuristic Dark / Mobile / P10 / Security &amp; Account Protection",
+      "Clean Modern Light / Desktop / P10 / Security &amp; Account Protection",
+      "Clean Modern Light / Mobile / P10 / Security &amp; Account Protection",
+      "Clean Modern Dark / Desktop / P10 / Security &amp; Account Protection",
+      "Clean Modern Dark / Mobile / P10 / Security &amp; Account Protection"
+    ]
+  },
+  {
+    "phase": 11,
+    "sectionId": "24:3",
+    "variants": [
+      "24:6",
+      "24:71",
+      "24:132",
+      "24:197",
+      "24:258",
+      "24:319",
+      "24:376",
+      "24:437"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P11 / Mobile Trading Experience",
+      "Neon Futuristic Light / Mobile / P11 / Mobile Trading Experience",
+      "Neon Futuristic Dark / Desktop / P11 / Mobile Trading Experience",
+      "Neon Futuristic Dark / Mobile / P11 / Mobile Trading Experience",
+      "Clean Modern Light / Desktop / P11 / Mobile Trading Experience",
+      "Clean Modern Light / Mobile / P11 / Mobile Trading Experience",
+      "Clean Modern Dark / Desktop / P11 / Mobile Trading Experience",
+      "Clean Modern Dark / Mobile / P11 / Mobile Trading Experience"
+    ]
+  },
+  {
+    "phase": 12,
+    "sectionId": "24:494",
+    "variants": [
+      "24:497",
+      "24:562",
+      "24:623",
+      "24:688",
+      "24:749",
+      "24:810",
+      "24:867",
+      "24:928"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P12 / Cloud Infrastructure &amp; Deployment",
+      "Neon Futuristic Light / Mobile / P12 / Cloud Infrastructure &amp; Deployment",
+      "Neon Futuristic Dark / Desktop / P12 / Cloud Infrastructure &amp; Deployment",
+      "Neon Futuristic Dark / Mobile / P12 / Cloud Infrastructure &amp; Deployment",
+      "Clean Modern Light / Desktop / P12 / Cloud Infrastructure &amp; Deployment",
+      "Clean Modern Light / Mobile / P12 / Cloud Infrastructure &amp; Deployment",
+      "Clean Modern Dark / Desktop / P12 / Cloud Infrastructure &amp; Deployment",
+      "Clean Modern Dark / Mobile / P12 / Cloud Infrastructure &amp; Deployment"
+    ]
+  },
+  {
+    "phase": 13,
+    "sectionId": "24:985",
+    "variants": [
+      "24:988",
+      "24:1053",
+      "24:1114",
+      "24:1179",
+      "24:1240",
+      "24:1301",
+      "24:1358",
+      "24:1419"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P13 / Observability, Incidents &amp; Customer Health",
+      "Neon Futuristic Light / Mobile / P13 / Observability, Incidents &amp; Customer Health",
+      "Neon Futuristic Dark / Desktop / P13 / Observability, Incidents &amp; Customer Health",
+      "Neon Futuristic Dark / Mobile / P13 / Observability, Incidents &amp; Customer Health",
+      "Clean Modern Light / Desktop / P13 / Observability, Incidents &amp; Customer Health",
+      "Clean Modern Light / Mobile / P13 / Observability, Incidents &amp; Customer Health",
+      "Clean Modern Dark / Desktop / P13 / Observability, Incidents &amp; Customer Health",
+      "Clean Modern Dark / Mobile / P13 / Observability, Incidents &amp; Customer Health"
+    ]
+  },
+  {
+    "phase": 14,
+    "sectionId": "24:1476",
+    "variants": [
+      "24:1479",
+      "24:1544",
+      "24:1605",
+      "24:1670",
+      "24:1731",
+      "24:1792",
+      "24:1849",
+      "24:1910"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P14 / PAPER / SHADOW Validation",
+      "Neon Futuristic Light / Mobile / P14 / PAPER / SHADOW Validation",
+      "Neon Futuristic Dark / Desktop / P14 / PAPER / SHADOW Validation",
+      "Neon Futuristic Dark / Mobile / P14 / PAPER / SHADOW Validation",
+      "Clean Modern Light / Desktop / P14 / PAPER / SHADOW Validation",
+      "Clean Modern Light / Mobile / P14 / PAPER / SHADOW Validation",
+      "Clean Modern Dark / Desktop / P14 / PAPER / SHADOW Validation",
+      "Clean Modern Dark / Mobile / P14 / PAPER / SHADOW Validation"
+    ]
+  },
+  {
+    "phase": 15,
+    "sectionId": "24:1967",
+    "variants": [
+      "24:1970",
+      "24:2035",
+      "24:2096",
+      "24:2161",
+      "24:2222",
+      "24:2283",
+      "24:2340",
+      "24:2401"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P15 / LIVE Activation &amp; Rollout",
+      "Neon Futuristic Light / Mobile / P15 / LIVE Activation &amp; Rollout",
+      "Neon Futuristic Dark / Desktop / P15 / LIVE Activation &amp; Rollout",
+      "Neon Futuristic Dark / Mobile / P15 / LIVE Activation &amp; Rollout",
+      "Clean Modern Light / Desktop / P15 / LIVE Activation &amp; Rollout",
+      "Clean Modern Light / Mobile / P15 / LIVE Activation &amp; Rollout",
+      "Clean Modern Dark / Desktop / P15 / LIVE Activation &amp; Rollout",
+      "Clean Modern Dark / Mobile / P15 / LIVE Activation &amp; Rollout"
+    ]
+  },
+  {
+    "phase": 16,
+    "sectionId": "24:2458",
+    "variants": [
+      "24:2461",
+      "24:2526",
+      "24:2587",
+      "24:2652",
+      "24:2713",
+      "24:2774",
+      "24:2831",
+      "24:2892"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P16 / Feature Store &amp; Dataset Quality",
+      "Neon Futuristic Light / Mobile / P16 / Feature Store &amp; Dataset Quality",
+      "Neon Futuristic Dark / Desktop / P16 / Feature Store &amp; Dataset Quality",
+      "Neon Futuristic Dark / Mobile / P16 / Feature Store &amp; Dataset Quality",
+      "Clean Modern Light / Desktop / P16 / Feature Store &amp; Dataset Quality",
+      "Clean Modern Light / Mobile / P16 / Feature Store &amp; Dataset Quality",
+      "Clean Modern Dark / Desktop / P16 / Feature Store &amp; Dataset Quality",
+      "Clean Modern Dark / Mobile / P16 / Feature Store &amp; Dataset Quality"
+    ]
+  },
+  {
+    "phase": 17,
+    "sectionId": "24:2949",
+    "variants": [
+      "24:2952",
+      "24:3017",
+      "24:3078",
+      "24:3143",
+      "24:3204",
+      "24:3265",
+      "24:3322",
+      "24:3383"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P17 / Model Training &amp; Evaluation",
+      "Neon Futuristic Light / Mobile / P17 / Model Training &amp; Evaluation",
+      "Neon Futuristic Dark / Desktop / P17 / Model Training &amp; Evaluation",
+      "Neon Futuristic Dark / Mobile / P17 / Model Training &amp; Evaluation",
+      "Clean Modern Light / Desktop / P17 / Model Training &amp; Evaluation",
+      "Clean Modern Light / Mobile / P17 / Model Training &amp; Evaluation",
+      "Clean Modern Dark / Desktop / P17 / Model Training &amp; Evaluation",
+      "Clean Modern Dark / Mobile / P17 / Model Training &amp; Evaluation"
+    ]
+  },
+  {
+    "phase": 18,
+    "sectionId": "24:3440",
+    "variants": [
+      "24:3443",
+      "24:3508",
+      "24:3569",
+      "24:3634",
+      "24:3695",
+      "24:3756",
+      "24:3813",
+      "24:3874"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P18 / Decision Evidence &amp; Trade Attribution",
+      "Neon Futuristic Light / Mobile / P18 / Decision Evidence &amp; Trade Attribution",
+      "Neon Futuristic Dark / Desktop / P18 / Decision Evidence &amp; Trade Attribution",
+      "Neon Futuristic Dark / Mobile / P18 / Decision Evidence &amp; Trade Attribution",
+      "Clean Modern Light / Desktop / P18 / Decision Evidence &amp; Trade Attribution",
+      "Clean Modern Light / Mobile / P18 / Decision Evidence &amp; Trade Attribution",
+      "Clean Modern Dark / Desktop / P18 / Decision Evidence &amp; Trade Attribution",
+      "Clean Modern Dark / Mobile / P18 / Decision Evidence &amp; Trade Attribution"
+    ]
+  },
+  {
+    "phase": 19,
+    "sectionId": "24:3931",
+    "variants": [
+      "24:3934",
+      "24:3999",
+      "24:4060",
+      "24:4125",
+      "24:4186",
+      "24:4247",
+      "24:4304",
+      "24:4365"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P19 / Model Registry, Approval &amp; Rollback",
+      "Neon Futuristic Light / Mobile / P19 / Model Registry, Approval &amp; Rollback",
+      "Neon Futuristic Dark / Desktop / P19 / Model Registry, Approval &amp; Rollback",
+      "Neon Futuristic Dark / Mobile / P19 / Model Registry, Approval &amp; Rollback",
+      "Clean Modern Light / Desktop / P19 / Model Registry, Approval &amp; Rollback",
+      "Clean Modern Light / Mobile / P19 / Model Registry, Approval &amp; Rollback",
+      "Clean Modern Dark / Desktop / P19 / Model Registry, Approval &amp; Rollback",
+      "Clean Modern Dark / Mobile / P19 / Model Registry, Approval &amp; Rollback"
+    ]
+  },
+  {
+    "phase": 20,
+    "sectionId": "24:4422",
+    "variants": [
+      "24:4425",
+      "24:4490",
+      "24:4551",
+      "24:4616",
+      "24:4677",
+      "24:4738",
+      "24:4795",
+      "24:4856"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P20 / Cost Control &amp; Workload Lifecycle",
+      "Neon Futuristic Light / Mobile / P20 / Cost Control &amp; Workload Lifecycle",
+      "Neon Futuristic Dark / Desktop / P20 / Cost Control &amp; Workload Lifecycle",
+      "Neon Futuristic Dark / Mobile / P20 / Cost Control &amp; Workload Lifecycle",
+      "Clean Modern Light / Desktop / P20 / Cost Control &amp; Workload Lifecycle",
+      "Clean Modern Light / Mobile / P20 / Cost Control &amp; Workload Lifecycle",
+      "Clean Modern Dark / Desktop / P20 / Cost Control &amp; Workload Lifecycle",
+      "Clean Modern Dark / Mobile / P20 / Cost Control &amp; Workload Lifecycle"
+    ]
+  },
+  {
+    "phase": 21,
+    "sectionId": "24:4913",
+    "variants": [
+      "24:4916",
+      "24:4981",
+      "24:5042",
+      "24:5107",
+      "24:5168",
+      "24:5229",
+      "24:5286",
+      "24:5347"
+    ],
+    "nodesPresent": true,
+    "variantNames": [
+      "Neon Futuristic Light / Desktop / P21 / System Status, AI Assistant &amp; Operations",
+      "Neon Futuristic Light / Mobile / P21 / System Status, AI Assistant &amp; Operations",
+      "Neon Futuristic Dark / Desktop / P21 / System Status, AI Assistant &amp; Operations",
+      "Neon Futuristic Dark / Mobile / P21 / System Status, AI Assistant &amp; Operations",
+      "Clean Modern Light / Desktop / P21 / System Status, AI Assistant &amp; Operations",
+      "Clean Modern Light / Mobile / P21 / System Status, AI Assistant &amp; Operations",
+      "Clean Modern Dark / Desktop / P21 / System Status, AI Assistant &amp; Operations",
+      "Clean Modern Dark / Mobile / P21 / System Status, AI Assistant &amp; Operations"
+    ]
+  }
+]

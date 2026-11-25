@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  MintTick existing EC2 manual lifecycle GitHub OIDC role ONLY. Create as a NEW
+  stack named minttick-paper-manual-control-iam; NEVER update/replace the
+  existing aitrading-paper-ec2-bootstrap or minttick-auth-oidc-bootstrap stacks.
+Resources:
+  PaperManualGithubLifecycleRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: aitrading-paper-ec2-manual-control
+      Description: >-
+        Main-branch GitHub Actions Start/Stop/Status for exactly one existing
+        Mumbai PAPER EC2; no creation, termination, reboot or IAM mutation.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                "token.actions.githubusercontent.com:sub":
+                  - "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/main"
+                  - "repo:operationReact/AiTradingSystem:ref:refs/heads/main"
+      Policies:
+        - PolicyName: aitrading-paper-ec2-manual-lifecycle-locked
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadMumbaiInstanceStateOnly
+                Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "aws:RequestedRegion": ap-south-1
+              - Sid: ReadExactDailyStopSchedule
+                Effect: Allow
+                Action: scheduler:GetSchedule
+                Resource: arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop
+              - Sid: StartStopOnlyTaggedExistingPaperEC2
+                Effect: Allow
+                Action:
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                Resource: arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a
+                Condition:
+                  StringEquals:
+                    "aws:RequestedRegion": ap-south-1
+                    "ec2:ResourceTag/Application": ai-trading-system
+                    "ec2:ResourceTag/Environment": paper
+                    "ec2:ResourceTag/Name": aitradingsystem-paper-ec2
+              - Sid: ExplicitlyDenyInstanceCreationTerminationAndReboot
+                Effect: Deny
+                Action:
+                  - ec2:RunInstances
+                  - ec2:TerminateInstances
+                  - ec2:RebootInstances
+                Resource: "*"
+      Tags:
+        - Key: Application
+          Value: ai-trading-system
+        - Key: Environment
+          Value: paper
+        - Key: Capability
+          Value: manual-lifecycle-only
+Outputs:
+  RoleArn:
+    Description: Exact existing-instance main-branch OIDC manual lifecycle role
+    Value: !GetAtt PaperManualGithubLifecycleRole.Arn

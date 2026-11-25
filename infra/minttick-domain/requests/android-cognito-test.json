@@ -1,0 +1,8 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "build-cognito-only-android-test",
+  "public_api_ready": false,
+  "cognito_pool": "ap-south-1_jz2T8qbiY",
+  "authorization": "USER_APPROVED_ANDROID_COGNITO_TEST_2026-11-07"
+}

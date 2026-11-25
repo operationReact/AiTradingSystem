@@ -1,0 +1,30 @@
+package in.aitradingsystem.config;
+
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * Ensures this build never starts configured as LIVE. The application has no live broker-order adapter,
+ * so paper-only remains the only safe execution mode until that capability is implemented and reviewed.
+ */
+@Component
+@DependsOnDatabaseInitialization
+public class TradingModeGuard {
+    public TradingModeGuard(JdbcClient jdbc) {
+        String activeMode = jdbc.sql("SELECT active_mode FROM trading_execution_mode WHERE id = 1")
+            .query(String.class).optional().orElse("PAPER");
+        if (!"PAPER".equals(activeMode)) {
+            throw new IllegalStateException("Unsupported active trading mode '" + activeMode
+                + "'. This build has no live broker order adapter; only PAPER is allowed.");
+        }
+    }
+
+    /**
+     * Separate capital-authority gate used by model governance. This remains closed until the live
+     * broker adapter and the independent LIVE approval gates are implemented and reviewed.
+     */
+    public boolean isLiveCapitalAuthorityOpen() {
+        return false;
+    }
+}

@@ -1,0 +1,254 @@
+name: EC2 PAPER partial provisioning audit (read-only, no changes)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-partial-state-audit.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  inspect:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AWS_ACCOUNT: "098859530205"
+      AWS_REGION: ap-south-1
+      STATE_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Assume exact existing restricted PAPER role for read-only audit
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision
+          aws-region: ap-south-1
+          role-session-name: paper-partial-audit-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Audit only exact-account partial VPC, IAM and EC2 inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          echo "--- PROJECT PAPER VPCs with matching tags ---"
+          aws ec2 describe-vpcs --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'Vpcs[].{Id:VpcId,CIDR:CidrBlock,State:State}' --output json
+          echo "--- Tagged PAPER EC2 inventory ---"
+          aws ec2 describe-instances --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Type:InstanceType}' --output json
+          echo "--- Tagged PAPER subnets ---"
+          aws ec2 describe-subnets --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'Subnets[].{Id:SubnetId,Vpc:VpcId,CIDR:CidrBlock,State:State}' --output json
+          echo "--- Tagged PAPER security groups, including default egress rule count ---"
+          aws ec2 describe-security-groups --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'SecurityGroups[].{Id:GroupId,Vpc:VpcId,IngressCount:length(IpPermissions),EgressCount:length(IpPermissionsEgress)}' --output json
+          echo "--- Tagged PAPER internet gateways and route tables ---"
+          aws ec2 describe-internet-gateways --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'InternetGateways[].{Id:InternetGatewayId,Attachments:Attachments[].VpcId}' --output json
+          aws ec2 describe-route-tables --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'RouteTables[].{Id:RouteTableId,Vpc:VpcId,Associations:Associations[].SubnetId}' --output json
+          echo "--- Exact dedicated PAPER IAM resource existence ---"
+          for name in aitrading-paper-ec2-ssm aitrading-paper-daily-stop; do
+            if aws iam get-role --role-name "$name" --query 'Role.RoleId' --output text >/dev/null 2>&1; then
+              echo "IAM role $name: PRESENT"
+            else
+              echo "IAM role $name: NOT_FOUND_OR_INACCESSIBLE"
+            fi
+          done
+          if aws iam get-instance-profile --instance-profile-name aitrading-paper-ec2-ssm \
+            --query 'InstanceProfile.InstanceProfileId' --output text >/dev/null 2>&1; then
+            echo "IAM instance profile: PRESENT"
+          else
+            echo "IAM instance profile: NOT_FOUND_OR_INACCESSIBLE"
+          fi
+
+      - name: Audit only isolated PAPER S3 Terraform state addresses
+        working-directory: infra/ec2-paper
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform init -input=false -no-color -backend-config=backend.hcl
+          echo "--- Terraform state managed addresses (no state or secrets printed) ---"
+          terraform state list -no-color
+          echo "Audited remote state without writes, import, plan, EC2 creation or deletes"
+
+      - name: Verify exact created EC2 host shutdown state and remaining scheduler
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          aws ec2 describe-instances --region "$AWS_REGION" \
+            --instance-ids i-09c01b470fb39b85a \
+            --query 'Reservations[0].Instances[0]' --output json > "$RUNNER_TEMP/paper-audited-instance.json"
+          python3 - "$RUNNER_TEMP/paper-audited-instance.json" <<'PY'
+          import json,sys
+          i=json.load(open(sys.argv[1],encoding="utf-8"))
+          tags={v["Key"]:v["Value"] for v in i.get("Tags",[])}
+          state=i.get("State",{}).get("Name")
+          if (i.get("InstanceId")!="i-09c01b470fb39b85a"
+              or i.get("InstanceType")!="t4g.medium"
+              or i.get("VpcId")!="vpc-04712728d857bb782"
+              or i.get("SubnetId")!="subnet-071ee24263e10fe7c"
+              or i.get("MetadataOptions",{}).get("HttpTokens")!="required"
+              or tags.get("Application")!="ai-trading-system"
+              or tags.get("Environment")!="paper"
+              or tags.get("Name")!="aitradingsystem-paper-ec2"):
+              raise SystemExit("Actual partial PAPER EC2 identity, size, network or IMDSv2 mismatch")
+          print("AUDITED_PAPER_INSTANCE_STATE="+str(state))
+          print("AUDITED_PAPER_INSTANCE_ROOT_EBS_COUNT="+str(len(i.get("BlockDeviceMappings",[]))))
+          if state not in ("stopped","stopping"):
+              raise SystemExit("PAPER EC2 not yet confirmed stopped; investigate hourly compute cost")
+          print("Exact PAPER EC2 verified stopped/stopping, not serving an app")
+          PY
+          if aws scheduler get-schedule --region "$AWS_REGION" \
+               --name aitrading-paper-nightly-stop \
+               --query '{State:State,Expression:ScheduleExpression,Timezone:ScheduleExpressionTimezone}' \
+               --output json > "$RUNNER_TEMP/paper-scheduler.json" 2>"$RUNNER_TEMP/paper-scheduler-error.txt"; then
+            python3 - "$RUNNER_TEMP/paper-scheduler.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding="utf-8"))
+          print("PAPER_SCHEDULER="+json.dumps(x,sort_keys=True))
+          PY
+          else
+            echo "PAPER_SCHEDULER=NOT_PRESENT_OR_INACCESSIBLE; no nightly stop guarantee yet"
+          fi
+
+      - name: Verify actual effective restricted provision role policy before any paid retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          aws iam get-role-policy \
+            --role-name aitrading-paper-ec2-provision \
+            --policy-name aitrading-paper-ec2-locked-provision-limited \
+            --query PolicyDocument --output json > "$RUNNER_TEMP/actual-provision-role-policy.json"
+          python3 - "$RUNNER_TEMP/actual-provision-role-policy.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          statements=data.get("Statement",[])
+          if not isinstance(statements,list):
+              raise SystemExit("missing effective AWS provisioning policy")
+          sids={s.get("Sid"):s for s in statements if isinstance(s,dict)}
+          def actions(sid):
+              x=sids.get(sid,{})
+              a=x.get("Action",[])
+              return set(a if isinstance(a,list) else [a])
+          if (
+              "ec2:RevokeSecurityGroupEgress" not in actions("ConfigureOnlyMumbaiPaperNetwork")
+              or "ec2:AuthorizeSecurityGroupEgress" not in actions("ConfigureOnlyMumbaiPaperNetwork")
+              or "ec2:DescribeVpcAttribute" not in actions("ReadOnlyMumbaiInventory")
+              or "ec2:DescribeSecurityGroupRules" not in actions("ReadOnlyMumbaiInventory")
+              or "ec2:AuthorizeSecurityGroupIngress" not in actions("DenyDangerousLifecycleAndPublicIngressEvenIfOtherPolicyAdded")
+              or sids.get("DenyDangerousLifecycleAndPublicIngressEvenIfOtherPolicyAdded",{}).get("Effect") != "Deny"
+          ):
+              raise SystemExit("CloudFormation provisioning role inline policy is not yet up to date")
+          for sid in ("ReadOnlyMumbaiInventory","ConfigureOnlyMumbaiPaperNetwork"):
+              if sids[sid].get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion") != "ap-south-1":
+                  raise SystemExit("actual provisioning policy is not region-restricted")
+          modification=sids.get("AllowUpdateOnlyExactStoppedPaperInstance",{})
+          target="arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a"
+          if (not {"ec2:ModifyInstanceAttribute","ec2:DescribeInstanceAttribute"}.issubset(
+                    actions("AllowUpdateOnlyExactStoppedPaperInstance"))
+              or modification.get("Effect")!="Allow"
+              or modification.get("Resource")!=target
+              or modification.get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion")!="ap-south-1"
+              or modification.get("Condition",{}).get("StringEquals",{}).get("ec2:ResourceTag/Environment")!="paper"):
+              raise SystemExit("New exact-PAPER-instance IAM permission not yet deployed via CloudFormation")
+          trust_update=sids.get("FixOnlyDedicatedPaperSchedulerTrust",{})
+          if (trust_update.get("Effect")!="Allow"
+              or trust_update.get("Action")!="iam:UpdateAssumeRolePolicy"
+              or trust_update.get("Resource")!="arn:aws:iam::098859530205:role/aitrading-paper-daily-stop"):
+              raise SystemExit("Dedicated PAPER schedule-group trust repair permission not yet deployed")
+          print("Actual AWS provision role policy verified including exact stop-role trust repair")
+          PY
+
+      - name: Read dedicated stop-role trust and stop-only inline policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws iam get-role --role-name aitrading-paper-daily-stop \
+            --query 'Role.AssumeRolePolicyDocument' --output json > "$RUNNER_TEMP/stop-role-trust.json"
+          aws iam get-role-policy --role-name aitrading-paper-daily-stop \
+            --policy-name only-stop-aitrading-paper \
+            --query PolicyDocument --output json > "$RUNNER_TEMP/stop-role-inline.json"
+          python3 - "$RUNNER_TEMP/stop-role-trust.json" "$RUNNER_TEMP/stop-role-inline.json" <<'PY'
+          import json,sys
+          t=json.load(open(sys.argv[1],encoding="utf-8"))
+          p=json.load(open(sys.argv[2],encoding="utf-8"))
+          statements=t.get("Statement",[])
+          if len(statements)!=1:
+              raise SystemExit("Stop role trust has unexpected statements")
+          s=statements[0]
+          condition=s.get("Condition",{})
+          source=(condition.get("StringEquals",{}).get("aws:SourceArn")
+                  or condition.get("ArnEquals",{}).get("aws:SourceArn"))
+          candidates={
+              "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop",
+              "arn:aws:scheduler:ap-south-1:098859530205:schedule-group/default"
+          }
+          if (s.get("Principal")!={"Service":"scheduler.amazonaws.com"}
+              or s.get("Action")!="sts:AssumeRole"
+              or condition.get("StringEquals",{}).get("aws:SourceAccount")!="098859530205"
+              or source not in candidates):
+              raise SystemExit("Stop-role trust differs from expected restricted recovery states")
+          ps=p.get("Statement",[])
+          if (len(ps)!=1
+              or ps[0].get("Effect")!="Allow"
+              or ps[0].get("Action")!="ec2:StopInstances"
+              or ps[0].get("Resource")!="arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a"
+              or ps[0].get("Condition",{}).get("StringEquals")!={"ec2:ResourceTag/Application":"ai-trading-system","ec2:ResourceTag/Environment":"paper"}):
+              raise SystemExit("Actual dedicated stop-only IAM policy is too broad or missing")
+          print("Dedicated stop-only IAM policy PASS")
+          print("Current stop-role trust is", "schedule-group" if source.endswith(":schedule-group/default") else "schedule-specific (requires Terraform repair)")
+          PY
+
+      - name: Read exact stopped instance shutdown and termination attributes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          for attr in instanceInitiatedShutdownBehavior disableApiTermination; do
+            echo "AUDITED_PAPER_EC2_ATTRIBUTE=$attr"
+            aws ec2 describe-instance-attribute --region "$AWS_REGION" \
+              --instance-id i-09c01b470fb39b85a --attribute "$attr" \
+              --query '{ShutdownBehavior:InstanceInitiatedShutdownBehavior.Value,TerminationProtection:DisableApiTermination.Value}' \
+              --output json
+          done
+          echo "Exact PAPER EC2 attribute reads passed; no AWS writes performed"
+
+      - name: Verify exact partial VPC attribute read access after CloudFormation role update
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          # Fixed ID is sourced from real, previous read-only audit, not from a guess.
+          value="$(aws ec2 describe-vpc-attribute --region "$AWS_REGION" \
+            --vpc-id vpc-04712728d857bb782 --attribute enableDnsHostnames \
+            --query 'EnableDnsHostnames.Value' --output text)"
+          test "$value" = "True" || {
+            echo "::error::Partial VPC DNS hostnames differ from the approved Terraform configuration"
+            exit 1
+          }
+          echo "Confirmed IAM ec2:DescribeVpcAttribute and expected VPC DNS setting"
+
+# Never download or upload Terraform state artifacts and never mutate AWS state.
+# If partial resources exist, recover by reviewed import/reconciliation, not
+# re-running the original create-only thirteen-resource approval.

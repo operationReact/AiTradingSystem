@@ -1,0 +1,145 @@
+name: MintTick - verified direct APK presigned HTTPS
+on:
+  push:
+    branches: [dev]
+    paths:
+      - infra/ec2-paper/requests/presigned-apk.json
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: minttick-presigned-apk-owner
+  cancel-in-progress: false
+jobs:
+  owner-direct-apk:
+    name: Verify signed APK and issue short-lived HTTPS download
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: "43822672920"
+      ARTIFACT_NAME: MintTick-Connected-Android-Test-d7db1f9467073df54c3dca7689665fb1fb17eb46
+      EXPECTED_APK_SHA: 09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda
+      EXPECTED_SIGNER: 7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B
+      BUCKET: aitrading-paper-releases-098859530205
+      OBJECT: releases/owner-apk/d7db1f9467073df54c3dca7689665fb1fb17eb46/MintTick-dev-synthetic-options-2026-11-16.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard owner-approved exact source artifact and request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          changed=set(subprocess.check_output(
+            ["git","diff-tree","--no-commit-id","--name-only","-r","HEAD"],text=True).splitlines())
+          allow={
+            "infra/ec2-paper/requests/presigned-apk.json",
+            ".github/workflows/minttick-presigned-apk.yml",
+          }
+          if "infra/ec2-paper/requests/presigned-apk.json" not in changed or not changed.issubset(allow):
+            raise SystemExit("Denied: unexpected release diff")
+          actual=json.loads(Path("infra/ec2-paper/requests/presigned-apk.json").read_text())
+          expected={
+            "application":"MintTick",
+            "environment":"dev",
+            "operation":"verified-temporary-direct-apk-download",
+            "source_run_id":43822672920,
+            "artifact_id":14205751562,
+            "source_sha":"d7db1f9467073df54c3dca7689665fb1fb17eb46",
+            "expected_sha256":"09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda",
+            "expected_signer_sha256":"7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
+            "aws_account":"098859530205",
+            "bucket":"aitrading-paper-releases-098859530205",
+            "object":"releases/owner-apk/d7db1f9467073df54c3dca7689665fb1fb17eb46/MintTick-dev-synthetic-options-2026-11-16.apk",
+            "expiry_seconds":2700,
+            "authorization":"USER_REQUESTED_DIRECT_APK_2026-11-16",
+            "attempt":3,
+          }
+          if actual!=expected:
+            raise SystemExit("Denied: unreviewed direct APK approval")
+          PY
+      - name: Retrieve immutable stable-signed release APK from successful run
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$ARTIFACT_NAME" --dir source
+          test -s source/app-release.apk
+          test -f source/app-release.apk.sha256
+          test -f source/app-release.apk.signer.sha256
+          actual="$(sha256sum source/app-release.apk | cut -d' ' -f1)"
+          test "$actual" = "$EXPECTED_APK_SHA"
+          test "$(cut -d' ' -f1 source/app-release.apk.sha256)" = "$actual"
+          test "$(tr -d '\r\n' < source/app-release.apk.signer.sha256)" = "$EXPECTED_SIGNER"
+          test "$(stat -c '%s' source/app-release.apk)" -eq 75423551
+          echo "PASS: source APK byte digest and signer receipt exact"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-owner-apk-${{ github.run_id }}
+      - name: Upload exact APK to existing encrypted 3-day private release prefix
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "098859530205"
+          aws s3 cp source/app-release.apk "s3://$BUCKET/$OBJECT" \
+            --content-type "application/vnd.android.package-archive" \
+            --content-disposition "attachment; filename=MintTick-dev-synthetic-options-2026-11-16.apk" \
+            --metadata "sha256=$EXPECTED_APK_SHA" --only-show-errors
+          size="$(aws s3api head-object --bucket "$BUCKET" --key "$OBJECT" --query ContentLength --output text)"
+          test "$size" = "75423551"
+          echo "PASS: existing encrypted private S3 release object uploaded"
+      - name: Presign and independently verify browser-downloadable HTTPS file
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p result
+          # AWS CLI may otherwise sign S3 URLs with a legacy signature variant.
+          aws configure set default.s3.signature_version s3v4
+          # Release bucket was created by the us-east-1 bootstrap stack;
+          # a Mumbai-signed URL yields S3 HTTP 301 PermanentRedirect XML.
+          url="$(aws s3 presign "s3://$BUCKET/$OBJECT" --region us-east-1 \
+            --endpoint-url https://s3.us-east-1.amazonaws.com --expires-in 2700)"
+          export URL_CHECK="$url"
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          url=urlsplit(os.environ["URL_CHECK"])
+          if url.scheme!="https" or not url.hostname or not url.hostname.endswith("amazonaws.com"):
+            raise SystemExit("Denied: unexpected presigned URL endpoint")
+          if "X-Amz-Signature=" not in url.query:
+            raise SystemExit("Denied: signed URL missing v4 signature")
+          PY
+          echo "Verifying GET from presigned S3, without printing bearer URL"
+          curl --fail --location --silent --show-error --retry 2 --retry-delay 2 \
+            --max-time 150 --write-out 'HTTP %{http_code}; bytes %{size_download}\n' \
+            --output /tmp/owner-minttick-apk "$url"
+          actual_size="$(stat -c '%s' /tmp/owner-minttick-apk)"
+          echo "Downloaded bytes: $actual_size"
+          if [ "$actual_size" != 75423551 ]; then
+            echo "FAIL: presigned URL returned wrong size"; exit 2
+          fi
+          actual_sha="$(sha256sum /tmp/owner-minttick-apk | cut -d' ' -f1)"
+          if [ "$actual_sha" != "$EXPECTED_APK_SHA" ]; then
+            echo "FAIL: presigned URL returned incorrect APK SHA256"; exit 2
+          fi
+          printf '%s\n' "$url" > result/OWNER_DIRECT_APK_URL.txt
+          printf 'expires_after_seconds=2700\nsha256=%s\n' "$EXPECTED_APK_SHA" \
+            > result/VERIFY.txt
+          echo "PASS: authenticated HTTPS download 75,423,551 bytes and independent matching SHA256" >> "$GITHUB_STEP_SUMMARY"
+          echo "Presigned URL is in the private, short-lived workflow artifact; no unmasked AWS session credentials in logs." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MintTick-owner-direct-APK-URL
+          path: result/
+          retention-days: 1

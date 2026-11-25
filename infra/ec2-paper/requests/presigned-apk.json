@@ -1,0 +1,16 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "verified-temporary-direct-apk-download",
+  "source_run_id": 43822672920,
+  "artifact_id": 14205751562,
+  "source_sha": "d7db1f9467073df54c3dca7689665fb1fb17eb46",
+  "expected_sha256": "09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda",
+  "expected_signer_sha256": "7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
+  "aws_account": "098859530205",
+  "bucket": "aitrading-paper-releases-098859530205",
+  "object": "releases/owner-apk/d7db1f9467073df54c3dca7689665fb1fb17eb46/MintTick-dev-synthetic-options-2026-11-16.apk",
+  "expiry_seconds": 2700,
+  "authorization": "USER_REQUESTED_DIRECT_APK_2026-11-16",
+  "attempt": 3
+}

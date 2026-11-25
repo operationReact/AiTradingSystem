@@ -1,0 +1,233 @@
+name: Mind live edge verification
+
+# Read-only. Runs on pushes to dev (the default branch is main, so dispatch
+# from the API is not available). It sends no trading calls and writes nothing.
+#
+# Security model verified in infra/minttick-domain/bootstrap-account-api.yml:
+# `ANY /api/customer/{proxy+}` is protected by the Cognito JWT authorizer at API
+# Gateway, so an anonymous request is refused (401) before the account proxy
+# routes it. Unknown customer routes therefore also return 401 anonymously. That
+# is deliberate, because it does not reveal which routes exist. A 404 for an
+# unknown route is only observable with a valid customer token.
+#
+# Authenticated checks need MINDTICK_VERIFY_CUSTOMER_TOKEN. Without it they are
+# reported as AUTHENTICATED_RUNTIME_NOT_VERIFIED, never as passed. The token is
+# never printed.
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      BASE: https://api.minttick.com
+    steps:
+      - name: Public readiness is healthy
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/actuator/health/readiness")"
+          test "$code" = 200 || { echo "FAIL readiness $code"; exit 1; }
+          echo "PASS readiness 200"
+
+      - name: Anonymous customer Mind routes are refused by the gateway (401)
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            local method="$1" path="$2" body="${3:-}" code
+            if [ -n "$body" ]; then
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" -H 'content-type: application/json' -d "$body" "$BASE$path")"
+            else
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" "$BASE$path")"
+            fi
+            if [ "$code" = 401 ]; then echo "PASS $method $path -> 401"; else echo "FAIL $method $path -> $code"; fail=1; fi
+          }
+          # Known protected routes.
+          check GET /api/customer/mind/v1/progress
+          check GET /api/customer/mind/v1/paper-portfolio
+          check GET /api/customer/mind/v1/paper-journal
+          check GET /api/customer/mind/v1/research-engines
+          check GET /api/customer/mind/v1/decision-history
+          check POST /api/customer/mind/v1/assistant/query '{"question":"status"}'
+          # Unknown and trade-like customer routes are refused identically, so route names are not disclosed.
+          check GET /api/customer/mind/v1/admin
+          check GET /api/customer/mind/v1/orders
+          exit $fail
+
+      - name: Check out the reviewed verification script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate read-only F&O runtime evidence parser with no network
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mind/check_fno_research_runtime.py scripts/mind/check_fno_capability_runtime.py scripts/mind/check_fno_market_snapshot.py scripts/mind/check_fno_flutter_market_contract.py
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_research_runtime.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_capability_runtime.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_market_snapshot.py' -v
+          python3 -m unittest discover -s scripts/mind -p 'test_check_fno_flutter_market_contract.py' -v
+          python3 -m py_compile scripts/mind/audit_fno_paper_runtime.py
+          python3 -m unittest discover -s scripts/mind -p 'test_audit_fno_paper_runtime.py' -v
+
+      - name: Authenticated Mind reads and denials (per-run token, never printed)
+        # The token is minted for this run only (Cognito access/ID tokens last 15 minutes). No long-lived
+        # JWT is stored. The owner provisions the test customer, the password secret and the client id
+        # variable (see docs). Missing pieces report AUTHENTICATED_RUNTIME_NOT_VERIFIED, never a pass.
+        env:
+          VERIFY_USERNAME: ${{ secrets.MINDTICK_VERIFY_USERNAME }}
+          VERIFY_PASSWORD: ${{ secrets.MINDTICK_VERIFY_PASSWORD }}
+          VERIFY_NEW_PASSWORD: ${{ secrets.MINDTICK_VERIFY_NEW_PASSWORD }}
+          VERIFY_CLIENT_ID: ${{ vars.MINDTICK_VERIFY_COGNITO_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "$VERIFY_USERNAME" ] || [ -z "$VERIFY_PASSWORD" ] || [ -z "$VERIFY_CLIENT_ID" ]; then
+            echo "AUTHENTICATED_RUNTIME_NOT_VERIFIED: the verification user, password secret or client id variable is not configured."
+            echo "::warning title=Mind authenticated verification::AUTHENTICATED_RUNTIME_NOT_VERIFIED. Owner provisioning is required."
+            {
+              echo "### Mind live verification"
+              echo "- Anonymous gateway refusal: checked in the previous step"
+              echo "- Authenticated reads and denials: AUTHENTICATED_RUNTIME_NOT_VERIFIED"
+              echo "- Deployed backend and account-edge revision: not verified by this workflow"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Mint a fresh ACCESS token for this run (token_use=access is what the edge and backend require).
+          # The password goes through a file, never argv or logs; the token is masked before use.
+          umask 077
+          printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
+          # The new-password secret is optional. It is used only if Cognito requires a password change.
+          printf '%s' "$VERIFY_NEW_PASSWORD" > "$RUNNER_TEMP/verify_new_password"
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password" "$RUNNER_TEMP/verify_token"
+          rm -f "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password"
+          token="$(cat "$RUNNER_TEMP/verify_token")"
+          rm -f "$RUNNER_TEMP/verify_token"
+          if [ -z "$token" ]; then
+            echo "FAIL: could not mint a verification token from Cognito for this run."
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token")
+          fail=0
+          # Provision the verification customer (idempotent). The backend requires a verified email
+          # and creates the CUSTOMER identity that the Mind routes need.
+          pcode="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST "${auth[@]}" "https://api.minttick.com/api/auth/cognito/provision")"
+          if [ "$pcode" = 200 ] || [ "$pcode" = 201 ]; then echo "PASS provision customer identity -> $pcode"; else echo "FAIL provision customer identity -> $pcode"; exit 1; fi
+          # Plain reads: each must return a JSON object.
+          for path in /api/customer/mind/v1/paper-portfolio /api/customer/mind/v1/paper-journal /api/customer/mind/v1/research-engines /api/customer/mind/v1/decision-history /api/customer/mind/v1/decision-outcomes; do
+            code="$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
+            if [ "$code" != 200 ] || ! python3 -c "import json;d=json.load(open('/tmp/body.json'));assert isinstance(d,dict)"; then
+              echo "FAIL authenticated $path -> $code"; fail=1; continue
+            fi
+            echo "PASS authenticated $path -> 200 JSON object"
+          done
+          # Progress contracts: the summary totals must be non-empty, an inventory page must fit the
+          # 131,072-byte edge cap, and one item detail must resolve. Checked by a reviewed script.
+          for path in /api/customer/mind/v1/progress "/api/customer/mind/v1/progress/inventory?offset=0&limit=50" /api/customer/mind/v1/progress/items/screen.coverage; do
+            code="$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
+            if [ "$code" != 200 ]; then echo "FAIL authenticated $path -> $code"; fail=1; continue; fi
+            if ! python3 scripts/mind/check_progress_contract.py "$path" /tmp/body.json; then echo "FAIL contract $path"; fail=1; continue; fi
+            echo "PASS authenticated $path -> 200 contract ok"
+          done
+          # Full inventory walk: every page below the edge cap, no duplicates or omissions, and
+          # summary percentages recomputed from the walked items. Prints counts and bytes only.
+          umask 077
+          printf '%s' "$token" > "$RUNNER_TEMP/verify_walk_token"
+          if python3 scripts/mind/walk_progress_inventory.py "https://api.minttick.com" "$RUNNER_TEMP/verify_walk_token" 313; then
+            echo "PASS authenticated full progress inventory walk"
+          else
+            echo "FAIL authenticated full progress inventory walk"; fail=1
+          fi
+          rm -f "$RUNNER_TEMP/verify_walk_token"
+          # One authenticated customer F&O research GET. This is a read-only
+          # status diagnosis; never return a quote, instrument, account, broker
+          # order or private body to GitHub logs. A 404 means NOT_DEPLOYED,
+          # not an F&O runtime pass. A blocked/no-trade result is not E2E proof.
+          umask 077
+          fno_file="$RUNNER_TEMP/mind_fno_research_runtime.json"
+          if fno_code="$(curl -sS -o "$fno_file" -w '%{http_code}' --max-time 20 \
+              "${auth[@]}" -H 'Accept: application/json' \
+              -H 'User-Agent: MintTick-Mind-FNO-ReadOnly/1.0' \
+              -H 'Cache-Control: no-store' \
+              "https://api.minttick.com/api/customer/mind/v1/fno-evaluation")"; then
+            if ! python3 scripts/mind/check_fno_research_runtime.py "$fno_code" "$fno_file"; then
+              echo "FAIL authenticated F&O research runtime contract"; fail=1
+            fi
+          else
+            echo "MIND_FNO_RESEARCH_RUNTIME:route=TRANSPORT_UNAVAILABLE;execution=false"
+            fail=1
+          fi
+          rm -f "$fno_file"
+          # Audit one nearest real listed expiry using a customer-only GET.
+          # No hardcoded expiry, no quote/contract/user data is copied to logs.
+          # This reveals the count of retained last trades separately from V2
+          # chain LTP indicators, without treating either as an executable order.
+          fno_nearest_expiry=""
+          # Probe customer F&O capability and listed expiry readiness even
+          # after market close. Each authenticated GET returns only a sanitized
+          # flags/counters receipt; no raw provider/quote/customer data leaves
+          # this job. Does not change market data rights or trading flags.
+          for kind in capability expiries; do
+            fno_body="$RUNNER_TEMP/mind_fno_${kind}_runtime.json"
+            if fno_status="$(curl -sS -o "$fno_body" -w '%{http_code}' --max-time 20 \
+                "${auth[@]}" -H 'Accept: application/json' \
+                -H 'User-Agent: MintTick-Mind-FNO-ReadOnly/1.0' \
+                -H 'Cache-Control: no-store' \
+                "https://api.minttick.com/api/customer/markets/fno/$kind")"; then
+              if ! python3 scripts/mind/check_fno_capability_runtime.py "$kind" "$fno_status" "$fno_body"; then
+                echo "FAIL authenticated F&O $kind contract"; fail=1
+              fi
+            else
+              echo "MIND_FNO_DIAG:TRANSPORT_UNAVAILABLE"
+              fail=1
+            fi
+            if [ "$kind" = "expiries" ] && [ "${fno_status:-0}" = 200 ]; then
+              fno_nearest_expiry="$(python3 scripts/mind/check_fno_market_snapshot.py expiry "$fno_body")" || fno_nearest_expiry=""
+            fi
+            rm -f "$fno_body"
+          done
+          if [ -n "$fno_nearest_expiry" ]; then
+            market_file="$RUNNER_TEMP/mind_fno_market_snapshot.json"
+            if market_code="$(curl -sS -o "$market_file" -w '%{http_code}' --max-time 30 \
+                "${auth[@]}" -H 'Accept: application/json' \
+                -H 'User-Agent: MintTick-Mind-FNO-ReadOnly/1.0' \
+                -H 'Cache-Control: no-store' \
+                "https://api.minttick.com/api/customer/markets/fno/market?expiry=$fno_nearest_expiry")"; then
+              if ! python3 scripts/mind/check_fno_market_snapshot.py market "$market_code" "$market_file"; then
+                echo "FAIL authenticated F&O market snapshot contract"; fail=1
+              fi
+              if [ "$market_code" = 200 ]; then
+                if ! python3 scripts/mind/check_fno_flutter_market_contract.py "$market_file"; then
+                  echo "FAIL Flutter market payload structural parity"; fail=1
+                fi
+              fi
+            else
+              echo "MIND_FNO_MARKET_SNAPSHOT:status=TRANSPORT_UNAVAILABLE;orders=false"
+              fail=1
+            fi
+            rm -f "$market_file"
+          else
+            echo "MIND_FNO_MARKET_SNAPSHOT:status=NO_VERIFIED_EXPIRY;orders=false"
+          fi
+          # PAPER runtime evidence for the existing verification customer only.
+          # GET-only. Never create/fund rooms, enable workers, place simulated
+          # orders, or treat this account's results as another owner's E2E.
+          umask 077
+          printf '%s' "$token" > "$RUNNER_TEMP/mind_fno_paper_verify_token"
+          if ! python3 scripts/mind/audit_fno_paper_runtime.py "$RUNNER_TEMP/mind_fno_paper_verify_token"; then
+            echo "FAIL protected read-only F&O PAPER runtime audit"
+            fail=1
+          fi
+          rm -f "$RUNNER_TEMP/mind_fno_paper_verify_token"
+          for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
+            if [ "$code" = 404 ]; then echo "PASS authenticated $path -> 404"; else echo "FAIL authenticated $path -> $code"; fail=1; fi
+          done
+          exit $fail

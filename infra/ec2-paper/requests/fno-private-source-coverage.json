@@ -1,0 +1,16 @@
+{
+  "kind": "minttick-owner-private-fno-source-coverage-v1",
+  "audit_revision": 2,
+  "operation": "metadata-replay-and-readonly-calendar-candidates",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "scope": "12-completed-nifty-expiry-months-daily",
+  "owner_permission_expires": "2026-11-28",
+  "max_provider_gets": 25,
+  "no_orders": true,
+  "no_redistribution": true,
+  "private_cache_read_only": true,
+  "no_market_price_export": true
+}
+

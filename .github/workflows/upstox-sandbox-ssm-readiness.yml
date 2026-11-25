@@ -1,0 +1,68 @@
+name: Upstox sandbox SSM role and parameter readiness (read-only)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-sandbox-ssm-readiness.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-sandbox-credential-read:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Assume dedicated sandbox reader IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-sandbox-ssm-check-${{ github.run_id }}
+      - name: Verify role, exact SecureString and decryption without printing token
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import json
+          import re
+          import subprocess
+
+          def aws(*args):
+              try:
+                  p = subprocess.run(
+                      ["aws", *args, "--region", "ap-south-1", "--output", "json",
+                       "--no-cli-pager"],
+                      capture_output=True, text=True, check=False, timeout=25)
+              except (OSError, subprocess.TimeoutExpired):
+                  raise RuntimeError("SANDBOX_AWS_CLI_UNAVAILABLE") from None
+              if p.returncode:
+                  # Do not reveal AWS response body or stderr, even on failure.
+                  raise RuntimeError("SANDBOX_AWS_ACCESS_DENIED_OR_UNAVAILABLE")
+              try:
+                  return json.loads(p.stdout)
+              except (ValueError, TypeError):
+                  raise RuntimeError("SANDBOX_AWS_RESPONSE_INVALID") from None
+
+          identity = aws("sts", "get-caller-identity")
+          expected = "arn:aws:sts::098859530205:assumed-role/minttick-upstox-sandbox-ssm-reader/"
+          if identity.get("Account") != "098859530205" or not str(identity.get("Arn", "")).startswith(expected):
+              raise RuntimeError("SANDBOX_UNEXPECTED_IAM_IDENTITY")
+          print("SANDBOX_IAM_ROLE:VERIFIED")
+
+          p = aws("ssm", "get-parameter", "--name",
+                  "/minttick/upstox/sandbox/access-token", "--with-decryption").get("Parameter")
+          if not isinstance(p, dict) or p.get("Name") != "/minttick/upstox/sandbox/access-token":
+              raise RuntimeError("SANDBOX_SSM_WRONG_PARAMETER")
+          if p.get("Type") != "SecureString":
+              raise RuntimeError("SANDBOX_SSM_NOT_SECURESTRING")
+          token = p.get("Value")
+          if not isinstance(token, str) or not re.fullmatch(r"[^\s]{20,4096}", token):
+              raise RuntimeError("SANDBOX_SSM_INVALID_TOKEN_FORMAT")
+          print("SANDBOX_SSM_SECURESTRING:READ_AND_DECRYPT_VERIFIED")
+          print("SANDBOX_BROKER_REQUESTS:ZERO")
+          PY

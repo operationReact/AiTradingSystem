@@ -1,0 +1,339 @@
+package in.aitradingsystem.provider.upstox;
+
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Small, bounded reader for Upstox MarketDataFeedV3.proto. Uses the official
+ * V3 protobuf field numbers, without an extra protoc toolchain/runtime dependency.
+ * Decodes F&O LTPC, last traded quantity, first depth with real quantities,
+ * live volume, OI, IV and Greeks. Never decodes JSON ticks.
+ * Unknown protobuf fields are safely skipped for forward compatibility.
+ */
+final class UpstoxFnoV3FeedCodec {
+    private static final int MAX_FRAME_BYTES = 1024 * 1024;
+    // One initial full V3 batch can include >128 contracts at the expanded cap.
+    private static final int MAX_FEEDS = 2048;
+
+    record Tick(String instrumentKey, Instant tradedAt, Instant feedAt,
+                BigDecimal ltp, BigDecimal bid, BigDecimal ask, Long openInterest,
+                BigDecimal iv, BigDecimal delta, BigDecimal theta,
+                BigDecimal gamma, BigDecimal vega, BigDecimal previousClose,
+                Long volume, Long bidQuantity, Long askQuantity,
+                Long lastTradedQuantity) {
+        // Existing test constructor remains source-compatible; absent
+        // V3 fields are UNKNOWN, never a fabricated zero.
+        Tick(String key, Instant tradedAt, Instant feedAt,
+                BigDecimal ltp, BigDecimal bid, BigDecimal ask, Long oi,
+                BigDecimal iv, BigDecimal delta, BigDecimal theta,
+                BigDecimal gamma, BigDecimal vega, BigDecimal previousClose) {
+            this(key, tradedAt, feedAt, ltp, bid, ask, oi,
+                    iv, delta, theta, gamma, vega, previousClose,
+                    null, null, null, null);
+        }
+    }
+
+    record FeedFrame(Instant feedAt, List<Tick> ticks) {}
+
+    private UpstoxFnoV3FeedCodec() {}
+
+    /** Default subscription never authorizes a non-F&O key. */
+    static byte[] subscription(String method, String mode, List<String> keys) {
+        return subscription(method, mode, keys, java.util.Set.of());
+    }
+
+    /**
+     * Explicitly permit only spot keys already verified by the operator's
+     * futures-pair registry. The allowed spot set must be a subset of the
+     * exact subscription plan; this does not grant display or execution rights.
+     * Upstox V3 subscription commands are binary UTF-8 JSON, not text frames.
+     */
+    static byte[] subscription(String method, String mode, List<String> keys,
+                               java.util.Set<String> verifiedSpotKeys) {
+        if (!("sub".equals(method) || "unsub".equals(method)
+                || "change_mode".equals(method))
+                || !("full".equals(mode) || "ltpc".equals(mode)
+                || "option_greeks".equals(mode))
+                || keys == null || keys.isEmpty() || keys.size() > 64
+                || verifiedSpotKeys == null
+                || verifiedSpotKeys.stream().anyMatch(k -> !validSpotKey(k))
+                || !keys.containsAll(verifiedSpotKeys)
+                || keys.stream().anyMatch(k -> !validKey(k)
+                    && !(validSpotKey(k) && verifiedSpotKeys.contains(k)))
+                || keys.stream().distinct().count() != keys.size()) {
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_SUBSCRIPTION");
+        }
+        StringBuilder out = new StringBuilder(256 + keys.size() * 30);
+        out.append("{\"guid\":\"").append(UUID.randomUUID())
+                .append("\",\"method\":\"").append(method)
+                .append("\",\"data\":{\"mode\":\"").append(mode)
+                .append("\",\"instrumentKeys\":[");
+        for (int i = 0; i < keys.size(); i++) {
+            if (i != 0) out.append(',');
+            // Keys are strictly alphanumeric/dash/underscore with FO prefix.
+            out.append('"').append(keys.get(i)).append('"');
+        }
+        return out.append("]}}").toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    static boolean validKey(String key) {
+        return key != null && key.matches("(NSE_FO|BSE_FO)\\|[A-Za-z0-9._-]{1,64}");
+    }
+
+    /** NSE equity spot key by ISIN. Accepted only when explicitly subscribed as a verified spot leg. */
+    static boolean validSpotKey(String key) {
+        return key != null && key.matches("NSE_EQ\\|IN[A-Z0-9]{10}");
+    }
+
+    static FeedFrame decode(byte[] bytes) {
+        return decode(bytes, java.util.Set.of());
+    }
+
+    /**
+     * Decodes ticks for derivative keys, plus equity spot keys ONLY when explicitly allowed
+     * by the caller (a verified, currently subscribed spot leg). Other equity frames are dropped.
+     */
+    static FeedFrame decode(byte[] bytes, java.util.Set<String> explicitSpotKeys) {
+        if (bytes == null || bytes.length == 0 || bytes.length > MAX_FRAME_BYTES) {
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_BINARY_FEED");
+        }
+        try {
+            Wire root = new Wire(ByteBuffer.wrap(bytes));
+            Instant feedAt = null;
+            List<KeyFeed> keyed = new ArrayList<>();
+            while (root.more()) {
+                int tag = root.tag();
+                switch (tag >>> 3) {
+                    case 2 -> {
+                        if ((tag & 7) != 2 || keyed.size() >= MAX_FEEDS)
+                            throw new IllegalArgumentException();
+                        keyed.add(parseMap(root.message()));
+                    }
+                    case 3 -> {
+                        if ((tag & 7) != 0) throw new IllegalArgumentException();
+                        feedAt = epochMillis(root.varint());
+                    }
+                    default -> root.skip(tag);
+                }
+            }
+            List<Tick> ticks = new ArrayList<>();
+            for (KeyFeed f : keyed) {
+                if ((validKey(f.key) || (explicitSpotKeys.contains(f.key) && validSpotKey(f.key)))
+                        && f.quote != null) {
+                    Quote q = f.quote;
+                    ticks.add(new Tick(f.key, q.tradedAt, feedAt, q.ltp, q.bid, q.ask,
+                            q.oi, q.iv, q.delta, q.theta, q.gamma, q.vega, q.previousClose,
+                            q.volume, q.bidQuantity, q.askQuantity, q.lastTradedQuantity));
+                }
+            }
+            return new FeedFrame(feedAt, List.copyOf(ticks));
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_BINARY_FEED");
+        }
+    }
+
+    private record KeyFeed(String key, Quote quote) {}
+
+    private static KeyFeed parseMap(Wire w) {
+        String key = null;
+        Quote feed = null;
+        while (w.more()) {
+            int t = w.tag();
+            switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); key = w.string(); }
+                case 2 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); feed = parseFeed(w.message()); }
+                default -> w.skip(t);
+            }
+        }
+        return new KeyFeed(key, feed);
+    }
+
+    private static Quote parseFeed(Wire w) {
+        Quote quote = new Quote();
+        while (w.more()) {
+            int t = w.tag();
+            switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseLtpc(w.message(), quote); }
+                case 2 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseFullFeed(w.message(), quote); }
+                case 3 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseFirstLevel(w.message(), quote); }
+                default -> w.skip(t);
+            }
+        }
+        return quote;
+    }
+
+    private static void parseFullFeed(Wire w, Quote q) {
+        while (w.more()) {
+            int t = w.tag();
+            if ((t >>> 3) == 1 && (t & 7) == 2) parseMarketFull(w.message(), q);
+            else w.skip(t); // Index full feed is not an F&O contract.
+        }
+    }
+
+    private static void parseMarketFull(Wire w, Quote q) {
+        while (w.more()) {
+            int t = w.tag();
+            switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseLtpc(w.message(), q); }
+                case 2 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseDepth(w.message(), q); }
+                case 3 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseGreeks(w.message(), q); }
+                // MarketFullFeed.vtt = 6: actual provider-traded quantity today.
+                case 6 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.volume = nonnegativeCount(w.varint()); }
+                case 7 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.oi = nonnegativeLong(w.decimal()); }
+                case 8 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.iv = nonnegative(w.decimal()); }
+                default -> w.skip(t);
+            }
+        }
+    }
+
+    private static void parseFirstLevel(Wire w, Quote q) {
+        while (w.more()) {
+            int t = w.tag();
+            switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseLtpc(w.message(), q); }
+                case 2 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseTopQuote(w.message(), q); }
+                case 3 -> { if ((t & 7) != 2) throw new IllegalArgumentException(); parseGreeks(w.message(), q); }
+                // FirstLevelWithGreeks.vtt = 4; do not reuse the OI field.
+                case 4 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.volume = nonnegativeCount(w.varint()); }
+                case 5 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.oi = nonnegativeLong(w.decimal()); }
+                case 6 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.iv = nonnegative(w.decimal()); }
+                default -> w.skip(t);
+            }
+        }
+    }
+
+    private static void parseLtpc(Wire w, Quote q) {
+        while (w.more()) {
+            int t = w.tag();
+            switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.ltp = nonnegative(w.decimal()); }
+                case 2 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.tradedAt = epochMillis(w.varint()); }
+                // LTPC.ltq = 3: last trade size, distinct from total volume.
+                case 3 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.lastTradedQuantity = nonnegativeCount(w.varint()); }
+                case 4 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.previousClose = nonnegative(w.decimal()); }
+                default -> w.skip(t);
+            }
+        }
+    }
+
+    private static void parseDepth(Wire w, Quote q) {
+        // First market depth level only; parsing many levels is unnecessary.
+        boolean first = true;
+        while (w.more()) {
+            int t = w.tag();
+            if ((t >>> 3) == 1 && (t & 7) == 2) {
+                Wire quote = w.message();
+                if (first) parseTopQuote(quote, q);
+                first = false;
+            } else w.skip(t);
+        }
+    }
+
+    private static void parseTopQuote(Wire w, Quote q) {
+        while (w.more()) {
+            int t = w.tag();
+            switch (t >>> 3) {
+                case 1 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.bidQuantity = nonnegativeCount(w.varint()); }
+                case 2 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.bid = nonnegative(w.decimal()); }
+                case 3 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.askQuantity = nonnegativeCount(w.varint()); }
+                case 4 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.ask = nonnegative(w.decimal()); }
+                default -> w.skip(t);
+            }
+        }
+    }
+
+    private static void parseGreeks(Wire w, Quote q) {
+        while (w.more()) {
+            int t = w.tag();
+            if ((t & 7) == 1 && (t >>> 3) >= 1 && (t >>> 3) <= 5) {
+                BigDecimal value = w.decimal();
+                switch (t >>> 3) {
+                    case 1 -> q.delta = value;
+                    case 2 -> q.theta = value;
+                    case 3 -> q.gamma = value;
+                    case 4 -> q.vega = value;
+                    default -> { /* rho not used in initial pilot */ }
+                }
+            } else w.skip(t);
+        }
+    }
+
+    private static BigDecimal nonnegative(BigDecimal v) {
+        if (v.signum() < 0) throw new IllegalArgumentException();
+        return v;
+    }
+    private static long nonnegativeCount(long v) {
+        if (v < 0) throw new IllegalArgumentException();
+        return v;
+    }
+    private static Long nonnegativeLong(BigDecimal v) {
+        if (v.signum() < 0) throw new IllegalArgumentException();
+        return v.longValueExact();
+    }
+    private static Instant epochMillis(long value) {
+        if (value <= 0) return null; // Missing timestamp is never fresh.
+        return Instant.ofEpochMilli(value);
+    }
+
+    private static final class Quote {
+        Instant tradedAt;
+        BigDecimal ltp, bid, ask, iv, delta, theta, gamma, vega, previousClose;
+        Long oi, volume, bidQuantity, askQuantity, lastTradedQuantity;
+    }
+
+    /** Minimal protobuf wire cursor, length- and tag-bounded, with no reflection. */
+    private static final class Wire {
+        private final ByteBuffer b;
+        Wire(ByteBuffer b) { this.b = b.order(ByteOrder.LITTLE_ENDIAN); }
+        boolean more() { return b.hasRemaining(); }
+        int tag() {
+            long t = varint();
+            if (t == 0 || (t >>> 3) == 0 || t > Integer.MAX_VALUE)
+                throw new IllegalArgumentException();
+            return (int) t;
+        }
+        long varint() {
+            long out = 0;
+            for (int i = 0; i < 10; i++) {
+                int v = b.get() & 255;
+                if (i == 9 && v > 1) throw new IllegalArgumentException();
+                out |= (long) (v & 127) << (7 * i);
+                if ((v & 128) == 0) return out;
+            }
+            throw new IllegalArgumentException();
+        }
+        Wire message() {
+            long n = varint();
+            if (n < 0 || n > b.remaining()) throw new IllegalArgumentException();
+            ByteBuffer sub = b.slice().order(ByteOrder.LITTLE_ENDIAN);
+            sub.limit((int) n);
+            b.position(b.position() + (int) n);
+            return new Wire(sub);
+        }
+        String string() {
+            Wire v = message();
+            if (v.b.remaining() > 128) throw new IllegalArgumentException();
+            return StandardCharsets.UTF_8.decode(v.b).toString();
+        }
+        BigDecimal decimal() {
+            double v = b.getDouble();
+            if (!Double.isFinite(v)) throw new IllegalArgumentException();
+            return BigDecimal.valueOf(v);
+        }
+        void skip(int tag) {
+            switch (tag & 7) {
+                case 0 -> varint();
+                case 1 -> { if (b.remaining() < 8) throw new IllegalArgumentException(); b.position(b.position() + 8); }
+                case 2 -> message();
+                case 5 -> { if (b.remaining() < 4) throw new IllegalArgumentException(); b.position(b.position() + 4); }
+                default -> throw new IllegalArgumentException();
+            }
+        }
+    }
+}

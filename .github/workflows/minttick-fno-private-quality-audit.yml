@@ -1,0 +1,94 @@
+name: MintTick F&O Phase 2 - owner-private historical quality audit
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-quality-audit.yml'
+      - 'infra/ec2-paper/fno_private_history_audit.py'
+      - 'infra/ec2-paper/fno_private_quality_ops.py'
+      - 'scripts/tests/test_fno_private_history_audit.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-private-quality-audit.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate SQLite quality rules and AWS safety contract offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_private_history_audit.py infra/ec2-paper/fno_private_quality_ops.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_history_audit.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_private_history_audit.py').read_text()
+          ops=Path('infra/ec2-paper/fno_private_quality_ops.py').read_text()
+          for required in ('mode=ro','PRAGMA query_only=ON','PRAGMA quick_check',
+                           'duplicateCandles','invalidOrMissingOI',
+                           'doneMissingReceipt','outsideBatchWindow'):
+              assert required in src, required
+          for forbidden in ('get-parameter','with-decryption','placeOrder',
+                            'submitOrder','urlopen','requests.get'):
+              assert forbidden not in src
+          assert 'sha256sum -c -' in ops
+          assert 'raw.githubusercontent.com/operationReact/AiTradingSystem/' in ops
+          assert 'OWNER_APPROVED_FNO_PHASE2_AUDIT_2026_11_21' in ops
+          PY
+
+  audit:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact single-file owner-approved read-only audit request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-private-quality-audit.json'
+          python3 - <<'PY'
+          import sys,json
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_private_quality_ops import expected_request
+          p=Path('infra/ec2-paper/requests/fno-private-quality-audit.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())==expected_request()
+          PY
+      - name: Assume existing restricted AWS OIDC SSM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-phase2-audit
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Run pinned read-only audit and publish counters, not market data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_private_quality_ops.py runner
+
+# No provider requests, orders, broker credentials, instance changes,
+# raw market-data export, cache mutation or new cloud resources.

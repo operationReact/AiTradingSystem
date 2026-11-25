@@ -1,0 +1,606 @@
+package in.aitradingsystem.marketdata;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.provider.angelone.AngelOneQuoteDetailParser;
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
+import in.aitradingsystem.provider.angelone.CustomerAngelOneLiveQuoteService;
+import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
+import in.aitradingsystem.user.CustomerIdentityStore;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.server.ResponseStatusException;
+
+/** Market data uses the APPLICATION's protected feed, not a user's broker session. */
+class CustomerMarketDataControllerTest {
+    private static final String ISSUER =
+        "https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_test";
+    private final CustomerIdentityStore identities = mock(CustomerIdentityStore.class);
+    private final InstrumentMasterService catalogue = mock(InstrumentMasterService.class);
+    private final MarketDataProvider provider = mock(MarketDataProvider.class);
+    private final CustomerAngelOneSessionService customerBroker =
+        mock(CustomerAngelOneSessionService.class);
+    private final CustomerAngelOneLiveQuoteService personalSockets =
+        mock(CustomerAngelOneLiveQuoteService.class);
+    private final AppAngelOneMarketFeedService applicationFeed =
+        mock(AppAngelOneMarketFeedService.class);
+
+    private JwtAuthenticationToken principal(String subject) {
+        var jwt = Jwt.withTokenValue("signed-test-access")
+            .header("alg", "RS256").issuer(ISSUER).subject(subject)
+            .issuedAt(Instant.parse("2026-11-07T00:00:00Z"))
+            .expiresAt(Instant.parse("2026-11-08T00:00:00Z")).build();
+        when(identities.find("cognito", ISSUER, subject))
+            .thenReturn(Optional.of(new CustomerIdentityStore.CustomerAccount(
+                UUID.randomUUID(), "ACTIVE", "CUSTOMER",
+                "Test", "customer@example.invalid")));
+        return new JwtAuthenticationToken(jwt,
+            List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")));
+    }
+
+    private Instrument equity() {
+        return new Instrument(42L, "NSE_CM", "NSE", "99999", "TEST-EQ",
+            "Test", "EQ", null, null, 1,
+            new BigDecimal("0.05"), UUID.randomUUID());
+    }
+
+    private CustomerMarketDataController controller() {
+        return new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker,
+            personalSockets, applicationFeed);
+    }
+
+    @Test
+    void snapshotPricesOnlyVerifiedLiveRowsAndMarksMismatchesUnavailable() {
+        var customer = principal("independent-customer");
+        var live = equity();
+        var mismatched = new Instrument(43L, "NSE_CM", "NSE", "88888", "OTHER-EQ",
+            "Other", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(live);
+        when(catalogue.requireActiveInstrument(43L)).thenReturn(mismatched);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(live, mismatched))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                new BigDecimal("155.30"),
+                Instant.parse("2026-11-08T09:00:00Z"),
+                Instant.parse("2026-11-08T09:00:01Z"),
+                "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"),
+            new CustomerAngelOneLiveQuoteService.LiveQuote(999L, "NSE", "WRONG-EQ",
+                new BigDecimal("10.00"), null, null, "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2")));
+
+        var store = mock(MarketLastTickStore.class);
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+        var snapshot = controller.snapshot(customer, List.of(42L, 43L)).getBody();
+
+        assertThat(snapshot).isNotNull();
+        assertThat(snapshot.rows()).hasSize(2);
+        assertThat(snapshot.rows().get(0).status()).isEqualTo("LIVE");
+        assertThat(snapshot.rows().get(0).ltp()).isEqualByComparingTo("155.30");
+        assertThat(snapshot.rows().get(1).status()).isEqualTo("UNAVAILABLE");
+        assertThat(snapshot.rows().get(1).ltp()).isNull();
+        verify(store).recordLive(argThat(quotes -> quotes.size() == 1
+            && quotes.iterator().next().instrumentId() == 42L
+            && "ANGEL_ONE_SMARTAPI_WS_V2".equals(quotes.iterator().next().source())));
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void snapshotRejectsDuplicatesOversizeAndNonCashInstruments() {
+        var customer = principal("independent-customer");
+        var controller = controller();
+        assertThatThrownBy(() -> controller.snapshot(customer, List.of(42L, 42L)))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> controller.snapshot(customer,
+                java.util.stream.LongStream.rangeClosed(1, 31).boxed().toList()))
+            .isInstanceOf(ResponseStatusException.class);
+        var future = new Instrument(44L, "NSE_FO", "NFO", "77777", "TEST24NOVFUT",
+            "Test", "FUT", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(44L)).thenReturn(future);
+        assertThatThrownBy(() -> controller.snapshot(customer, List.of(44L)))
+            .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(applicationFeed);
+    }
+
+    @Test
+    void appFeedQuotesAreAvailableWithoutPersonalBrokerConnection() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.quote(instrument)).thenReturn(new BigDecimal("125.55"));
+
+        var response = controller().quote(customer, 42L).getBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.ltp()).isEqualByComparingTo("125.55");
+        assertThat(response.source()).isEqualTo("ANGEL_ONE_SMARTAPI_APP");
+        assertThat(response.tradingSymbol()).isEqualTo("TEST-EQ");
+        verify(applicationFeed).quote(instrument);
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void explicitlyTypedUnsuffixedBseEquityCanReceiveAnApplicationQuote() {
+        var customer = principal("verified-bse-customer");
+        var bse = new Instrument(62L, "BSE_CM", "BSE", "500325", "RELIANCE",
+            "Reliance", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(62L)).thenReturn(bse);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.quote(bse)).thenReturn(new BigDecimal("1500.55"));
+
+        var response = controller().quote(customer, 62L).getBody();
+        assertThat(response).isNotNull();
+        assertThat(response.exchange()).isEqualTo("BSE");
+        assertThat(response.tradingSymbol()).isEqualTo("RELIANCE");
+        assertThat(response.ltp()).isEqualByComparingTo("1500.55");
+        verify(applicationFeed).quote(bse);
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void rejectsUnverifiedBseRowsAndExplicitDerivativesDespiteEquityLookingSymbol() {
+        var customer = principal("verified-bse-customer");
+        var untyped = new Instrument(63L, "BSE_CM", "BSE", "500325", "RELIANCE",
+            "Reliance", null, null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        var derivative = new Instrument(64L, "NSE_CM", "NSE", "99999", "FAKE-EQ",
+            "Fake", "FUTSTK", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        var bseFund = new Instrument(65L, "BSE_CM", "BSE", "500326", "FUND-EQ",
+            "Fund", "MF", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(63L)).thenReturn(untyped);
+        when(catalogue.requireActiveInstrument(64L)).thenReturn(derivative);
+        when(catalogue.requireActiveInstrument(65L)).thenReturn(bseFund);
+        var api = controller();
+        assertThatThrownBy(() -> api.quote(customer, 63L))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> api.quote(customer, 64L))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> api.quote(customer, 65L))
+            .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(applicationFeed);
+    }
+
+    @Test
+    void detailQuoteUsesOnlyTheApplicationFeedAndReturnsOhlcWithProvenance() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.detail(instrument)).thenReturn(new AngelOneQuoteDetailParser.Detail(
+            new BigDecimal("125.55"), new BigDecimal("120.00"), new BigDecimal("126.00"),
+            new BigDecimal("119.50"), new BigDecimal("121.00"), 987654L,
+            Instant.parse("2026-11-08T09:00:00Z"), new BigDecimal("123.40"), new BigDecimal("150.00"),
+            new BigDecimal("100.10"), 500L, 450L,
+            List.of(new AngelOneQuoteDetailParser.DepthLevel(new BigDecimal("125.50"), 300L, 4L)),
+            List.of(new AngelOneQuoteDetailParser.DepthLevel(new BigDecimal("125.60"), 200L, 2L))));
+
+        var response = controller().quoteDetail(customer, 42L).getBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.ltp()).isEqualByComparingTo("125.55");
+        assertThat(response.open()).isEqualByComparingTo("120.00");
+        assertThat(response.high()).isEqualByComparingTo("126.00");
+        assertThat(response.low()).isEqualByComparingTo("119.50");
+        assertThat(response.previousClose()).isEqualByComparingTo("121.00");
+        assertThat(response.volume()).isEqualTo(987654L);
+        assertThat(response.exchangeAt()).isEqualTo(Instant.parse("2026-11-08T09:00:00Z"));
+        assertThat(response.source()).isEqualTo("ANGEL_ONE_SMARTAPI_FULL_APP");
+        assertThat(response.averagePrice()).isEqualByComparingTo("123.40");
+        assertThat(response.week52High()).isEqualByComparingTo("150.00");
+        assertThat(response.week52Low()).isEqualByComparingTo("100.10");
+        assertThat(response.totalBuyQuantity()).isEqualTo(500L);
+        assertThat(response.bids()).hasSize(1);
+        assertThat(response.asks().get(0).price()).isEqualByComparingTo("125.60");
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void verifiedNsePostAuctionBrokerFullQuoteIsSavedWithoutCallingItLiveOrOfficialClose() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketDetailSnapshotStore.class);
+        var postCas = java.time.LocalDate.of(2026, 11, 11);
+        var zone = java.time.ZoneId.of("Asia/Kolkata");
+        var exchangeAt = postCas.atTime(15, 34).atZone(zone).toInstant();
+        when(calendar.session(postCas)).thenReturn(new MarketSession(postCas,
+            postCas.atTime(9, 15).atZone(zone), postCas.atTime(15, 30).atZone(zone), true));
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.detail(instrument)).thenReturn(new AngelOneQuoteDetailParser.Detail(
+            new BigDecimal("1335.40"), new BigDecimal("1333.50"),
+            new BigDecimal("1349.40"), new BigDecimal("1327.00"),
+            new BigDecimal("1324.40"), 10000L, exchangeAt,
+            null, null, null, 0L, 0L, List.of(), List.of()));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed,
+            null, null, store, calendar);
+
+        var result = controller.quoteDetail(customer, 42L).getBody();
+        assertThat(result.ltp()).isEqualByComparingTo("1335.40");
+        assertThat(result.high()).isEqualByComparingTo("1349.40");
+        assertThat(result.exchangeAt()).isEqualTo(exchangeAt);
+        assertThat(result.source()).isEqualTo("ANGEL_ONE_SMARTAPI_FULL_APP");
+        assertThat(result.status()).isEqualTo("ON_DEMAND");
+        verify(store).save(argThat(d -> d.exchangeAt().equals(exchangeAt)));
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void detailQuoteIsUnavailableWithoutApplicationFeedAndNeverFallsBackToBroker() {
+        var customer = principal("independent-customer");
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(equity());
+        when(applicationFeed.available()).thenReturn(false);
+
+        assertThatThrownBy(() -> controller().quoteDetail(customer, 42L))
+            .isInstanceOfSatisfying(ResponseStatusException.class,
+                ex -> assertThat(ex.getStatusCode().value()).isEqualTo(503));
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void livePriceComesFromTheSameApplicationFeedNotBrokerSession() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.live(instrument)).thenReturn(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                new BigDecimal("155.30"),
+                Instant.parse("2026-11-08T09:00:00Z"),
+                Instant.parse("2026-11-08T09:00:01Z"),
+                "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"));
+
+        var response = controller().quote(customer, 42L, true).getBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.status()).isEqualTo("LIVE");
+        assertThat(response.ltp()).isEqualByComparingTo("155.30");
+        assertThat(response.source()).isEqualTo("ANGEL_ONE_SMARTAPI_WS_V2");
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void closedMarketDoesNotInventLivePrices() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.live(instrument)).thenReturn(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null));
+        var response = controller().quote(customer, 42L, true).getBody();
+        assertThat(response.status()).isEqualTo("MARKET_CLOSED");
+        assertThat(response.ltp()).isNull();
+        assertThat(response.exchangeAt()).isNull();
+        verifyNoInteractions(customerBroker, personalSockets);
+    }
+
+    @Test
+    void closedMarketShowsStoredLastTickAsLastCloseWithChangeOnlyWhenPreviousCloseKnown() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var exchangeAt = Instant.parse("2026-11-06T10:00:00Z");
+        var store = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(instrument))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null)));
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("100.00"), new BigDecimal("98.00"), exchangeAt)));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("100.00");
+        assertThat(row.exchangeAt()).isEqualTo(exchangeAt);
+        assertThat(row.source()).isEqualTo("STORED_LAST_LIVE_TICK");
+        assertThat(row.changePercent()).isEqualByComparingTo("2.0408");
+
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("100.00"), null, exchangeAt)));
+        var firstSession = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(firstSession.status()).isEqualTo("LAST_CLOSE");
+        assertThat(firstSession.changePercent()).isNull();
+        verifyNoInteractions(customerBroker, personalSockets);
+    }
+
+    @Test
+    void failedApplicationSessionReturnsVerifiedStoredRowsRatherThanFailingThePage() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var store = mock(MarketLastTickStore.class);
+        var tickAt = Instant.parse("2026-11-09T09:50:00Z");
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(instrument)))
+            .thenThrow(new IllegalStateException("provider session expired"));
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("126.20"),
+                new BigDecimal("125.00"), tickAt)));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+        assertThat(row.exchangeAt()).isEqualTo(tickAt);
+        assertThat(row.source()).isEqualTo("STORED_LAST_LIVE_TICK");
+        verify(store, never()).recordLive(any());
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void failedApplicationSessionWithoutSavedDataRemainsUnavailableNotFakeLive() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var store = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(instrument)))
+            .thenThrow(new IllegalStateException("provider session expired"));
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of());
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+        assertThat(row.exchangeAt()).isNull();
+        verify(store, never()).recordLive(any());
+    }
+
+    private CustomerMarketDataController.DetailQuote verifiedSavedDetail(String symbol) {
+        Instant exchangeAt = Instant.parse("2026-11-09T09:58:00Z");
+        return new CustomerMarketDataController.DetailQuote(42L, "NSE", symbol,
+            new BigDecimal("126.20"), new BigDecimal("123.00"),
+            new BigDecimal("127.00"), new BigDecimal("122.00"),
+            new BigDecimal("125.00"), 12400L, exchangeAt,
+            exchangeAt.plusSeconds(4), "ANGEL_ONE_SMARTAPI_FULL_APP",
+            "ON_DEMAND", new BigDecimal("125.40"),
+            new BigDecimal("148.00"), new BigDecimal("87.00"),
+            1000L, 800L, List.of(), List.of());
+    }
+
+    @Test
+    void exploreUsesPreviouslyVerifiedDetailWhenNoLiveTickWasEverSaved() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var detail = mock(MarketDetailSnapshotStore.class);
+        var ticks = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null)));
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of());
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, ticks, detail);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+        assertThat(row.source()).isEqualTo("STORED_LAST_DETAIL");
+        assertThat(row.changePercent()).isEqualByComparingTo("0.9600");
+        assertThat(row.exchangeAt()).isEqualTo(Instant.parse("2026-11-09T09:58:00Z"));
+        verify(ticks, never()).recordLive(any());
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void brokerOutageUsesSavedFullDetailEvenIfTickTableIsMissing() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var detail = mock(MarketDetailSnapshotStore.class);
+        var ticks = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenThrow(new IllegalStateException("reconnect"));
+        when(ticks.lastFor(List.of(42L))).thenThrow(
+            new org.springframework.dao.DataRetrievalFailureException("cache table not migrated"));
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, ticks, detail);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.source()).isEqualTo("STORED_LAST_DETAIL");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+    }
+
+    @Test
+    void savedMarketPriceUsesNewestExchangeEventAcrossWebSocketAndFullQuote() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var details = mock(MarketDetailSnapshotStore.class);
+        var ticks = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null)));
+        when(details.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed,
+            null, ticks, details);
+
+        // A later FULL quote supersedes an earlier, disconnected WS tick.
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("123.20"), null,
+                Instant.parse("2026-11-09T09:30:00Z"))));
+        var newerFull = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(newerFull.ltp()).isEqualByComparingTo("126.20");
+        assertThat(newerFull.source()).isEqualTo("STORED_LAST_DETAIL");
+        assertThat(newerFull.exchangeAt()).isEqualTo(Instant.parse("2026-11-09T09:58:00Z"));
+        assertThat(newerFull.status()).isEqualTo("LAST_CLOSE");
+
+        // If the WS tick really is newer, do not replace it with old FULL stats.
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("128.40"), null,
+                Instant.parse("2026-11-09T10:02:00Z"))));
+        var newerTick = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(newerTick.ltp()).isEqualByComparingTo("128.40");
+        assertThat(newerTick.source()).isEqualTo("STORED_LAST_LIVE_TICK");
+        assertThat(newerTick.exchangeAt()).isEqualTo(Instant.parse("2026-11-09T10:02:00Z"));
+
+        // The same ordering is required when the application feed is unavailable.
+        when(applicationFeed.available()).thenReturn(false);
+        var offline = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(offline.ltp()).isEqualByComparingTo("128.40");
+        assertThat(offline.status()).isEqualTo("LAST_CLOSE");
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void cachedDetailCannotCrossInstrumentIdentityOrRepairSpoofedProviderReply() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var detail = mock(MarketDetailSnapshotStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("WRONG-EQ")));
+        when(applicationFeed.available()).thenReturn(false);
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, null, detail);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(999L, "NSE", "WRONG-EQ",
+                new BigDecimal("9999"), null, null, "LIVE", "UNKNOWN")));
+        row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+    }
+
+    @Test
+    void savedEquityFallbackRejectsInvalidHolidayEventTimeButRetainsVerifiedSessionQuote() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var calendar = mock(MarketSessionCalendar.class);
+        var ticks = mock(MarketLastTickStore.class);
+        var details = mock(MarketDetailSnapshotStore.class);
+        var holiday = Instant.parse("2026-11-10T09:50:00Z");
+        var monday = Instant.parse("2026-11-09T09:58:00Z");
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(false);
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("999.00"), null, holiday)));
+        when(details.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        when(calendar.isInsideCashSession(holiday)).thenReturn(false);
+        when(calendar.isInsideCashSession(monday)).thenReturn(true);
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed,
+            null, ticks, details, calendar);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+        assertThat(row.exchangeAt()).isEqualTo(monday);
+        assertThat(row.source()).isEqualTo("STORED_LAST_DETAIL");
+
+        when(calendar.isInsideCashSession(monday)).thenReturn(false);
+        row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+    }
+
+    @Test
+    void spoofedTickOrSourceIsRejectedRatherThanRenderedLive() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.live(instrument)).thenReturn(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(999L, "BSE", "OTHER-EQ",
+                new BigDecimal("999.00"),
+                Instant.parse("2026-11-08T09:00:00Z"),
+                Instant.parse("2026-11-08T09:00:01Z"),
+                "LIVE", "SIMULATED"));
+        assertThatThrownBy(() -> controller().quote(customer, 42L, true))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void unsupportedInstrumentIsRejectedBeforeAnyProviderCall() {
+        var customer = principal("independent-customer");
+        var derivative = new Instrument(51L, "NFO", "NFO", "99999", "TEST-FUT",
+            "Test", "FUT", null, null, 1,
+            new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(51L)).thenReturn(derivative);
+        assertThatThrownBy(() -> controller().quote(customer, 51L))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verifyNoInteractions(applicationFeed, personalSockets, customerBroker, provider);
+    }
+
+    @Test
+    void lambdaApplicationFeedCanProvideOnDemandQuotesWithoutUserBroker() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(false);
+        when(provider.lastTradedPrice(instrument)).thenReturn(new BigDecimal("88.90"));
+        when(provider.source()).thenReturn("ANGEL_ONE_SMARTAPI");
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE_LAMBDA", customerBroker, personalSockets, applicationFeed);
+        var quote = controller.quote(customer, 42L).getBody();
+        assertThat(quote.ltp()).isEqualByComparingTo("88.90");
+        verifyNoInteractions(customerBroker, personalSockets);
+    }
+
+    @Test
+    void missingApplicationFeedIs503NotDemandToConnectPersonalBroker() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(false);
+        assertThatThrownBy(() -> controller().quote(customer, 42L))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        assertThatThrownBy(() -> controller().quote(customer, 42L, true))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        verifyNoInteractions(customerBroker, personalSockets);
+    }
+
+    @Test
+    void providerAndBrokerFailuresMapToTypedProblemsNotInternalServerError() {
+        var rateLimited = controller().providerFailure(new in.aitradingsystem.provider.angelone
+            .AngelOneException(in.aitradingsystem.provider.angelone.AngelOneException.Kind.RATE_LIMITED,
+                "RATE_LIMITED", "upstream detail must not leak"));
+        assertThat(rateLimited.getStatus()).isEqualTo(429);
+        assertThat(rateLimited.getProperties()).containsEntry("code", "PROVIDER_RATE_LIMITED");
+        assertThat(rateLimited.getDetail()).doesNotContain("upstream detail");
+
+        var brokerRequired = controller().brokerConnectionRequired();
+        assertThat(brokerRequired.getStatus()).isEqualTo(503);
+        assertThat(brokerRequired.getProperties()).containsEntry("code", "BROKER_CONNECTION_REQUIRED");
+    }
+}

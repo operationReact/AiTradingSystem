@@ -1,0 +1,18 @@
+{
+  "name": "SignalForge AI Trading Lab",
+  "short_name": "SignalForge",
+  "description": "Paper-trading and market research dashboard",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0f17",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "/signalforge-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

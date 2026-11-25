@@ -1,0 +1,13 @@
+You are the principal product architect, Flutter UI/UX architect, Spring Boot staff engineer, PostgreSQL/Flyway architect, security reviewer and test lead for MintTick.
+
+TASK: Implement MintTick authenticated Home V2 end to end from the complete project specification at docs/home/MintTick_Home_V2_Full_Technical_Design_for_Copilot.md, using the screenshot at docs/home/MintTick_Home_Approved_Visual_Reference.png as the approved VISUAL REFERENCE ONLY. This is a new Home as a USER WORKSPACE command center, not a copy of the Markets dashboard.
+
+FIRST: Audit the latest dev codebase and create a current-vs-required gap matrix. Pay special attention to existing Cognito user identity, modes, Trading Room drafts and funded Paper wallets, execution-readiness blockers, personal brokers vs app-managed market feed, and existing Flutter theme/navigation. Reconcile any code changes newer than the baseline in the spec.
+
+THEN: Implement every section described in the spec: header, greeting, Paper/Live switcher, truthful workspace KPIs, quick actions, Trading Rooms, MintTick Mind, attention items, learning, notifications, watchlists and bottom navigation. Create real backend/API/schema support where necessary, but do not invent financial metrics or suggest active execution when the current engine blocks it. Paper and Live must remain isolated; brokerage account setup must not gate Markets data.
+
+ENGINEERING: Build a secure, owner-scoped read-only Home BFF, typed Flutter clients/models and responsive native widgets. Follow the spec's phased PR sequence with appropriate JUnit/Testcontainers, Flutter widget/golden tests, accessibility, performance, feature flags and rollback. Use official near-black MintTick visual tokens. Never hardcode the mock user's data, displayed P&L, risk scores, AI claims or course content. Unavailable values need explicit neutral states.
+
+WORKFLOW: Implement in small feature branches and PRs targeting dev, maintain passing CI, and show the code, tests and screenshots at each phase. Do not modify existing execution permissions or silently start a stopped EC2 instance. Complete frontend AND backend functionality, with a final acceptance matrix proving each section's real data source, CTA/navigation and safety gates.
+
+Begin with Phase 0 audit and Phase 1 backend Home snapshot + frontend data contract. Continue sequentially using the spec as the definition of done.

@@ -1,0 +1,921 @@
+[
+  {
+    "id": "P00-PR01",
+    "title": "Correlation/error normalization",
+    "workItems": [
+      "P00-W01"
+    ]
+  },
+  {
+    "id": "P00-PR02",
+    "title": "CI contract",
+    "workItems": [
+      "P00-W02"
+    ]
+  },
+  {
+    "id": "P01-PR01",
+    "title": "Shared market session/calendar service",
+    "workItems": [
+      "P01-W01"
+    ]
+  },
+  {
+    "id": "P01-PR02",
+    "title": "Candle quality and gap detection",
+    "workItems": [
+      "P01-W02"
+    ]
+  },
+  {
+    "id": "P01-PR03",
+    "title": "Backfill reconciliation",
+    "workItems": [
+      "P01-W03"
+    ]
+  },
+  {
+    "id": "P01-PR04",
+    "title": "Angel One throttling/provider metrics",
+    "workItems": [
+      "P01-W04"
+    ]
+  },
+  {
+    "id": "P01-PR05",
+    "title": "UI market-data operations",
+    "workItems": [
+      "P01-W05"
+    ]
+  },
+  {
+    "id": "P02-PR01",
+    "title": "Strategy metadata registry",
+    "workItems": [
+      "P02-W01"
+    ]
+  },
+  {
+    "id": "P02-PR02",
+    "title": "Persisted strategy configuration/versioning",
+    "workItems": [
+      "P02-W02"
+    ]
+  },
+  {
+    "id": "P02-PR03",
+    "title": "Candidate identity/deduplication",
+    "workItems": [
+      "P02-W03"
+    ]
+  },
+  {
+    "id": "P02-PR04",
+    "title": "Strategy hardening",
+    "workItems": [
+      "P02-W04"
+    ]
+  },
+  {
+    "id": "P02-PR05",
+    "title": "Scanner runtime/performance",
+    "workItems": [
+      "P02-W05"
+    ]
+  },
+  {
+    "id": "P02-PR06",
+    "title": "Strategy/scanner APIs",
+    "workItems": [
+      "P02-W06"
+    ]
+  },
+  {
+    "id": "P02-PR07",
+    "title": "UI scanner foundation",
+    "workItems": [
+      "P02-W07"
+    ]
+  },
+  {
+    "id": "P03-PR01",
+    "title": "Strategy-neutral backtest SPI",
+    "workItems": [
+      "P03-W01"
+    ]
+  },
+  {
+    "id": "P03-PR02",
+    "title": "Provenance/metrics schema extension",
+    "workItems": [
+      "P03-W02"
+    ]
+  },
+  {
+    "id": "P03-PR03",
+    "title": "Walk-forward validation",
+    "workItems": [
+      "P03-W03"
+    ]
+  },
+  {
+    "id": "P03-PR04",
+    "title": "Leakage protections",
+    "workItems": [
+      "P03-W04"
+    ]
+  },
+  {
+    "id": "P03-PR05",
+    "title": "APIs",
+    "workItems": [
+      "P03-W05"
+    ]
+  },
+  {
+    "id": "P03-PR06",
+    "title": "UI",
+    "workItems": [
+      "P03-W06"
+    ]
+  },
+  {
+    "id": "P04-PR01",
+    "title": "Scenario persistence",
+    "workItems": [
+      "P04-W01"
+    ]
+  },
+  {
+    "id": "P04-PR02",
+    "title": "Regime model",
+    "workItems": [
+      "P04-W02"
+    ]
+  },
+  {
+    "id": "P04-PR03",
+    "title": "Session-safe block sampling",
+    "workItems": [
+      "P04-W03"
+    ]
+  },
+  {
+    "id": "P04-PR04",
+    "title": "Orchestration",
+    "workItems": [
+      "P04-W04"
+    ]
+  },
+  {
+    "id": "P04-PR05",
+    "title": "APIs",
+    "workItems": [
+      "P04-W05"
+    ]
+  },
+  {
+    "id": "P04-PR06",
+    "title": "Tests",
+    "workItems": [
+      "P04-W06"
+    ]
+  },
+  {
+    "id": "P04-PR07",
+    "title": "UI contract (implemented visually in Phase 9)",
+    "workItems": [
+      "P04-W07"
+    ]
+  },
+  {
+    "id": "P05-PR01",
+    "title": "Risk V2 domain + parity scaffolding",
+    "workItems": [
+      "P05-W06",
+      "P05-W11",
+      "P05-W29",
+      "P05-W30",
+      "P05-W54",
+      "P05-W55",
+      "P05-W56"
+    ]
+  },
+  {
+    "id": "P05-PR02",
+    "title": "Persisted policy configuration",
+    "workItems": [
+      "P05-W02",
+      "P05-W07",
+      "P05-W08",
+      "P05-W33",
+      "P05-W34",
+      "P05-W51",
+      "P05-W63",
+      "P05-W64"
+    ]
+  },
+  {
+    "id": "P05-PR03",
+    "title": "Existing-rule extraction",
+    "workItems": [
+      "P05-W01",
+      "P05-W12",
+      "P05-W14",
+      "P05-W17",
+      "P05-W19",
+      "P05-W20",
+      "P05-W22",
+      "P05-W23",
+      "P05-W24",
+      "P05-W40"
+    ]
+  },
+  {
+    "id": "P05-PR04",
+    "title": "New day-trader-derived/production rules",
+    "workItems": [
+      "P05-W13",
+      "P05-W15",
+      "P05-W16",
+      "P05-W18",
+      "P05-W21",
+      "P05-W25",
+      "P05-W26",
+      "P05-W27",
+      "P05-W28",
+      "P05-W65",
+      "P05-W66"
+    ]
+  },
+  {
+    "id": "P05-PR05",
+    "title": "Decision persistence V2",
+    "workItems": [
+      "P05-W09",
+      "P05-W10",
+      "P05-W37",
+      "P05-W41",
+      "P05-W50",
+      "P05-W52",
+      "P05-W57"
+    ]
+  },
+  {
+    "id": "P05-PR06",
+    "title": "RiskContextFactory + PAPER path switch",
+    "workItems": [
+      "P05-W04",
+      "P05-W31",
+      "P05-W32",
+      "P05-W42",
+      "P05-W43",
+      "P05-W58",
+      "P05-W62"
+    ]
+  },
+  {
+    "id": "P05-PR07",
+    "title": "Position sizing",
+    "workItems": [
+      "P05-W03",
+      "P05-W35",
+      "P05-W38"
+    ]
+  },
+  {
+    "id": "P05-PR08",
+    "title": "Risk UI shared model",
+    "workItems": [
+      "P05-W05",
+      "P05-W36",
+      "P05-W39",
+      "P05-W44",
+      "P05-W45"
+    ]
+  },
+  {
+    "id": "P05-PR09",
+    "title": "Dual-design risk composition",
+    "workItems": [
+      "P05-W47",
+      "P05-W48",
+      "P05-W49",
+      "P05-W60"
+    ]
+  },
+  {
+    "id": "P05-PR10",
+    "title": "Observability + final hardening",
+    "workItems": [
+      "P05-W53",
+      "P05-W59",
+      "P05-W61"
+    ]
+  },
+  {
+    "id": "P06-PR01",
+    "title": "Explicit order model",
+    "workItems": [
+      "P06-W01"
+    ]
+  },
+  {
+    "id": "P06-PR02",
+    "title": "Partial-fill-safe fill schema",
+    "workItems": [
+      "P06-W02"
+    ]
+  },
+  {
+    "id": "P06-PR03",
+    "title": "Position model",
+    "workItems": [
+      "P06-W03"
+    ]
+  },
+  {
+    "id": "P06-PR04",
+    "title": "Portfolio snapshots",
+    "workItems": [
+      "P06-W04"
+    ]
+  },
+  {
+    "id": "P06-PR05",
+    "title": "Reconciliation",
+    "workItems": [
+      "P06-W05"
+    ]
+  },
+  {
+    "id": "P06-PR06",
+    "title": "Intraday end-of-session behavior",
+    "workItems": [
+      "P06-W06"
+    ]
+  },
+  {
+    "id": "P06-PR07",
+    "title": "Service decomposition",
+    "workItems": [
+      "P06-W07"
+    ]
+  },
+  {
+    "id": "P06-PR08",
+    "title": "APIs",
+    "workItems": [
+      "P06-W08"
+    ]
+  },
+  {
+    "id": "P06-PR09",
+    "title": "UI",
+    "workItems": [
+      "P06-W09"
+    ]
+  },
+  {
+    "id": "P07-PR01",
+    "title": "Execution policy schema",
+    "workItems": [
+      "P07-W01"
+    ]
+  },
+  {
+    "id": "P07-PR02",
+    "title": "Approval schema",
+    "workItems": [
+      "P07-W02"
+    ]
+  },
+  {
+    "id": "P07-PR03",
+    "title": "Policy evaluator",
+    "workItems": [
+      "P07-W03"
+    ]
+  },
+  {
+    "id": "P07-PR04",
+    "title": "Pre-execution revalidation",
+    "workItems": [
+      "P07-W04"
+    ]
+  },
+  {
+    "id": "P07-PR05",
+    "title": "Concurrency",
+    "workItems": [
+      "P07-W05"
+    ]
+  },
+  {
+    "id": "P07-PR06",
+    "title": "APIs",
+    "workItems": [
+      "P07-W06"
+    ]
+  },
+  {
+    "id": "P07-PR07",
+    "title": "UI",
+    "workItems": [
+      "P07-W07"
+    ]
+  },
+  {
+    "id": "P08-PR01",
+    "title": "Daily performance materialization",
+    "workItems": [
+      "P08-W01"
+    ]
+  },
+  {
+    "id": "P08-PR02",
+    "title": "Analytics services",
+    "workItems": [
+      "P08-W02"
+    ]
+  },
+  {
+    "id": "P08-PR03",
+    "title": "Notification model",
+    "workItems": [
+      "P08-W03"
+    ]
+  },
+  {
+    "id": "P08-PR04",
+    "title": "Operational health aggregation",
+    "workItems": [
+      "P08-W04"
+    ]
+  },
+  {
+    "id": "P08-PR05",
+    "title": "Audit search",
+    "workItems": [
+      "P08-W05"
+    ]
+  },
+  {
+    "id": "P08-PR06",
+    "title": "APIs/UI contracts",
+    "workItems": [
+      "P08-W06"
+    ]
+  },
+  {
+    "id": "P09-PR01",
+    "title": "Frontend architecture refactor",
+    "workItems": [
+      "P09-W01"
+    ]
+  },
+  {
+    "id": "P09-PR02",
+    "title": "Design tokens",
+    "workItems": [
+      "P09-W02"
+    ]
+  },
+  {
+    "id": "P09-PR03",
+    "title": "Shared page-controller pattern",
+    "workItems": [
+      "P09-W03"
+    ]
+  },
+  {
+    "id": "P09-PR04",
+    "title": "Required screen inventory",
+    "workItems": [
+      "P09-W04"
+    ]
+  },
+  {
+    "id": "P09-PR05",
+    "title": "Data state requirements",
+    "workItems": [
+      "P09-W05"
+    ]
+  },
+  {
+    "id": "P09-PR06",
+    "title": "Experience switching",
+    "workItems": [
+      "P09-W06"
+    ]
+  },
+  {
+    "id": "P09-PR07",
+    "title": "Responsive matrix",
+    "workItems": [
+      "P09-W07"
+    ]
+  },
+  {
+    "id": "P09-PR08",
+    "title": "Accessibility",
+    "workItems": [
+      "P09-W08"
+    ]
+  },
+  {
+    "id": "P09-PR09",
+    "title": "Frontend tests",
+    "workItems": [
+      "P09-W09"
+    ]
+  },
+  {
+    "id": "P10-PR01",
+    "title": "Production user/role model",
+    "workItems": [
+      "P10-W01"
+    ]
+  },
+  {
+    "id": "P10-PR02",
+    "title": "Session model",
+    "workItems": [
+      "P10-W02"
+    ]
+  },
+  {
+    "id": "P10-PR03",
+    "title": "Authorization matrix",
+    "workItems": [
+      "P10-W03"
+    ]
+  },
+  {
+    "id": "P10-PR04",
+    "title": "Security hardening",
+    "workItems": [
+      "P10-W04"
+    ]
+  },
+  {
+    "id": "P10-PR05",
+    "title": "Security tests",
+    "workItems": [
+      "P10-W05"
+    ]
+  },
+  {
+    "id": "P11-PR01",
+    "title": "PWA cache policy",
+    "workItems": [
+      "P11-W01"
+    ]
+  },
+  {
+    "id": "P11-PR02",
+    "title": "Installability assets",
+    "workItems": [
+      "P11-W02"
+    ]
+  },
+  {
+    "id": "P11-PR03",
+    "title": "Android/iOS position",
+    "workItems": [
+      "P11-W03"
+    ]
+  },
+  {
+    "id": "P11-PR04",
+    "title": "Device validation",
+    "workItems": [
+      "P11-W04"
+    ]
+  },
+  {
+    "id": "P12-PR01",
+    "title": "Infrastructure profile decision",
+    "workItems": [
+      "P12-W01"
+    ]
+  },
+  {
+    "id": "P12-PR02",
+    "title": "Environment separation",
+    "workItems": [
+      "P12-W02"
+    ]
+  },
+  {
+    "id": "P12-PR03",
+    "title": "Budget stack target details",
+    "workItems": [
+      "P12-W03"
+    ]
+  },
+  {
+    "id": "P12-PR04",
+    "title": "Managed stack target details",
+    "workItems": [
+      "P12-W04"
+    ]
+  },
+  {
+    "id": "P12-PR05",
+    "title": "Deployment flow",
+    "workItems": [
+      "P12-W05"
+    ]
+  },
+  {
+    "id": "P12-PR06",
+    "title": "Secrets",
+    "workItems": [
+      "P12-W06"
+    ]
+  },
+  {
+    "id": "P13-PR01",
+    "title": "Metrics",
+    "workItems": [
+      "P13-W01"
+    ]
+  },
+  {
+    "id": "P13-PR02",
+    "title": "Structured logging",
+    "workItems": [
+      "P13-W02"
+    ]
+  },
+  {
+    "id": "P13-PR03",
+    "title": "Health/readiness",
+    "workItems": [
+      "P13-W03"
+    ]
+  },
+  {
+    "id": "P13-PR04",
+    "title": "Alerts",
+    "workItems": [
+      "P13-W04"
+    ]
+  },
+  {
+    "id": "P13-PR05",
+    "title": "Reliability testing",
+    "workItems": [
+      "P13-W05"
+    ]
+  },
+  {
+    "id": "P13-PR06",
+    "title": "Performance budgets",
+    "workItems": [
+      "P13-W06"
+    ]
+  },
+  {
+    "id": "P14-PR01",
+    "title": "Release candidate freeze",
+    "workItems": [
+      "P14-W01"
+    ]
+  },
+  {
+    "id": "P14-PR02",
+    "title": "Production seed/config",
+    "workItems": [
+      "P14-W02"
+    ]
+  },
+  {
+    "id": "P14-PR03",
+    "title": "Smoke test sequence",
+    "workItems": [
+      "P14-W03"
+    ]
+  },
+  {
+    "id": "P14-PR04",
+    "title": "Operational signoff",
+    "workItems": [
+      "P14-W04"
+    ]
+  },
+  {
+    "id": "P14-PR05",
+    "title": "V1 completion definition",
+    "workItems": [
+      "P14-W05"
+    ]
+  },
+  {
+    "id": "P15-PR01",
+    "title": "Broker abstraction",
+    "workItems": [
+      "P15-W01"
+    ]
+  },
+  {
+    "id": "P15-PR02",
+    "title": "LIVE intent schema",
+    "workItems": [
+      "P15-W02"
+    ]
+  },
+  {
+    "id": "P15-PR03",
+    "title": "Broker order/fill schema",
+    "workItems": [
+      "P15-W03"
+    ]
+  },
+  {
+    "id": "P15-PR04",
+    "title": "LIVE submission workflow",
+    "workItems": [
+      "P15-W04"
+    ]
+  },
+  {
+    "id": "P15-PR05",
+    "title": "Read-only Angel One integration first",
+    "workItems": [
+      "P15-W05"
+    ]
+  },
+  {
+    "id": "P15-PR06",
+    "title": "Compliance/regulatory gate",
+    "workItems": [
+      "P15-W06"
+    ]
+  },
+  {
+    "id": "P15-PR07",
+    "title": "Activation controls",
+    "workItems": [
+      "P15-W07"
+    ]
+  },
+  {
+    "id": "P15-PR08",
+    "title": "Pilot",
+    "workItems": [
+      "P15-W08"
+    ]
+  },
+  {
+    "id": "P16-PR01",
+    "title": "Source inventory, licensing/provenance, point-in-time feature and label schema",
+    "workItems": []
+  },
+  {
+    "id": "P16-PR02",
+    "title": "Historical dataset builder, Parquet manifests/checksums, partitioning and reproducible versioned snapshots",
+    "workItems": []
+  },
+  {
+    "id": "P16-PR03",
+    "title": "Label maturation, missing/no-fill/timeout handling, corporate actions and leakage defenses",
+    "workItems": []
+  },
+  {
+    "id": "P16-PR04",
+    "title": "Data quality/drift observability, scheduled ephemeral refresh, retention and cleanup",
+    "workItems": []
+  },
+  {
+    "id": "P17-PR01",
+    "title": "Reproducible Scikit-learn baseline and time-series evaluation",
+    "workItems": []
+  },
+  {
+    "id": "P17-PR02",
+    "title": "LightGBM primary + XGBoost challenger",
+    "workItems": []
+  },
+  {
+    "id": "P17-PR03",
+    "title": "Versioned PredictionRequest/Response contract, expiry, model hash, feature version, confidence, trace ID",
+    "workItems": []
+  },
+  {
+    "id": "P17-PR04",
+    "title": "CPU inference deployment comparison (embedded/batch vs FastAPI container), warmup, load/latency and recovery tests",
+    "workItems": []
+  },
+  {
+    "id": "P18-PR01",
+    "title": "Immutable decision-time evidence captured before submission, linked to account, intent, strategy/model, risk verdict and feature snapshot.",
+    "workItems": []
+  },
+  {
+    "id": "P18-PR02",
+    "title": "Broker fill and position reconciliation",
+    "workItems": []
+  },
+  {
+    "id": "P18-PR03",
+    "title": "Post-close event-driven analysis",
+    "workItems": []
+  },
+  {
+    "id": "P18-PR04",
+    "title": "SHAP explanation worker, model-feature contribution versus actual-outcome distinction, cached explainability and provenance.",
+    "workItems": []
+  },
+  {
+    "id": "P18-PR05",
+    "title": "APIs and reports for trade explanation, expected-versus-actual, why-profit/why-loss, strategy/regime cohorts",
+    "workItems": []
+  },
+  {
+    "id": "P19-PR01",
+    "title": "MLflow OSS experiment tracking, model/data/code lineage, immutable artifacts and least privilege.",
+    "workItems": []
+  },
+  {
+    "id": "P19-PR02",
+    "title": "Candidate/champion registry, signatures, calibration reports, evaluation gates, rollback and reproducibility.",
+    "workItems": []
+  },
+  {
+    "id": "P19-PR03",
+    "title": "Drift/quality alerts and retraining triggers",
+    "workItems": []
+  },
+  {
+    "id": "P19-PR04",
+    "title": "PAPER/SHADOW forward evaluation, operator/risk approval, controlled canary and rollback",
+    "workItems": []
+  },
+  {
+    "id": "P19-PR05",
+    "title": "Evaluation reports by instrument, regime, strategy, drawdown, net expectancy, costs and sample uncertainty.",
+    "workItems": []
+  },
+  {
+    "id": "P20-PR01",
+    "title": "Resource taxonomy and cost ownership, mandatory tags, cost forecasts, AWS Budgets/anomaly alarms, retention, job quotas.",
+    "workItems": []
+  },
+  {
+    "id": "P20-PR02",
+    "title": "EventBridge + Step Functions (as needed) + ephemeral ECS/Fargate/Lambda workload orchestration",
+    "workItems": []
+  },
+  {
+    "id": "P20-PR03",
+    "title": "Resource lease controller, idempotent start/stop, orphan cleanup, dev shutdown and market-calendar warmup.",
+    "workItems": []
+  },
+  {
+    "id": "P20-PR04",
+    "title": "Exposure-aware safe-to-stop gate: unknown orders, pending fills, broker reconciliation, open positions/overnight protection, operator obligations",
+    "workItems": []
+  },
+  {
+    "id": "P20-PR05",
+    "title": "Cost measurement and policy tests: compute hours, full AWS spend, network/storage/ALB/NAT/RDS residuals, budget alarms and chaos/recovery.",
+    "workItems": []
+  },
+  {
+    "id": "P20-PR06",
+    "title": "Alternative selection ADR: Lambda vs Fargate vs EC2/Spot vs scheduled existing workers",
+    "workItems": []
+  },
+  {
+    "id": "P21-PR01",
+    "title": "AI Trading Control Center replaces chart-dominated default: automation/broker readiness, balance, realized/unrealized net P&L, exposure, AI activity, protection and clear emergency stop.",
+    "workItems": []
+  },
+  {
+    "id": "P21-PR02",
+    "title": "Trade Intelligence drill-down: original decision timeline, predicted vs actual, evidence, SHAP contributions, execution costs, uncertainty and linked broker fills.",
+    "workItems": []
+  },
+  {
+    "id": "P21-PR03",
+    "title": "AI Learning Center, experiment comparisons, model registry, approval/rollback flows",
+    "workItems": []
+  },
+  {
+    "id": "P21-PR04",
+    "title": "Cost Control Center: workload class/status, estimated and actual spend, job schedule, idle/lease state, resource actions, safe-stop reason, budget alarms and audit.",
+    "workItems": []
+  },
+  {
+    "id": "P21-PR05",
+    "title": "Shared interaction/state contract across Neon Futuristic AI and Clean Modern, with Dark/Light/System appearances",
+    "workItems": []
+  },
+  {
+    "id": "P21-PR06",
+    "title": "Interactive Figma states and frontend E2E: navigation, overlays, drawers, filters, motion/microinteractions, contextual AI explanation, loading/empty/error/stale, broker outage, UNKNOWN order, kill-switch confirmation, reduced-motion and accessibility.",
+    "workItems": []
+  }
+]

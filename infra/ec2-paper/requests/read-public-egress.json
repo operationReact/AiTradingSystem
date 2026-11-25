@@ -1,0 +1,8 @@
+{
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "read-only-public-egress-ip",
+  "region": "ap-south-1",
+  "aws_account": "098859530205",
+  "environment": "paper",
+  "application": "MintTick"
+}

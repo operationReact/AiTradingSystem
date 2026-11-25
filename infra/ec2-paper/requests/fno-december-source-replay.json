@@ -1,0 +1,13 @@
+{
+  "kind": "minttick-owner-private-fno-dec-replay-v1",
+  "owner_permission_expires": "2026-11-28",
+  "operation": "read-only-provider-source-match",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "max_gets": 23,
+  "expiry": "2025-12",
+  "no_orders": true,
+  "no_redistribution": true,
+  "cache_read_only": true
+}

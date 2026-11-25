@@ -1,0 +1,124 @@
+name: Upstox sandbox current-NIFTY-contract F&O one-shot acceptance
+
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/upstox-sandbox-real-nifty-key-once.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: minttick-upstox-sandbox-current-bod-nifty-20261123
+  cancel-in-progress: false
+
+jobs:
+  sandbox-fno:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Enforce exactly one new one-shot workflow on protected branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/upstox-sandbox-real-nifty-key-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Zero-network tests of sandbox host, header, token handling, ACKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_sandbox*.py' -v
+      - name: Assume exact sandbox-only SSM reader
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-upstox-sandbox-ssm-reader
+          aws-region: ap-south-1
+          role-session-name: minttick-current-nifty-${{ github.run_id }}
+      - name: Resolve genuine current F&O master contract and simulate one lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          python3 - <<'PY'
+          import datetime
+          import gzip
+          import json
+          import sys
+          import urllib.request
+          from decimal import Decimal
+          from zoneinfo import ZoneInfo
+
+          sys.path.insert(0, 'scripts')
+          import upstox_fno_sandbox_lifecycle as probe
+          import upstox_fno_sandbox_ssm as ssm
+          if probe.SANDBOX != 'https://api-sandbox.upstox.com' or probe.SANDBOX_USER_AGENT != 'MintTick-Upstox-Sandbox/1.0':
+              raise RuntimeError('SANDBOX_HOST_OR_AGENT_UNEXPECTED')
+
+          req = urllib.request.Request(
+              'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz',
+              headers={'User-Agent': 'MintTick-Upstox-InstrumentAudit/1.0',
+                       'Accept': 'application/gzip'})
+          with urllib.request.urlopen(req, timeout=25) as response:
+              blob = response.read(55_000_001)
+          if len(blob)>55_000_000:
+              raise RuntimeError('BOD_FILE_TOO_LARGE')
+          instruments = json.loads(gzip.decompress(blob))
+          if not isinstance(instruments, list):
+              raise RuntimeError('BOD_WRONG_SHAPE')
+          now = datetime.datetime.now(ZoneInfo('Asia/Kolkata')).date()
+          candidates = []
+          for item in instruments:
+              if not isinstance(item, dict) or item.get('segment')!='NSE_FO':
+                  continue
+              if item.get('underlying_symbol') not in ('NIFTY', 'NIFTY 50') or item.get('instrument_type')!='CE':
+                  continue
+              try:
+                  expiry = datetime.datetime.fromtimestamp(
+                      int(item.get('expiry'))/1000, ZoneInfo('Asia/Kolkata')).date()
+                  strike = float(item.get('strike_price'))
+                  lot = int(item.get('lot_size'))
+                  tick_field = Decimal(str(item.get('tick_size')))
+              except (ValueError, TypeError, OSError, OverflowError):
+                  continue
+              # Never select an already expired or same-day expiry contract.
+              if not (now < expiry <= now + datetime.timedelta(days=31)):
+                  continue
+              if not (20000 <= strike <= 32000 and 1 <= lot <= 10000 and tick_field == 5):
+                  continue
+              key = item.get('instrument_key')
+              if not isinstance(key,str) or not probe.INSTRUMENT.fullmatch(key):
+                  continue
+              candidates.append((expiry, abs(strike-26000),key, lot, str(item.get('trading_symbol',''))))
+          if not candidates:
+              print('SANDBOX_FNO_CURRENT_BOD:NO_VALID_NIFTY_OPTION')
+              raise SystemExit(2)
+          candidates.sort()
+          expiry, distance, key, qty, symbol = candidates[0]
+          if len(symbol)>120:
+              raise RuntimeError('UNEXPECTED_BOD_SYMBOL_LENGTH')
+          print('SANDBOX_FNO_BOD_SOURCE:CURRENT_NSE_JSON_GZ')
+          print('SANDBOX_FNO_SELECTED:' + key + ';' + symbol + ';qty=' + str(qty) + ';expiry=' + expiry.isoformat())
+          print('SANDBOX_FNO_PRICE:100.05')
+          print('SANDBOX_FNO_ORIGIN:API_SANDBOX_ONLY')
+          token = ssm.load_sandbox_token()
+          try:
+              result = probe.run_cycle(
+                  probe.sandbox_transport(token),
+                  key, qty, '100.05', '0.05')
+          except probe.SandboxError as exc:
+              print('SANDBOX_FNO_PROVIDER_RESULT:BLOCKED:' + str(exc))
+              raise SystemExit(1)
+          finally:
+              token = None
+          print('SANDBOX_FNO_LIFECYCLE:' + json.dumps(result,sort_keys=True))
+          if not all(result.get(k) is True for k in ('placed','modified','cancelled')):
+              raise SystemExit(3)
+          print('SANDBOX_FNO_LIFECYCLE:PLACE_MODIFY_CANCEL_VERIFIED')
+          print('SANDBOX_REAL_MONEY_ORDERS:ZERO')
+          PY

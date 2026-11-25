@@ -1,0 +1,81 @@
+name: Mintick Mind protected research endpoint unauthenticated preflight (once)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/mind-customer-evaluation-unauth-preflight-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  get-no-credentials:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require exactly this new read-only workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=.github/workflows/mind-customer-evaluation-unauth-preflight-once.yml
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD)" = "$(printf 'A\t%s' "$p")"
+      - name: Check exact customer endpoint DNS TLS and unauthorized GET (no token)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import socket
+          import ssl
+          import urllib.error
+          import urllib.request
+          host='api.minttick.com'
+          path='/api/customer/mind/v1/fno-evaluation'
+          try:
+              socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+              print('MIND_ENDPOINT_DNS:OK')
+          except OSError:
+              print('MIND_ENDPOINT_DNS:UNAVAILABLE')
+              raise SystemExit(1)
+          try:
+              with socket.create_connection((host,443),timeout=8) as sock:
+                  with ssl.create_default_context().wrap_socket(sock, server_hostname=host):
+                      print('MIND_ENDPOINT_TLS:OK')
+          except (OSError, ssl.SSLError, TimeoutError):
+              print('MIND_ENDPOINT_TLS:UNAVAILABLE')
+              raise SystemExit(1)
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):
+                  return None
+          opener=urllib.request.build_opener(NoRedirect())
+          req=urllib.request.Request(
+              'https://'+host+path, method='GET',
+              headers={'Accept':'application/json',
+                       'User-Agent':'MintTick-Mind-Sandbox-ReadOnly/1.0',
+                       'Cache-Control':'no-store'})
+          try:
+              with opener.open(req,timeout=8) as res:
+                  status=res.status
+          except urllib.error.HTTPError as err:
+              status=err.code
+          except (OSError, urllib.error.URLError, TimeoutError):
+              print('MIND_ENDPOINT_GET:TRANSPORT_UNAVAILABLE')
+              raise SystemExit(1)
+          print('MIND_ENDPOINT_GET_HTTP:'+str(status))
+          print('MIND_ENDPOINT_BEARER_TOKEN_USED:FALSE')
+          print('MIND_ENDPOINT_BROKER_ORDER_REQUESTS:ZERO')
+          if status in (401,403):
+              print('MIND_ENDPOINT_UNAUTHENTICATED:BLOCKED_EXPECTED')
+              raise SystemExit(0)
+          if status == 404:
+              print('MIND_ENDPOINT_ROUTE:NOT_DEPLOYED_OR_UNAVAILABLE')
+          elif status == 200:
+              print('MIND_ENDPOINT_AUTH_GATE:UNEXPECTED_PUBLIC_ACCESS')
+          else:
+              print('MIND_ENDPOINT_ROUTE:UNEXPECTED_STATUS')
+          raise SystemExit(1)
+          PY

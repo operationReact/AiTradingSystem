@@ -1,0 +1,67 @@
+name: Phase 5 - Risk UI contract gate
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'frontend/src/pages/RiskPage.jsx'
+      - 'frontend/src/hooks/useApi.js'
+      - 'frontend/e2e/risk-management.spec.mjs'
+      - '.github/workflows/phase5-risk-ui-gate.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'frontend/src/pages/RiskPage.jsx'
+      - 'frontend/src/hooks/useApi.js'
+      - 'frontend/e2e/risk-management.spec.mjs'
+      - '.github/workflows/phase5-risk-ui-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-e2e:
+    name: E2E-P5 Pro + Clear risk contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked application dependencies
+        run: npm ci
+      - name: Install pinned gate-only Playwright and axe tooling
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build application
+        run: npm run build
+      - name: Start Vite test server
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/ats-vite.log 2>&1 &
+          echo $! > /tmp/ats-vite.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/risk >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/ats-vite.log
+          exit 1
+      - name: Run E2E-P5 dual-design risk flows
+        run: npx playwright test e2e/risk-management.spec.mjs --reporter=line
+      - name: Upload P5 risk screenshot/test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p05-risk-ui-e2e-evidence
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14

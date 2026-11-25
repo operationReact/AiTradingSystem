@@ -1,0 +1,13 @@
+{
+  "kind": "minttick-owner-private-fno-quality-audit-v1",
+  "audit_revision": 4,
+  "operation": "read-only-historical-candle-and-checkpoint-audit",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "scope": "12-completed-nifty-expiry-months-daily",
+  "authorization": "OWNER_APPROVED_FNO_PHASE2_AUDIT_2026_11_21",
+  "no_provider_requests": true,
+  "no_orders": true,
+  "no_redistribution": true
+}

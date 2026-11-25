@@ -1,0 +1,156 @@
+name: MintTick F&O personal NSE UDiFF daily archive probe
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-personal-nse-probe.yml'
+      - 'infra/ec2-paper/fno_personal_nse_archive_probe.py'
+      - 'scripts/tests/test_fno_personal_nse_archive_probe.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-personal-nse-archive-probe.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic NSE UDiFF file reader tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_personal_nse_archive_probe.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_personal_nse_archive_probe.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_personal_nse_archive_probe.py').read_text()
+          assert 'nsearchives.nseindia.com' in src
+          assert 'date(2025, 12, 15)' in src
+          assert 'NoRedirect' in src
+          for forbidden in ('placeOrder','submitOrder','put-parameter',
+                            'INSERT INTO','DELETE FROM','UPDATE fno_'):
+              assert forbidden not in src
+          PY
+
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact personal one-day archive access request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-personal-nse-archive-probe.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('infra/ec2-paper/requests/fno-personal-nse-archive-probe.json')
+          assert path.is_file() and not path.is_symlink() and path.stat().st_size<1024
+          assert json.loads(path.read_text())=={
+              "kind":"minttick-personal-nse-fo-public-archive-probe-v1",
+              "operation":"fetch-one-december-nse-fo-udiff-zip-memory-only",
+              "account":"098859530205",
+              "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "date":"2025-12-15",
+              "max_archives":1,
+              "no_orders":True,
+              "no_market_data_export":True,
+              "no_auth_bypass":True,
+              "no_persistence":True
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-personal-nse-probe
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Probe one official NSE FO UDiFF archive with sanitized counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from verify_ssm_release import verify_aws
+          from fno_private_bulk_ops import _aws,INSTANCE
+          verify_aws()
+          raw=Path('infra/ec2-paper/fno_personal_nse_archive_probe.py').read_bytes()
+          assert 3000<len(raw)<9000
+          digest=hashlib.sha256(raw).hexdigest()
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch(r'[0-9a-f]{40}',commit)
+          url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+commit+'/infra/ec2-paper/fno_personal_nse_archive_probe.py'
+          command=("set -eu\numask 077\n"
+                   "tmp=$(mktemp /tmp/minttick-nse-udiff-probe.XXXXXX)\n"
+                   "trap 'rm -f \"$tmp\"' EXIT\n"
+                   "curl --fail --silent --show-error --max-time 25 --proto '=https' --tlsv1.2 -o \"$tmp\" '"+url+"'\n"
+                   "printf '%s  %s\\n' '"+digest+"' \"$tmp\" | sha256sum -c - >/dev/null\n"
+                   "PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 \"$tmp\"\n")
+          sent=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                    '--instance-ids',INSTANCE,'--timeout-seconds','120',
+                    '--comment','MintTick personal NSE FO archive source access (read only)',
+                    '--parameters',json.dumps({'commands':[command]}))
+          cid=(sent.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch(r'[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_NSE_PROBE_COMMAND_INVALID')
+          for _ in range(30):
+              time.sleep(4)
+              status=_aws('ssm','get-command-invocation','--command-id',cid,'--instance-id',INSTANCE)
+              state=status.get('Status')
+              if state in ('Success','Failed','TimedOut','Cancelled'):
+                  if state!='Success':
+                      raise SystemExit('FNO_NSE_PROBE_FAILED')
+                  out=status.get('StandardOutputContent') or ''
+                  lines=[x[len('MINTTICK_NSE_FO_PUBLIC_ARCHIVE_V1:'):] for x in out.splitlines() if x.startswith('MINTTICK_NSE_FO_PUBLIC_ARCHIVE_V1:')]
+                  if len(lines)!=1 or len(lines[0])>400:
+                      raise SystemExit('FNO_NSE_PROBE_UNTRUSTED_OUTPUT')
+                  data=json.loads(lines[0])
+                  allowed={'FETCHED','NOT_FOUND','SOURCE_REJECTED','TRANSPORT_UNAVAILABLE','INVALID_SOURCE_RESPONSE'}
+                  if data.get('state') not in allowed or data.get('day')!='2025-12-15':
+                      raise SystemExit('FNO_NSE_PROBE_INVALID_RESULT')
+                  if data['state']=='FETCHED':
+                      if (set(data)!={'state','day','indexFutures','indexOptions','requiredFields',
+                                       'archiveBytes','rawDataPublished','localStorage'}
+                          or any(type(data[k]) is not int or not 0<=data[k]<=30000000
+                                 for k in ('indexFutures','indexOptions','requiredFields','archiveBytes'))
+                          or data['rawDataPublished'] is not False
+                          or data['localStorage'] is not False):
+                          raise SystemExit('FNO_NSE_PROBE_UNSAFE')
+                      print('FNO NSE ARCHIVE: state=FETCHED; indexFutureRows='+str(data['indexFutures'])+
+                            '; indexOptionRows='+str(data['indexOptions'])+
+                            '; archiveBytes='+str(data['archiveBytes'])+
+                            '; stored=false; providerKeyExport=false',flush=True)
+                      if data['indexFutures']<1 or data['indexOptions']<1:
+                          raise SystemExit('FNO_NSE_PROBE_NO_NIFTY_DERIVATIVES')
+                  else:
+                      print('FNO NSE ARCHIVE: state='+data['state']+'; date=2025-12-15; stored=false',flush=True)
+                      raise SystemExit('FNO_NSE_PROBE_UNAVAILABLE')
+                  break
+              if state not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_NSE_PROBE_UNEXPECTED_STATUS')
+          else:
+              raise SystemExit('FNO_NSE_PROBE_TIMEOUT')
+          PY

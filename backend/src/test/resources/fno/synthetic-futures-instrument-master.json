@@ -1,0 +1,58 @@
+[
+ {
+  "segment": "NSE_FO",
+  "exchange": "NSE",
+  "instrument_type": "FUT",
+  "instrument_key": "NSE_FO|SYN1001",
+  "underlying_key": "NSE_INDEX|Nifty 50",
+  "underlying_symbol": "NIFTY",
+  "trading_symbol": "NIFTY FUT 29 DEC 26",
+  "expiry": 1798482600000,
+  "lot_size": 75
+ },
+ {
+  "segment": "NSE_FO",
+  "exchange": "NSE",
+  "instrument_type": "FUT",
+  "instrument_key": "NSE_FO|SYN1002",
+  "underlying_key": "NSE_INDEX|Nifty 50",
+  "underlying_symbol": "NIFTY",
+  "trading_symbol": "NIFTY FUT 26 JAN 27",
+  "expiry": 1800901800000,
+  "lot_size": 75
+ },
+ {
+  "segment": "NSE_FO",
+  "exchange": "NSE",
+  "instrument_type": "FUT",
+  "instrument_key": "NSE_FO|SYN0999",
+  "underlying_key": "NSE_INDEX|Nifty 50",
+  "underlying_symbol": "NIFTY",
+  "trading_symbol": "NIFTY FUT 27 OCT 26",
+  "expiry": 1793039400000,
+  "lot_size": 75
+ },
+ {
+  "segment": "NSE_FO",
+  "exchange": "NSE",
+  "instrument_type": "CE",
+  "instrument_key": "NSE_FO|SYN2001",
+  "underlying_key": "NSE_INDEX|Nifty 50",
+  "underlying_symbol": "NIFTY",
+  "trading_symbol": "NIFTY 25000 CE",
+  "expiry": 1798482600000,
+  "lot_size": 75,
+  "strike_price": 25000
+ },
+ {
+  "segment": "NSE_EQ",
+  "exchange": "NSE",
+  "instrument_type": "EQ",
+  "instrument_key": "NSE_EQ|SYN3001",
+  "underlying_key": "NSE_EQ|SYN3001",
+  "underlying_symbol": "SYN",
+  "trading_symbol": "SYN",
+  "expiry": 0,
+  "lot_size": 1
+ }
+]

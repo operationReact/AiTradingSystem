@@ -1,0 +1,101 @@
+name: MintTick F&O owner-private bulk ingestion - controlled start
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-owner-private-start.yml'
+      - 'infra/ec2-paper/fno_private_bulk_worker.py'
+      - 'infra/ec2-paper/fno_private_bulk_ops.py'
+      - 'scripts/tests/test_fno_private_bulk_worker.py'
+      - 'scripts/tests/test_fno_private_bulk_ops.py'
+      - 'infra/ec2-paper/FNO_PRIVATE_BULK_RUNBOOK.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-owner-private-bulk-start.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline validate owner-scoped private ingestion and start
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_private_bulk_worker.py infra/ec2-paper/fno_private_bulk_ops.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_bulk_worker.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_bulk_ops.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/fno_private_bulk_worker.py').read_text()
+          q=Path('infra/ec2-paper/fno_private_bulk_ops.py').read_text()
+          assert 'provider_licence_verified": False' in p
+          assert '"no_redistribution": True' in p
+          assert 'MAX_REQUESTS_PER_RUN = 600' in p
+          assert 'MIN_REQUEST_GAP = 2.5' in p
+          assert 'MAX_MONTHS = 12' in p
+          assert 'DAILY_CACHE_TTL_SECONDS = 7 * 86400' in p
+          assert 'fno_historical_candles' in p
+          assert '"live_orders":False' in q
+          assert 'verify_aws()' in q
+          assert 'fno_private_bulk_worker.py run' in q
+          for forbidden in ('placeOrder','submitOrder','TRADING_MODE=LIVE',
+                            'put-parameter','secretsmanager put-secret-value'):
+              assert forbidden not in p and forbidden not in q, forbidden
+          PY
+
+  start:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require owner-approved single-file private research start
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only HEAD^1 HEAD)" = 'infra/ec2-paper/requests/fno-owner-private-bulk-start.json'
+          python3 - <<'PY'
+          import sys,json
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_private_bulk_ops import expected_request
+          path=Path('infra/ec2-paper/requests/fno-owner-private-bulk-start.json')
+          assert path.is_file() and not path.is_symlink() and path.stat().st_size<1024
+          assert json.loads(path.read_text())==expected_request()
+          PY
+      - name: Use existing AWS OIDC role and exact PAPER EC2
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-owner-private-backfill
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Start first persisted batches and single background systemd service
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_private_bulk_ops.py runner
+
+# Owner-approved, single-user PRIVATE local research cache only.
+# Not a claim of Upstox/NSE commercial redistribution rights.
+# No live orders. Existing EC2 auto-stop/cost controls remain unchanged.

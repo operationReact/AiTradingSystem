@@ -1,0 +1,9 @@
+# P09-W03 signals and PAPER execution controllers
+
+SignalsPage owns instrument search, selected identity, candle interval, evaluation and order-review selection. Pro/Clear compositions consume request projections and callbacks through a shared semantic workspace. Refreshed catalogue results cannot silently change selected identity; pending/error/anonymous evidence cannot authorize evaluation or open an evidence-based review. Search drafts and intervals remain above the variant subtree.
+
+PaperTradesPage owns URL filters, pagination, tab selection, order detail, reconciliation and bounded current-page CSV export. Its Pro/Clear views import presentation components and formatters, not API hooks/clients. Clearing filters also resets pagination. Queries do not remount on a design switch. Order-detail evidence and the reusable PAPER draft controller/dialog stay outside the variant subtree, preserving draft fields, signal timestamp and per-review idempotency key across appearance changes and retries. Shared backend risk/approval authority is unchanged.
+
+Browser contracts verify URL/filter/query continuity, signal draft/interval continuity, missing selected identity after refresh, and a failed PAPER submission followed by a design switch/retry using the identical body/idempotency key. The controlled response remains APPROVAL_PENDING; no browser fixture claims a real fill. Existing PostgreSQL approval/settlement tests separately cover actual persistence and revalidation.
+
+This completes the signals/orders controller slice. Overview and remaining instrument/market/provider/settings compositions still require reconciliation before P09-W03 completion. Full screen composition and state/viewport inventory remain subsequent work. No schema, provider connection, deployment or LIVE activation is included.
