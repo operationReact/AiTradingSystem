@@ -67,7 +67,7 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
       - name: Verify news integration contracts
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=NewsSourceRegistryTest,NewsSourceCoverageTest,NewsSourceHealthControllerTest,RssFeedParserTest,NewsIngestionJobTest,NewsIntelligenceAdminHealthControllerIT,NewsSourcePolicyIT test
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=NewsSourceRegistryTest,NewsSourceCoverageTest,NewsSourceHealthControllerTest,CustomerMarketNewsControllerIT,RssFeedParserTest,NewsIngestionJobTest,NewsIntelligenceAdminHealthControllerIT,NewsSourcePolicyIT test
 
   activate:
     needs: validate
