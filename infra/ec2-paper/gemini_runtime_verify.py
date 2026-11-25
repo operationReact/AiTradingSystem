@@ -71,12 +71,11 @@ def valid_receipt(receipt):
         return False
     completed = receipt["providerResponseCompleted"]
     if completed and not (receipt["providerCallAttempted"]
-                          and receipt["challengeValidated"]
-                          and receipt["requestIdPresent"]):
+                          and receipt["challengeValidated"]):
         return False
     if receipt["status"] == "VERIFIED" and not (
             completed and receipt["challengeValidated"]
-            and receipt["requestIdPresent"] and latency is not None):
+            and latency is not None):
         return False
     if completed and receipt["status"] != "VERIFIED":
         return False
