@@ -127,6 +127,26 @@ try:
 except (KeyError,ValueError):
     raise SystemExit("ACTIVATION_TIMESTAMP_MISSING")
 url="http://127.0.0.1:8080/api/admin/market-intelligence/health"
+health={}
+def safe_health_snapshot(payload):
+    model=payload.get("model",{})
+    return {
+      "flags":{k:payload.get(k) is True for k in
+        ("ingestionEnabled","eventLedgerEnabled","analyzerBridgeEnabled",
+         "analysisSchedulerEnabled","mindContextEnabled")},
+      "provider":model.get("selectedProvider"),
+      "sources":[{"sourceId":x.get("sourceId"),"status":x.get("latestStatus"),
+                  "items":x.get("lastFetchedItems"),
+                  "rights":x.get("rightsState"),
+                  "uses":[x.get(k) is True for k in
+                    ("canIngest","canRetain","canDisplay","canTransferToModel")]}
+                 for x in payload.get("sources",[]) if x.get("sourceId") in
+                    ("moneycontrol","economic-times","sebi")],
+      "geminiAttempted":bool(model.get("lastGeminiAttemptAt")),
+      "geminiOutcome":model.get("lastGeminiAttemptOutcome"),
+    }
+def emit_health_snapshot(payload):
+    print("MINTTICK_NEWS_HEALTH_DIAG:"+json.dumps(safe_health_snapshot(payload),sort_keys=True))
 deadline=time.monotonic()+1500
 source_done=False
 gemini_done=False
@@ -140,15 +160,18 @@ while time.monotonic()<deadline:
     flags=("ingestionEnabled","eventLedgerEnabled","analyzerBridgeEnabled",
            "analysisSchedulerEnabled","mindContextEnabled")
     if not all(health.get(k) is True for k in flags):
+        emit_health_snapshot(health)
         raise SystemExit("NEWS_RUNTIME_FLAGS_NOT_ACTIVE")
     model=health.get("model",{})
     if model.get("selectedProvider")!="GEMINI":
+        emit_health_snapshot(health)
         raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
     for source_id in ("moneycontrol","economic-times","sebi"):
         source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
         if not source or source.get("rightsState")!="APPROVED" or not all(
             source.get(field) is True for field in
             ("canIngest","canRetain","canDisplay","canTransferToModel")):
+            emit_health_snapshot(health)
             raise SystemExit("NEWS_SOURCE_POLICY_NOT_APPROVED")
     source_done=any(
         source.get("latestStatus")=="SUCCESS" and (source.get("lastFetchedItems") or 0)>0
@@ -165,8 +188,11 @@ while time.monotonic()<deadline:
         break
     time.sleep(20)
 else:
+    emit_health_snapshot(health)
     if not source_done: raise SystemExit("NEWS_SOURCE_EVIDENCE_TIMEOUT")
-if not gemini_done: raise SystemExit("NEWS_GEMINI_EVIDENCE_TIMEOUT")
+if not gemini_done:
+    emit_health_snapshot(health)
+    raise SystemExit("NEWS_GEMINI_EVIDENCE_TIMEOUT")
 print("MINTTICK_NEWS_RUNTIME_FLAGS:READY")
 PY
 echo "MINTTICK_NEWS_ACTIVATION_OK:paper-only"
@@ -219,18 +245,22 @@ def run() -> None:
             return
         if result.get("Status") not in {"Pending", "InProgress", "Delayed"}:
             error = result.get("StandardErrorContent") or ""
-            stage_match = re.search(r"MINTTICK_NEWS_FAILED_STAGE:([A-Z_]+)", error)
+            output = result.get("StandardOutputContent") or ""
+            diagnostics = error + "\n" + output
+            stage_match = re.search(r"MINTTICK_NEWS_FAILED_STAGE:([A-Z_]+)", diagnostics)
             allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT",
                        "NEWS_RUNTIME_FLAGS_NOT_ACTIVE", "NEWS_GEMINI_NOT_SELECTED",
                        "NEWS_SOURCE_POLICY_NOT_APPROVED", "APP_KEY_INVALID",
                        "ACTIVATION_TIMESTAMP_MISSING", "UNSAFE_RUNTIME_FILE",
                        "DUPLICATE_RUNTIME_KEY", "POLICY_UPDATE_REJECTED",
                        "POLICY_RECEIPT_INVALID", "POLICY_UPDATE_FAILED"}
-            reason = next((line.strip() for line in error.splitlines()
-                           if line.strip() in allowed), None)
+            reason = next((item for item in allowed if item in diagnostics), None)
             stage = stage_match.group(1) if stage_match else "UNKNOWN"
+            snapshot_match = re.search(r"MINTTICK_NEWS_HEALTH_DIAG:(\{[^\n]{1,3000}\})", diagnostics)
+            snapshot = snapshot_match.group(1) if snapshot_match else ""
             raise RuntimeError("NEWS_ACTIVATION_FAILED:" + stage + ":" +
-                               (reason or result.get("Status", "UNKNOWN")))
+                               (reason or result.get("Status", "UNKNOWN")) +
+                               (":" + snapshot if snapshot else ""))
     raise RuntimeError("NEWS_ACTIVATION_TIMEOUT")
 
 
