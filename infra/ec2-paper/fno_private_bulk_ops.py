@@ -63,11 +63,17 @@ SAFE_SMOKE_FAILURES=frozenset({
     "INVALID_FNO_STATE", "INVALID_FNO_RECEIPT", "INVALID_RATE_LIMIT",
     "ORIGINAL_HTTP_RECEIPT_SINK_REQUIRED",
     "SMOKE_NO_VALID_ROWS", "SMOKE_UNEXPECTED_OUTCOME", "SMOKE_OUTPUT_INVALID",
+    "WORKER_DEPENDENCY_UNAVAILABLE", "WORKER_IMPORT_FAILED",
+    "WORKER_SOURCE_INCOMPATIBLE", "WORKER_RUNTIME_EXCEPTION",
+    "WORKER_TRACEBACK_UNCLASSIFIED",
 })
 
-def smoke_failure(stdout):
-    if not isinstance(stdout,str) or len(stdout)>4096:
+def smoke_failure(stdout,stderr=""):
+    if not isinstance(stdout,str):
         return "UNCLASSIFIED_SAFE_FAILURE"
+    # A noisy child must never be copied into the workflow log. Only inspect
+    # bounded tails for exact fixed markers and exception class names.
+    stdout=stdout[-4096:]
     found=re.findall(r"^FNO_BULK_ERROR:([A-Z0-9_]{1,64})$",stdout,re.M)
     if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
         return found[0]
@@ -80,6 +86,17 @@ def smoke_failure(stdout):
                     else "SMOKE_UNEXPECTED_OUTCOME")
     if "FNO_BULK_SMOKE:" in stdout:
         return "SMOKE_OUTPUT_INVALID"
+    if isinstance(stderr,str) and stderr:
+        stderr=stderr[-8192:]
+        if "ModuleNotFoundError" in stderr:
+            return "WORKER_DEPENDENCY_UNAVAILABLE"
+        if "ImportError" in stderr:
+            return "WORKER_IMPORT_FAILED"
+        if "SyntaxError" in stderr:
+            return "WORKER_SOURCE_INCOMPATIBLE"
+        if "Traceback (most recent call last)" in stderr:
+            return "WORKER_RUNTIME_EXCEPTION"
+        return "WORKER_TRACEBACK_UNCLASSIFIED"
     return "UNCLASSIFIED_SAFE_FAILURE"
 
 def expected_request():
@@ -163,10 +180,10 @@ def parse_smoke_failure(raw):
         return found[0]
     return "UNCLASSIFIED_SAFE_FAILURE"
 
-def _call(*args,timeout=45):
+def _call(*args,timeout=45,capture_stderr=False):
     try:
         return subprocess.run(args,stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL,
+                              stderr=subprocess.PIPE if capture_stderr else subprocess.DEVNULL,
                               text=True,timeout=timeout,check=False)
     except (OSError,subprocess.TimeoutExpired):
         return None
@@ -250,9 +267,11 @@ def host():
     if init is None or init.returncode!=0 or "FNO_OWNER_SCOPE_CREATED" not in init.stdout:
         print(receipt("OWNER_SCOPE_REJECTED"),flush=True)
         return 2
-    smoke=_call("/usr/bin/python3",str(WORKER),"smoke",timeout=210)
+    smoke=_call("/usr/bin/python3",str(WORKER),"smoke",timeout=210,
+                capture_stderr=True)
     if smoke is None or smoke.returncode!=0:
-        safe_cause=smoke_failure(smoke.stdout if smoke else "")
+        safe_cause=smoke_failure(smoke.stdout if smoke else "",
+                                 smoke.stderr if smoke else "")
         print(receipt("SMOKE_FAILED"),flush=True)
         print("FNO_BULK_SMOKE_FAILURE:"+safe_cause,flush=True)
         return 2
