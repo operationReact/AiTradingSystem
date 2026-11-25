@@ -183,7 +183,7 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository {
     final allowedIntervals = intraday
         ? const ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'] : intervals;
     if (!allowedIntervals.contains(interval) ||
-        !const ['SMA_TREND_VOLUME_V1', 'OPENING_RANGE_BREAKOUT_V1', 'VWAP_MOMENTUM_V1', 'MA_RECLAIM_V1']
+        !const ['SMA_TREND_VOLUME_V1', 'OPENING_RANGE_BREAKOUT_V1', 'VWAP_MOMENTUM_V1', 'MA_RECLAIM_V1', 'VOLUME_BREAKOUT_V1']
             .contains(strategyCode) ||
         instrumentId < 1) {
       throw ArgumentError('Invalid PAPER cycle request');

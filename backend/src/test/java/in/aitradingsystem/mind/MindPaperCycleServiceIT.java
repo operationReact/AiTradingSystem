@@ -329,6 +329,27 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void volumeBreakoutCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("SBIN-EQ", "3045");
+        seedVolumeBreakoutCandles(instrumentId, "SBIN-EQ", "3045");
+        recordTick(instrumentId, "101.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+
+        var entry = service(progress(), SOURCE).run(owner, room, "volume_breakout_entry01", instrumentId,
+            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.VOLUME_BREAKOUT_STRATEGY_CODE);
+
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.VOLUME_BREAKOUT_STRATEGY_CODE);
+        assertThat(entry.cycle().signalAction()).isEqualTo("BUY");
+        assertThat(entry.cycle().reasons()).contains("CLOSE_ABOVE_PRIOR_20_BAR_HIGH",
+            "VOLUME_AT_LEAST_1_5X_AVERAGE");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(entry.order()).isNotNull();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
     void movingAverageReclaimCandidateUsesTheGuardedPaperEngine() {
         long instrumentId = instrument("SBIN-AF", "11128");
         seedMovingAverageReclaimCandles(instrumentId, "SBIN-AF", "11128");
@@ -484,7 +505,8 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
             progress, clock, null, permitted, candles, quality,
             new in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy(),
             new in.aitradingsystem.scanner.VwapMomentumStrategy(),
-            new in.aitradingsystem.scanner.MovingAverageReclaimStrategy());
+            new in.aitradingsystem.scanner.MovingAverageReclaimStrategy(),
+            new in.aitradingsystem.scanner.VolumeBreakoutStrategy());
     }
 
     private void seedOrbCandles(long instrumentId, String symbol, String token) {
@@ -512,6 +534,32 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
                 .param("catalogue", catalogue).param("at", java.sql.Timestamp.from(candleTime))
                 .param("open", open).param("high", high).param("low", low).param("close", close)
                 .param("volume", volume).param("source", SOURCE)
+                .param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
+    }
+
+    private void seedVolumeBreakoutCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 21; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 9).plusMinutes(index)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            boolean latest = index == 20;
+            BigDecimal open = latest ? new BigDecimal("100.80") : new BigDecimal("100.00");
+            BigDecimal high = latest ? new BigDecimal("101.20") : new BigDecimal("100.20");
+            BigDecimal low = latest ? new BigDecimal("100.70") : new BigDecimal("99.80");
+            BigDecimal close = latest ? new BigDecimal("101.00") : new BigDecimal("100.00");
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                       :open,:high,:low,:close,:volume,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", open).param("high", high).param("low", low).param("close", close)
+                .param("volume", latest ? 2_000L : 1_000L).param("source", SOURCE)
                 .param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
         }
     }
