@@ -645,6 +645,9 @@ class _TradingAppState extends State<TradingApp> {
       ? MintTickHomeCommandCentre(
           loadProfile: _loadCustomerProfile,
           summaryRepository: HttpCustomerHomeSummaryRepository(_api),
+          paperPortfolioRepository: HttpMindPaperPortfolioRepository(_api),
+          mindHistoryRepository: HttpMindDecisionHistoryRepository(_api),
+          mindProgressRepository: HttpMindProgressRepository(_api),
           drafts: _roomDrafts,
           mode: _workspaceMode,
           onCreateRoom: _openCreateRoom,
