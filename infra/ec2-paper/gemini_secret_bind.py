@@ -66,22 +66,22 @@ def install_command(nonce: str, ciphertext_b64: str) -> str:
     if not NONCE_RE.fullmatch(nonce) or not re.fullmatch(r"[A-Za-z0-9+/=]{512}", ciphertext_b64):
         raise BindError("invalid encrypted secret envelope")
     state = f"{ROOT}/.gemini-keybind-{nonce}"
-    return f"""set -euo pipefail
+    script = """set -euo pipefail
 umask 077
 stage=identity
-trap 'rc=$?; rm -rf -- '{state}'; printf "MINTTICK_GEMINI_BIND_FAILED:%s\\n" "$stage" >&2; exit "$rc"' ERR
+trap 'rc=$?; rm -rf -- __STATE__; printf "MINTTICK_GEMINI_BIND_FAILED:%s\\n" "$stage" >&2; exit "$rc"' ERR
 test "$(id -u)" -eq 0
 test "$(uname -m)" = "aarch64"
-test -d '{state}' && test ! -L '{state}'
-test "$(stat -c '%u:%a' '{state}')" = '0:700'
+test -d '__STATE__' && test ! -L '__STATE__'
+test "$(stat -c '%u:%a' '__STATE__')" = '0:700'
 stage=decrypt
-printf '%s' '{ciphertext_b64}' | base64 -d > '{state}/ciphertext.bin'
-openssl pkeyutl -decrypt -inkey '{state}/private.pem' \\
+printf '%s' '__CIPHERTEXT__' | base64 -d > '__STATE__/ciphertext.bin'
+openssl pkeyutl -decrypt -inkey '__STATE__/private.pem' \\
   -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \\
-  -in '{state}/ciphertext.bin' -out '{state}/gemini.key' 2>/dev/null
-chmod 0600 '{state}/gemini.key'
+  -in '__STATE__/ciphertext.bin' -out '__STATE__/gemini.key' 2>/dev/null
+chmod 0600 '__STATE__/gemini.key'
 stage=runtime_write
-python3 - '{ROOT}/runtime.env' '{state}/gemini.key' <<'PY'
+python3 - '__ROOT__/runtime.env' '__STATE__/gemini.key' <<'PY'
 import os
 from pathlib import Path
 import re
@@ -112,14 +112,14 @@ for line in lines:
         kept.append(line)
 kept.extend([
     "NEWS_ANALYSIS_PROVIDER=GEMINI",
-    "GEMINI_MODEL={MODEL}",
+    "GEMINI_MODEL=__MODEL__",
     "GEMINI_API_KEY=" + key,
 ])
 fd, temporary = tempfile.mkstemp(prefix=".runtime.env.gemini.", dir=str(runtime.parent))
 try:
     os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
-        output.write("\n".join(kept) + "\n")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\\n") as output:
+        output.write("\\n".join(kept) + "\\n")
         output.flush()
         os.fsync(output.fileno())
     os.replace(temporary, runtime)
@@ -131,10 +131,17 @@ except BaseException:
     raise
 PY
 stage=cleanup
-rm -rf -- '{state}'
-printf '{STORED_MARKER}\\n'
+rm -rf -- '__STATE__'
+printf '__STORED_MARKER__\\n'
 stage=complete
 """
+    return (script.replace("__ROOT__", ROOT)
+                  .replace("__STATE__", state)
+                  .replace("__CIPHERTEXT__", ciphertext_b64)
+                  .replace("__MODEL__", MODEL)
+                  .replace("__STORED_MARKER__", STORED_MARKER))
+
+
 
 
 def aws_json(*args: str) -> dict:
