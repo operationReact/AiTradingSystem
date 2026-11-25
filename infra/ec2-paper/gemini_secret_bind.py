@@ -24,7 +24,7 @@ REGION = "ap-south-1"
 INSTANCE = "i-09c01b470fb39b85a"
 ROOT = "/opt/aitradingsystem-paper"
 MODEL = "gemini-3.5-flash-lite"
-KEY_RE = re.compile(r"[A-Za-z0-9_-]{20,256}")
+KEY_RE = re.compile(r"[!-~]{1,512}")
 NONCE_RE = re.compile(r"[0-9a-f]{32}")
 PUBLIC_MARKER = "MINTTICK_GEMINI_BIND_PUBLIC_KEY:"
 STORED_MARKER = "MINTTICK_GEMINI_BIND_STORED:true"
@@ -34,9 +34,13 @@ class BindError(RuntimeError):
     pass
 
 
-def validate_key(value: str) -> None:
-    if not isinstance(value, str) or not KEY_RE.fullmatch(value):
+def validate_key(value: str) -> str:
+    if not isinstance(value, str):
         raise BindError("Gemini key is absent or has an unsupported format")
+    value = value.strip()
+    if not KEY_RE.fullmatch(value):
+        raise BindError("Gemini key is absent or has an unsupported format")
+    return value
 
 
 def bootstrap_command(nonce: str) -> str:
@@ -96,7 +100,7 @@ for path in (runtime, key_path):
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
         raise SystemExit(31)
 key = key_path.read_text(encoding="ascii")
-if not re.fullmatch(r"[A-Za-z0-9_-]{20,256}", key):
+if not re.fullmatch(r"[!-~]{1,512}", key):
     raise SystemExit(32)
 lines = runtime.read_text(encoding="utf-8").splitlines()
 names = {"GEMINI_API_KEY", "NEWS_ANALYSIS_PROVIDER", "GEMINI_MODEL"}
@@ -227,7 +231,7 @@ def encrypt_for_host(public_key_b64: str, secret: str) -> str:
 
 
 def bind(secret: str) -> None:
-    validate_key(secret)
+    secret = validate_key(secret)
     os.environ["AWS_REGION"] = REGION
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import verify_ssm_release as release
