@@ -86,7 +86,46 @@ class MindOpeningRangeReplay {
             !RegExp(r'^(NSE|BSE):[A-Z0-9._-]+-EQ$').hasMatch(instrument))) ||
         (interval != null && !_intervals.contains(interval)) ||
         (fingerprint != null && (fingerprint is! String ||
-            !RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint))) {
+            !RegExp(r'^[a-f0-9]{64}
+      throw const FormatException('Unverified opening-range source identity');
+    }
+    if (posture == 'WAIT' &&
+        (signal == null || cutoff == null || instrument == null ||
+         interval == null || fingerprint == null ||
+         !reasons.contains('STRUCTURAL_REPLAY_ONLY'))) {
+      throw const FormatException('WAIT missing bounded opening-range replay');
+    }
+    return MindOpeningRangeReplay(
+      generatedAt: generatedAt,
+      strategyVersion: source['strategyVersion'] as String,
+      replayStatus: status,
+      decisionPosture: posture as String,
+      blockingReasons: reasons,
+      paperShadowStatus: source['paperShadowStatus'] as String,
+      instrument: instrument as String?,
+      interval: interval as String?,
+      signalAt: signal,
+      dataCutoffAt: cutoff,
+      fingerprint: fingerprint as String?,
+    );
+  }
+}
+
+abstract interface class MindOpeningRangeReplayRepository {
+  Future<MindOpeningRangeReplay> load();
+}
+
+class HttpMindOpeningRangeReplayRepository
+    implements MindOpeningRangeReplayRepository {
+  const HttpMindOpeningRangeReplayRepository(this.api);
+  final AuthenticatedApiClient api;
+
+  @override
+  Future<MindOpeningRangeReplay> load() async =>
+      MindOpeningRangeReplay.fromJson(
+        await api.getJson('/api/customer/mind/v1/opening-range-replay'));
+}
+).hasMatch(fingerprint)))) {
       throw const FormatException('Unverified opening-range source identity');
     }
     if (posture == 'WAIT' &&
