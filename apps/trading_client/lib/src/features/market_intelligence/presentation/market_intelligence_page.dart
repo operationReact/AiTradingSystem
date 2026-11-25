@@ -331,9 +331,9 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
     }
     String score(double? value) => value == null
         ? 'not available'
-        : '\${value >= 0 ? '+' : ''}\${value.toStringAsFixed(2)}';
+        : '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}';
     return Container(
-      key: ValueKey('market-news-impact-\${article.id}'),
+      key: ValueKey('market-news-impact-${article.id}'),
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -345,21 +345,21 @@ class _MarketIntelligencePageState extends State<MarketIntelligencePage> {
         Text('MintTick Mind · stock impact assessment',
           style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 5),
-        Text('Affected symbols: \${impact.impactedSymbols.isEmpty ? 'not identified' : impact.impactedSymbols.join(', ')}'),
-        Text('News tone: \${impact.sentiment.toLowerCase()} · \${impact.category.toLowerCase().replaceAll('_', ' ')}'),
-        Text('Directional evidence: \${score(impact.directionScore)} · confidence \${impact.confidence == null ? 'not available' : '\${(impact.confidence! * 100).round()}%'}'),
-        Text('Materiality: \${impact.materiality == null ? 'not available' : '\${(impact.materiality! * 100).round()}%'} · horizon \${impact.horizon?.toLowerCase().replaceAll('_', ' ') ?? 'unknown'}'),
+        Text('Affected symbols: ${impact.impactedSymbols.isEmpty ? 'not identified' : impact.impactedSymbols.join(', ')}'),
+        Text('News tone: ${impact.sentiment.toLowerCase()} · ${impact.category.toLowerCase().replaceAll('_', ' ')}'),
+        Text('Directional evidence: ${score(impact.directionScore)} · confidence ${impact.confidence == null ? 'not available' : '${(impact.confidence! * 100).round()}%'}'),
+        Text('Materiality: ${impact.materiality == null ? 'not available' : '${(impact.materiality! * 100).round()}%'} · horizon ${impact.horizon?.toLowerCase().replaceAll('_', ' ') ?? 'unknown'}'),
         if (impact.evidence.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Text('Evidence: \${impact.evidence}'),
+          Text('Evidence: ${impact.evidence}'),
         ],
         if (impact.risks.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Text('Uncertainty: \${impact.risks.join(' · ')}'),
+          Text('Uncertainty: ${impact.risks.join(' · ')}'),
         ],
         if (impact.contradiction == true || impact.ambiguity == true) ...[
           const SizedBox(height: 5),
-          Text('Caution: \${impact.contradiction == true ? 'conflicting evidence' : ''}\${impact.contradiction == true && impact.ambiguity == true ? ' · ' : ''}\${impact.ambiguity == true ? 'interpretation is ambiguous' : ''}',
+          Text('Caution: ${impact.contradiction == true ? 'conflicting evidence' : ''}${impact.contradiction == true && impact.ambiguity == true ? ' · ' : ''}${impact.ambiguity == true ? 'interpretation is ambiguous' : ''}',
             style: theme.textTheme.bodySmall?.copyWith(color: muted)),
         ],
         const SizedBox(height: 8),
@@ -407,8 +407,8 @@ class _ArticleLine extends StatelessWidget {
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 5),
         child: Text(
-          '\${article.source} · \${_MarketIntelligencePageState._ist(article.publishedAt)}'
-          '\${article.stockImpact == null ? (article.analysisStatus == 'FAILED' ? ' · analysis failed' : ' · Mind analysis pending') : ' · \${article.stockImpact!.sentiment.toLowerCase()} · \${article.stockImpact!.impactedSymbols.join(', ')}'}',
+          '${article.source} · ${_MarketIntelligencePageState._ist(article.publishedAt)}'
+          '${article.stockImpact == null ? (article.analysisStatus == 'FAILED' ? ' · analysis failed' : ' · Mind analysis pending') : ' · ${article.stockImpact!.sentiment.toLowerCase()} · ${article.stockImpact!.impactedSymbols.join(', ')}'}',
           maxLines: 2, overflow: TextOverflow.ellipsis),
       ),
       trailing: const Icon(Icons.chevron_right_rounded, size: 19),
