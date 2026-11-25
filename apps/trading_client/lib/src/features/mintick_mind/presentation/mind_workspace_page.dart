@@ -16,6 +16,7 @@ import '../data/mind_verified_news_repository.dart';
 import '../data/mind_decision_outcomes_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_opening_range_replay_repository.dart';
+import '../data/mind_orb_walkforward_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
 import '../data/mind_prospective_signals_repository.dart';
@@ -121,6 +122,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.evidenceRepository,
     this.strategyReplayRepository,
     this.openingRangeReplayRepository,
+    this.orbWalkForwardRepository,
     this.decisionHistoryRepository,
     this.verifiedNewsRepository,
     this.decisionOutcomesRepository,
@@ -155,6 +157,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   final MindEvidenceRepository? evidenceRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
   final MindOpeningRangeReplayRepository? openingRangeReplayRepository;
+  final MindOrbWalkForwardRepository? orbWalkForwardRepository;
   final MindDecisionHistoryRepository? decisionHistoryRepository;
   final MindVerifiedNewsRepository? verifiedNewsRepository;
   final MindDecisionOutcomesRepository? decisionOutcomesRepository;
@@ -498,6 +501,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
                     strategyReplayRepository: widget.strategyReplayRepository,
                     openingRangeReplayRepository:
                         widget.openingRangeReplayRepository,
+                    orbWalkForwardRepository: widget.orbWalkForwardRepository,
                     walkForwardRepository: widget.walkForwardRepository,
                     prospectiveRepository: widget.prospectiveRepository,
                     prospectiveSignalsRepository: widget.prospectiveSignalsRepository,
