@@ -25,7 +25,7 @@ EXPECTED = {
     "instance_id": INSTANCE,
     "environment": "PAPER",
     "operation": "activate",
-    "source_ids": ["moneycontrol", "economic-times", "sebi"],
+    "source_ids": ["nse-announcements", "moneycontrol", "economic-times", "sebi"],
     "permitted_uses": ["INGEST", "RETAIN", "DISPLAY", "NLP_TRANSFER"],
     "reviewer_ref": "owner-attestation:2026-11-25",
     "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
@@ -59,7 +59,7 @@ for line in lines:
     values[k]=v
 key=values.get("APP_API_KEY","")
 if not re.fullmatch(r"[0-9a-f]{64}", key): raise SystemExit("APP_KEY_INVALID")
-sources=("moneycontrol","economic-times","sebi")
+sources=("nse-announcements","moneycontrol","economic-times","sebi")
 uses=["INGEST","RETAIN","DISPLAY","NLP_TRANSFER"]
 now=datetime.now(timezone.utc).isoformat()
 for source in sources:
@@ -147,7 +147,7 @@ def safe_health_snapshot(payload):
                   "uses":[x.get(k) is True for k in
                     ("canIngest","canRetain","canDisplay","canTransferToModel")]}
                  for x in payload.get("sources",[]) if x.get("sourceId") in
-                    ("moneycontrol","economic-times","sebi")],
+                    ("nse-announcements","moneycontrol","economic-times","sebi")],
       "geminiAttempted":bool(model.get("lastGeminiAttemptAt")),
       "geminiOutcome":model.get("lastGeminiAttemptOutcome"),
     }
@@ -187,7 +187,7 @@ while time.monotonic()<deadline:
     if model.get("selectedProvider")!="GEMINI":
         emit_health_snapshot(health)
         raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
-    for source_id in ("moneycontrol","economic-times","sebi"):
+    for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"):
         source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
         if not source or source.get("rightsState")!="APPROVED" or not all(
             source.get(field) is True for field in
