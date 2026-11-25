@@ -1,22 +1,22 @@
 {
-  "kind": "minttick-news-runtime-activate-v1",
-  "account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
-  "environment": "PAPER",
-  "operation": "activate",
-  "source_ids": [
-    "moneycontrol",
-    "economic-times",
-    "sebi"
-  ],
-  "permitted_uses": [
-    "INGEST",
-    "RETAIN",
-    "DISPLAY",
-    "NLP_TRANSFER"
-  ],
-  "reviewer_ref": "owner-attestation:2026-11-25",
-  "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
-  "content_ttl_days": 30
+    "kind": "minttick-news-runtime-activate-v1",
+    "account": "098859530205",
+    "region": "ap-south-1",
+    "instance_id": "i-09c01b470fb39b85a",
+    "environment": "PAPER",
+    "operation": "activate",
+    "source_ids": [
+        "moneycontrol",
+        "economic-times",
+        "sebi"
+    ],
+    "permitted_uses": [
+        "INGEST",
+        "RETAIN",
+        "DISPLAY",
+        "NLP_TRANSFER"
+    ],
+    "reviewer_ref": "owner-attestation:2026-11-25",
+    "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
+    "content_ttl_days": 30
 }
