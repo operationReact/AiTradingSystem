@@ -27,11 +27,11 @@ public class GeminiNewsSummarizer {
 
     public GeminiNewsSummarizer(ObjectMapper objectMapper,
         @Value("${GEMINI_API_KEY:}") String apiKey,
-        @Value("${GEMINI_MODEL:gemini-2.5-flash}") String model,
+        @Value("${GEMINI_MODEL:gemini-3.5-flash-lite}") String model,
         @Value("${app.news.summarization.enabled:false}") boolean enabled) {
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
-        this.model = model.matches("[A-Za-z0-9._-]{1,80}") ? model : "gemini-2.5-flash";
+        this.model = model.matches("[A-Za-z0-9._-]{1,80}") ? model : "gemini-3.5-flash-lite";
         this.enabled = enabled && !apiKey.isBlank();
     }
 
