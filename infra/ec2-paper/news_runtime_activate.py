@@ -172,6 +172,7 @@ def utc_instant(value, label):
 deadline=time.monotonic()+1500
 source_done=False
 gemini_done=False
+analysis_triggered=False
 while time.monotonic()<deadline:
     req=urllib.request.Request(url,headers={"X-API-Key":key})
     try:
