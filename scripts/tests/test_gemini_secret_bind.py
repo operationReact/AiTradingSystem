@@ -13,6 +13,9 @@ import gemini_secret_bind as bind
 class GeminiSecretBindTests(unittest.TestCase):
     def test_api_key_shape_is_bounded(self):
         bind.validate_key("AIzaSyExampleSyntheticKey0123456789_-")
+        bind.validate_key("google-key:v2." + "a" * 300)
+        with self.assertRaises(bind.BindError):
+            bind.validate_key("invalid key with whitespace")
         self.assertEqual(bind.validate_key("  AIzaSyExampleSyntheticKey0123456789_-\n"), "AIzaSyExampleSyntheticKey0123456789_-")
         with self.assertRaises(bind.BindError):
             bind.validate_key("")
