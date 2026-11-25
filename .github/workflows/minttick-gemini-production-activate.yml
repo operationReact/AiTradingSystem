@@ -73,7 +73,7 @@ jobs:
               "lengthInExpectedRange": 20 <= len(value) <= 256,
               "allowedKeyCharactersOnly": bool(re.fullmatch(r"[A-Za-z0-9_-]{20,256}", value)),
               "expectedGooglePrefix": value.startswith("AIza"),
-              "surroundingQuotes": len(value) >= 2 and value[0] == value[-1] and value[0] in "\\"'",
+              "surroundingQuotes": value[:1] in ("'", '"') and value[-1:] == value[:1],
           }
           print(json.dumps(report, sort_keys=True))
           PY
