@@ -40,6 +40,7 @@ stage=intake_diagnostic
 python3 - <<'PY'
 import json
 from pathlib import Path
+import os
 import stat
 import subprocess
 
@@ -54,7 +55,7 @@ key_present=bool(runtime.get('MINTTICK_FNO_RESEARCH_PRIVATE_INTAKE_REVIEWER_PUBL
 directory=root/'fno176-attested-intake'
 directory_ready=False
 try:
-    info=directory.stat(follow_symlinks=False)
+    info=os.lstat(directory)
     directory_ready=(stat.S_ISDIR(info.st_mode) and info.st_uid==10001
                      and stat.S_IMODE(info.st_mode)==0o700)
 except OSError:

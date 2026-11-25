@@ -73,6 +73,8 @@ class SafeSsmPreflightDiagnostics(unittest.TestCase):
     def test_remote_preflight_has_safe_stage_trap_and_parses_cleanly(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("MINTTICK_PREFLIGHT_FAILED_STAGE:%s", source)
+        self.assertIn("info=os.lstat(directory)", source)
+        self.assertNotIn("follow_symlinks=False", source)
         for stage in gate.PREFLIGHT_STAGES:
             if stage != "complete":
                 self.assertIn("stage=" + stage, source)
