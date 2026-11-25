@@ -1,5 +1,8 @@
 """Offline tests for exact-host private F&O backfill bootstrap. No AWS/Upstox."""
 from pathlib import Path
+import base64
+import gzip
+import hashlib
 import sys
 import unittest
 
@@ -40,6 +43,19 @@ class BootstrapContractTest(unittest.TestCase):
             "FNO_BULK_SMOKE_FAILURE:/private/token\n"))
         self.assertEqual("SMOKE_NO_VALID_ROWS",ops.smoke_failure(
             "FNO_BULK_SMOKE:NO_VALID_ROWS;complete=0;total=0;rows=0;calls=7\n"))
+    def test_runner_pins_exact_transitive_worker_modules(self):
+        self.assertEqual(ops.PINNED_MODULES,
+            ("fno_history_backfill.py", "upstox_fno_backfill_adapters.py"))
+        for name in ops.PINNED_MODULES:
+            digest,encoded=ops.package_source(name)
+            source=gzip.decompress(base64.b64decode(encoded))
+            self.assertEqual(hashlib.sha256(source).hexdigest(),digest)
+            self.assertIn("sha256sum -c -",ops.stage_source_command(name,digest,encoded))
+            self.assertIn("mv -f",ops.stage_source_command(name,digest,encoded))
+        with self.assertRaises(ValueError):
+            ops.package_source("../../runtime.env")
+        with self.assertRaises(ValueError):
+            ops.stage_source_command("../../runtime.env","0"*64,"YWJj")
     def test_single_systemd_unit_is_not_broker_order_service(self):
         unit=ops.unit_text()
         self.assertIn("ExecStart=/usr/bin/python3",unit)
