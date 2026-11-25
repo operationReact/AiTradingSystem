@@ -25,7 +25,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,6 +59,15 @@ jobs:
           assert json.loads(p.read_text()) == expected
           PY
           fi
+      - name: Compile backend and run news source, parser, and PostgreSQL policy tests
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Verify news integration contracts
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=NewsSourceRegistryTest,NewsSourceCoverageTest,NewsSourceHealthControllerTest,RssFeedParserTest,NewsIngestionJobTest,NewsIntelligenceAdminHealthControllerIT,NewsSourcePolicyIT test
 
   activate:
     needs: validate
