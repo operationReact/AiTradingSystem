@@ -231,8 +231,8 @@ while time.monotonic()<deadline:
                     receipt=json.loads(response.read())
             except (urllib.error.URLError,TimeoutError,ValueError):
                 raise SystemExit("NEWS_ANALYSIS_TRIGGER_FAILED")
-            if receipt.get("status")!="ANALYZED" or receipt.get("provider")!="GEMINI" \\
-                or not receipt.get("providerRequestId") or not receipt.get("analyzedAt") \\
+            if receipt.get("status")!="ANALYZED" or receipt.get("provider")!="GEMINI" \
+                or not receipt.get("providerRequestId") or not receipt.get("analyzedAt") \
                 or utc_instant(receipt["analyzedAt"],"ANALYSIS")<activated:
                 raise SystemExit("NEWS_ANALYSIS_RESULT_INVALID")
     attempted_at=model.get("lastGeminiAttemptAt")
