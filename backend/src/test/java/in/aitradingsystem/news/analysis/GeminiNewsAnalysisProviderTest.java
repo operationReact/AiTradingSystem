@@ -19,7 +19,7 @@ class GeminiNewsAnalysisProviderTest {
 
         Map<String, Object> body = provider.requestBody("system", "user");
 
-        assertThat(body).containsEntry("model", "gemini-2.5-flash");
+        assertThat(body).containsEntry("model", "gemini-3.5-flash-lite");
         assertThat(body).containsEntry("input", "user");
         assertThat(body).containsEntry("system_instruction", "system");
         assertThat(body).containsEntry("store", false);
@@ -88,7 +88,7 @@ class GeminiNewsAnalysisProviderTest {
             {"status":"completed","id":"synthetic-id","steps":[
               {"type":"model_output","content":[{"type":"text","text":"{}"}]}]}
             """);
-        NewsProperties props = new NewsProperties("GEMINI", "gemini-2.5-flash",
+        NewsProperties props = new NewsProperties("GEMINI", "gemini-3.5-flash-lite",
             "claude-test", "test-key", "", 1000, 5000, 2);
         var provider = new GeminiNewsAnalysisProvider(props, mapper) {
             @Override
@@ -112,7 +112,7 @@ class GeminiNewsAnalysisProviderTest {
             """);
         java.util.concurrent.atomic.AtomicReference<JsonNode> next =
             new java.util.concurrent.atomic.AtomicReference<>(response);
-        NewsProperties props = new NewsProperties("GEMINI", "gemini-2.5-flash",
+        NewsProperties props = new NewsProperties("GEMINI", "gemini-3.5-flash-lite",
             "claude-test", "test-key", "", 1000, 5000, 2);
         var provider = new GeminiNewsAnalysisProvider(props, mapper) {
             @Override
@@ -141,7 +141,7 @@ class GeminiNewsAnalysisProviderTest {
     private GeminiNewsAnalysisProvider provider() {
         NewsProperties props = new NewsProperties(
             "GEMINI",
-            "gemini-2.5-flash",
+            "gemini-3.5-flash-lite",
             "claude-test",
             "test-key",
             "",
