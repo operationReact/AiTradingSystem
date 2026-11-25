@@ -369,7 +369,9 @@ def run(start_limit=0, max_requests=MAX_REQUESTS_PER_RUN, wait_for_more=False):
                 if consecutive_errors>=8: break
             else:
                 consecutive_errors=0
-            completed+=1
+            # Only non-empty, successfully persisted batches count as work.
+            if result=="DONE":
+                completed+=1
             if completed%5==0 or completed==1:
                 cleanup_expired_cache(sink)
                 persist_summary(queue,sink)
