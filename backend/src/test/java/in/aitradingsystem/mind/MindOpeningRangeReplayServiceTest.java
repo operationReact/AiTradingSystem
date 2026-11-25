@@ -141,6 +141,8 @@ class MindOpeningRangeReplayServiceTest {
         var input = bars();
         var candidate = candidate(input);
         when(scans.rankedCandidates(RUN_ID, 200)).thenReturn(List.of(candidate));
+        when(candles.recentCandlesAsOf(42L, "FIVE_MINUTE", SIGNAL_AT,
+            MindSourceSnapshot.OPENING_RANGE_BARS)).thenReturn(input);
         when(scans.findMindInputCustody(RUN_ID, candidate.candidateFingerprint()))
             .thenReturn(Optional.empty());
 
