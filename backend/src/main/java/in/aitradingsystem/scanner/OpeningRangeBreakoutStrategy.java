@@ -33,6 +33,25 @@ public final class OpeningRangeBreakoutStrategy implements ScannerStrategy {
                 minimumCandles(), TradingStyle.INTRADAY, true, "HEALTHY", true, false);
     }
 
+    private static boolean hasCompleteOpeningRange(String interval, List<MarketCandle> opening) {
+        int stepMinutes = switch (interval) {
+            case "ONE_MINUTE" -> 1;
+            case "THREE_MINUTE" -> 3;
+            case "FIVE_MINUTE" -> 5;
+            default -> 0;
+        };
+        if (stepMinutes == 0) return false;
+
+        int expectedCount = 15 / stepMinutes;
+        if (opening.size() != expectedCount) return false;
+        for (int index = 0; index < expectedCount; index++) {
+            LocalTime expected = OPEN.plusMinutes((long) index * stepMinutes);
+            LocalTime actual = opening.get(index).candleTime().atZone(INDIA).toLocalTime();
+            if (!expected.equals(actual)) return false;
+        }
+        return true;
+    }
+
     @Override
     public Optional<ScanCandidate> evaluate(ScanContext context) {
         List<MarketCandle> bars = context.candles();
@@ -44,7 +63,8 @@ public final class OpeningRangeBreakoutStrategy implements ScannerStrategy {
             LocalTime time = local.toLocalTime();
             if (local.toLocalDate().equals(session) && !time.isBefore(OPEN) && time.isBefore(RANGE_END)) opening.add(bar);
         }
-        if (opening.size() < 3 || latest.candleTime().atZone(INDIA).toLocalTime().isBefore(RANGE_END)) return Optional.empty();
+        if (!hasCompleteOpeningRange(context.interval(), opening)
+                || latest.candleTime().atZone(INDIA).toLocalTime().isBefore(RANGE_END)) return Optional.empty();
         BigDecimal rangeHigh = opening.stream().map(MarketCandle::high).max(BigDecimal::compareTo).orElseThrow();
         BigDecimal avgVolume = opening.stream().map(b -> BigDecimal.valueOf(b.volume())).reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(opening.size()), 8, RoundingMode.HALF_UP);
