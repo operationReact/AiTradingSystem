@@ -30,11 +30,16 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
   late final Future<(List<MindPaperRoom>, List<MindPaperInstrument>)> _setup = _load();
   String? _roomId;
   int? _instrumentId;
+  String _strategyCode = 'SMA_TREND_VOLUME_V1';
   String _interval = 'FIFTEEN_MINUTE';
   bool _running = false;
   MindPaperCycleResult? _result;
   List<MindPaperCycle> _recent = const [];
   String? _error;
+
+  List<(String, String)> get _intervalChoices => _strategyCode == 'OPENING_RANGE_BREAKOUT_V1'
+      ? const [('ONE_MINUTE', '1m'), ('THREE_MINUTE', '3m'), ('FIVE_MINUTE', '5m')]
+      : const [('FIVE_MINUTE', '5m'), ('FIFTEEN_MINUTE', '15m'), ('ONE_HOUR', '1h'), ('ONE_DAY', '1D')];
 
   Future<(List<MindPaperRoom>, List<MindPaperInstrument>)> _load() async {
     final rooms = await widget.repository.rooms();
@@ -65,7 +70,8 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
     if (_running || room == null || instrument == null) return;
     setState(() { _running = true; _error = null; });
     try {
-      final result = await widget.repository.run(roomId: room, instrumentId: instrument, interval: _interval);
+      final result = await widget.repository.run(roomId: room, instrumentId: instrument,
+          interval: _interval, strategyCode: _strategyCode);
       if (!mounted) return;
       setState(() { _result = result; _running = false; });
       await _loadRecent();
@@ -97,9 +103,15 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                 MindTag('PAPER · VIRTUAL', color: MindPalette.yellow),
               ]),
               const SizedBox(height: 4),
-              const Text('SMA_TREND_VOLUME_V1 on stored broker candles → verified live quote → automatic risk '
+              Text('$_strategyCode on stored broker candles → verified live quote → automatic risk '
                   'sizing → existing PAPER engine. No broker order is ever placed.',
                   style: TextStyle(color: MindPalette.muted, fontSize: 11)),
+              if (_strategyCode == 'OPENING_RANGE_BREAKOUT_V1') ...[
+                const SizedBox(height: 4),
+                const Text('Research candidate only. This cycle uses virtual funds and cannot enable LIVE orders.',
+                    key: ValueKey('mind-orb-paper-only'),
+                    style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
+              ],
               const SizedBox(height: 10),
             ]);
             if (snap.connectionState != ConnectionState.done) {
@@ -129,7 +141,29 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                   (v) => setState(() => _instrumentId = v), const ValueKey('mind-paper-instrument')),
               const SizedBox(height: 8),
               Wrap(spacing: 6, children: [
-                for (final (code, label) in const [('FIVE_MINUTE', '5m'), ('FIFTEEN_MINUTE', '15m'), ('ONE_HOUR', '1h'), ('ONE_DAY', '1D')])
+                for (final (code, label) in const [
+                  ('SMA_TREND_VOLUME_V1', 'SMA Trend'),
+                  ('OPENING_RANGE_BREAKOUT_V1', 'Opening Range Breakout'),
+                ])
+                  ChoiceChip(label: Text(label), selected: _strategyCode == code,
+                      onSelected: (_) => setState(() {
+                        _strategyCode = code;
+                        if (code == 'OPENING_RANGE_BREAKOUT_V1' &&
+                            !const ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'].contains(_interval)) {
+                          _interval = 'FIVE_MINUTE';
+                        } else if (code == 'SMA_TREND_VOLUME_V1' &&
+                            const ['ONE_MINUTE', 'THREE_MINUTE'].contains(_interval)) {
+                          _interval = 'FIVE_MINUTE';
+                        }
+                      }),
+                      backgroundColor: MindPalette.card, selectedColor: MindPalette.panel,
+                      side: const BorderSide(color: MindPalette.border),
+                      labelStyle: TextStyle(fontSize: 11,
+                          color: _strategyCode == code ? MindPalette.mint : MindPalette.text)),
+              ]),
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, children: [
+                for (final (code, label) in _intervalChoices)
                   ChoiceChip(label: Text(label), selected: _interval == code,
                       onSelected: (_) => setState(() => _interval = code),
                       backgroundColor: MindPalette.card, selectedColor: MindPalette.panel,

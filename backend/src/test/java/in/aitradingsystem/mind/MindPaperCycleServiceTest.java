@@ -33,8 +33,10 @@ class MindPaperCycleServiceTest {
         assertThat(MindPaperCycleService.roundDown(new BigDecimal("105.81"), tick)).isEqualByComparingTo("105.80");
         assertThat(MindPaperCycleService.roundUp(new BigDecimal("105.85"), tick)).isEqualByComparingTo("105.85");
         assertThat(MindPaperCycleService.maxCandleAge(HistoricalCandleInterval.FIFTEEN_MINUTE)).isEqualTo(Duration.ofHours(1));
-        assertThat(MindPaperCycleService.maxCandleAge(HistoricalCandleInterval.ONE_MINUTE)).isEqualTo(Duration.ZERO);
-        assertThat(MindPaperCycleService.INTERVALS).doesNotContain(HistoricalCandleInterval.ONE_MINUTE);
+        assertThat(MindPaperCycleService.maxCandleAge(HistoricalCandleInterval.ONE_MINUTE)).isEqualTo(Duration.ofMinutes(3));
+        assertThat(MindPaperCycleService.maxCandleAge(HistoricalCandleInterval.THREE_MINUTE)).isEqualTo(Duration.ofMinutes(9));
+        assertThat(MindPaperCycleService.INTERVALS).contains(HistoricalCandleInterval.ONE_MINUTE,
+            HistoricalCandleInterval.THREE_MINUTE);
     }
 
     @Test

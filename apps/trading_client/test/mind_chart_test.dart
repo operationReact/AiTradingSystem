@@ -11,7 +11,8 @@ class _Cycles implements MindPaperCycleRepository {
   Future<List<MindPaperInstrument>> instruments() async =>
       const [MindPaperInstrument(7, 'RELIANCE-EQ · NSE'), MindPaperInstrument(8, 'SBIN-EQ · NSE')];
   @override
-  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId, required String interval}) =>
+  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId,
+      required String interval, required String strategyCode}) =>
       throw UnimplementedError();
   @override
   Future<List<MindPaperCycle>> recent(String roomId) async => const [];

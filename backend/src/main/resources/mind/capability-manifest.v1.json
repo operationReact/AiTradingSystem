@@ -1757,7 +1757,7 @@
    "parentId": "family.Breakout",
    "group": "Breakout",
    "owner": "Claude",
-   "blockerCode": "NOT_WIRED_TO_PAPER",
+   "blockerCode": "LIVE_NOT_AUTHORIZED",
    "requiredInputs": [
     "OHLCV candles"
    ],
@@ -1780,14 +1780,27 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/scanner/StrategyRegistryTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "apps/trading_client/test/mind_paper_cycle_test.dart"
     }
    ],
    "missing": [
-    "Connect to Mind strategy-to-PAPER orchestration",
-    "Backtest + walk-forward evidence per strategy",
-    "Runtime evaluation evidence on deployed revision"
+    "Independent positive after-cost out-of-sample evidence with verified inputs",
+    "Prospective PAPER cohort with at least 30 closed trades",
+    "Runtime evaluation evidence on deployed revision",
+    "Separate LIVE activation approval and all broker execution safety gates"
    ],
-   "note": "09:15-09:30 IST opening range breakout with volume confirmation (scanner registry).",
+   "note": "09:15-09:30 IST opening range breakout with volume confirmation; connected to guarded virtual PAPER only. No LIVE execution authorization.",
    "id": "strategy.STR-024",
    "kind": "STRATEGY",
    "name": "Opening Range Breakout",

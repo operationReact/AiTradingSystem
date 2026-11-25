@@ -147,7 +147,8 @@ abstract interface class MindPaperCycleRepository {
   Future<List<MindPaperRoom>> rooms();
   /// The owner's watchlist; the cycle never picks instruments on its own.
   Future<List<MindPaperInstrument>> instruments();
-  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId, required String interval});
+  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId,
+      required String interval, required String strategyCode});
   Future<List<MindPaperCycle>> recent(String roomId);
 }
 
@@ -155,7 +156,8 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository {
   HttpMindPaperCycleRepository(this.api, {Random? random}) : _random = random ?? Random.secure();
   final AuthenticatedApiClient api;
   final Random _random;
-  static const intervals = ['FIFTEEN_MINUTE', 'FIVE_MINUTE', 'ONE_HOUR', 'ONE_DAY'];
+  static const intervals = ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE',
+    'FIFTEEN_MINUTE', 'ONE_HOUR', 'ONE_DAY'];
 
   @override
   Future<List<MindPaperRoom>> rooms() async => [
@@ -174,13 +176,21 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository {
   }
 
   @override
-  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId, required String interval}) async {
+  Future<MindPaperCycleResult> run({required String roomId, required int instrumentId,
+      required String interval, required String strategyCode}) async {
     _room(roomId);
-    if (!intervals.contains(interval) || instrumentId < 1) throw ArgumentError('Invalid PAPER cycle request');
+    final orb = strategyCode == 'OPENING_RANGE_BREAKOUT_V1';
+    final allowedIntervals = orb
+        ? const ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'] : intervals;
+    if (!allowedIntervals.contains(interval) ||
+        !const ['SMA_TREND_VOLUME_V1', 'OPENING_RANGE_BREAKOUT_V1'].contains(strategyCode) ||
+        instrumentId < 1) {
+      throw ArgumentError('Invalid PAPER cycle request');
+    }
     final key = 'mindcycle-${List.generate(20, (_) => _random.nextInt(36).toRadixString(36)).join()}';
     return MindPaperCycleResult.parse(await api.postJson('/api/customer/trading-rooms/$roomId/mind/paper-cycles',
         headers: {'Idempotency-Key': key},
-        body: {'instrumentId': instrumentId, 'interval': interval}));
+        body: {'instrumentId': instrumentId, 'interval': interval, 'strategyCode': strategyCode}));
   }
 
   @override
