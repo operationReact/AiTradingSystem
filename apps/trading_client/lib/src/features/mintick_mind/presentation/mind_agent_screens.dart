@@ -25,6 +25,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
       ('shadow-arena','Shadow Arena',Icons.science_outlined),
       ('institutional-flow','FII / DII Flow',Icons.account_balance_outlined),
       ('daily-verdict','Daily Verdict',Icons.event_note_outlined),
+      ('news-analyzer','News Analyzer',Icons.newspaper_outlined),
       ('culprit-catcher','Culprit Catcher',Icons.bug_report_outlined),
     ];
     return Wrap(spacing:7,runSpacing:7,children:[
@@ -106,6 +107,8 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
       ]),
       _tile('Daily Market Verdict','Briefing and blockers · mock only',
         Icons.event_note_outlined,route:'daily-verdict'),
+      _tile('News Analyzer','Live customer news feed and analysis details',
+        Icons.newspaper_outlined,route:'news-analyzer'),
     ]);
 
   Widget agentCouncilScreen(){
