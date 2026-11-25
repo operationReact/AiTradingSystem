@@ -87,6 +87,16 @@ def safe_failure_reason(exc):
         return reason
     if isinstance(exc, sqlite3.Error):
         return "PRIVATE_DB_ERROR"
+    if isinstance(exc, OSError):
+        return "PRIVATE_STORAGE_ERROR"
+    if isinstance(exc, GateClosed):
+        return "UNCLASSIFIED_GATE_BLOCK"
+    if isinstance(exc, RuntimeError):
+        return "UNCLASSIFIED_RUNTIME_FAILURE"
+    if isinstance(exc, ValueError):
+        return "UNCLASSIFIED_VALIDATION_FAILURE"
+    if isinstance(exc, (KeyError,TypeError,AttributeError)):
+        return "UNCLASSIFIED_PROVIDER_SCHEMA_FAILURE"
     return "UNCLASSIFIED_SAFE_FAILURE"
 
 def today():
