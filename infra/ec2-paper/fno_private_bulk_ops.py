@@ -194,6 +194,24 @@ def parse_smoke_failure(raw):
         return found[0]
     return "UNCLASSIFIED_SAFE_FAILURE"
 
+def parse_smoke_counters(raw):
+    """Read only bounded counters from the fixed smoke diagnostic marker."""
+    if not isinstance(raw,str) or len(raw)>8000:
+        return None
+    found=re.findall(
+        r"^FNO_BULK_SMOKE_COUNTERS:complete=(\\d{1,5});total=(\\d{1,5});"
+        r"rows=(\\d{1,5});calls=(\\d{1,3})$",raw,re.M)
+    if len(found)!=1:
+        return None
+    try:
+        values=tuple(int(x) for x in found[0])
+    except ValueError:
+        return None
+    complete,total,rows,calls=values
+    if any(x>20000 for x in values[:3]) or calls>12:
+        return None
+    return values
+
 def _call(*args,timeout=45,capture_stderr=False):
     try:
         return subprocess.run(args,stdout=subprocess.PIPE,
@@ -300,6 +318,9 @@ def host():
     if not (0<done<=total<=20000 and rows>0 and 0<calls<=12):
         print(receipt("SMOKE_FAILED"),flush=True)
         print("FNO_BULK_SMOKE_FAILURE:SMOKE_COUNTERS_INVALID",flush=True)
+        if all(0<=value<=20000 for value in (done,total,rows)) and 0<=calls<=12:
+            print(f"FNO_BULK_SMOKE_COUNTERS:complete={done};total={total};"
+                  f"rows={rows};calls={calls}",flush=True)
         return 2
     unit=Path(UNIT)
     if unit.is_symlink() or (unit.exists() and not unit.is_file()):
@@ -397,11 +418,16 @@ def runner():
             if result is None:
                 raise SystemExit("FNO_BULK_NO_SAFE_RECEIPT")
             code,done,total,rows=result
-            failure=("; cause="+parse_smoke_failure(stdout)
-                     if code=="SMOKE_FAILED" else "")
+            cause=parse_smoke_failure(stdout) if code=="SMOKE_FAILED" else None
+            failure=("; cause="+cause if cause else "")
+            counters=parse_smoke_counters(stdout) if cause=="SMOKE_COUNTERS_INVALID" else None
+            counter_text=(
+                f"; smokeComplete={counters[0]}; smokePlanned={counters[1]}; "
+                f"smokeRows={counters[2]}; smokeCalls={counters[3]}"
+                if counters else "")
             print(f"FNO PRIVATE BULK: state={code}; finished={done}; "
                   f"planned={total}; persistedRows={rows}; "
-                  "singleService=true; redistribution=false"+failure+"; "
+                  "singleService=true; redistribution=false"+failure+counter_text+"; "
                   "ownerScopeExpiry=2026-11-28; providerLicenceUnverified=true",
                   flush=True)
             if state!="Success" or code not in {"STARTED","ALREADY_RUNNING"}:
