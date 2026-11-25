@@ -50,7 +50,7 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
         }
         try {
             JsonNode root = post(
-                "/v1/interactions",
+                "/v1beta/interactions",
                 Map.of("x-goog-api-key", props.geminiApiKey()),
                 requestBody(systemPrompt, userPrompt));
             if (root == null || !"completed".equals(root.path("status").asText())) {
