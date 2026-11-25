@@ -55,6 +55,7 @@ public final class OpeningRangeBreakoutStrategy implements ScannerStrategy {
     @Override
     public Optional<ScanCandidate> evaluate(ScanContext context) {
         List<MarketCandle> bars = context.candles();
+        if (bars.isEmpty() || bars.stream().anyMatch(bar -> !context.interval().equals(bar.interval()))) return Optional.empty();
         MarketCandle latest = bars.getLast();
         LocalDate session = latest.candleTime().atZone(INDIA).toLocalDate();
         List<MarketCandle> opening = new ArrayList<>();
