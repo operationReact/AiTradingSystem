@@ -89,16 +89,19 @@ def safe_failure_reason(exc):
         return "PRIVATE_DB_ERROR"
     if isinstance(exc, OSError):
         return "PRIVATE_STORAGE_ERROR"
-    exception_classes = {
-        GateClosed: "WORKER_EXCEPTION_GATE_CLOSED",
-        RuntimeError: "WORKER_EXCEPTION_RUNTIME_ERROR",
-        ValueError: "WORKER_EXCEPTION_VALIDATION_ERROR",
-        KeyError: "WORKER_EXCEPTION_KEY_ERROR",
-        TypeError: "WORKER_EXCEPTION_TYPE_ERROR",
-        AttributeError: "WORKER_EXCEPTION_ATTRIBUTE_ERROR",
-    }
-    failure = exception_classes.get(type(exc))
-    return failure or "UNCLASSIFIED_SAFE_FAILURE"
+    if isinstance(exc, GateClosed):
+        return "WORKER_EXCEPTION_GATE_CLOSED"
+    if isinstance(exc, RuntimeError):
+        return "WORKER_EXCEPTION_RUNTIME_ERROR"
+    if isinstance(exc, ValueError):
+        return "WORKER_EXCEPTION_VALIDATION_ERROR"
+    if isinstance(exc, KeyError):
+        return "WORKER_EXCEPTION_KEY_ERROR"
+    if isinstance(exc, TypeError):
+        return "WORKER_EXCEPTION_TYPE_ERROR"
+    if isinstance(exc, AttributeError):
+        return "WORKER_EXCEPTION_ATTRIBUTE_ERROR"
+    return "UNCLASSIFIED_SAFE_FAILURE"
 
 def today():
     return datetime.now(ZoneInfo("Asia/Kolkata")).date()
