@@ -51,6 +51,27 @@ class GeminiApiSmokeTests(unittest.TestCase):
         output["evidence"] = "different"
         self.assertEqual(smoke.summarize(response_bytes(output)), (False, True))
 
+    def test_run_uses_current_v1beta_endpoint(self):
+        class FakeResponse:
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return None
+            def read(self, _limit):
+                return response_bytes()
+
+        with patch.object(smoke.urllib.request, "build_opener") as build:
+            build.return_value.open.return_value = FakeResponse()
+            receipt = smoke.run("synthetic-test-key")
+        request = build.return_value.open.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+        )
+        self.assertEqual(receipt["status"], "VERIFIED")
+        self.assertNotIn("synthetic-test-key", json.dumps(receipt))
+
     def test_absent_key_fails_without_network_call(self):
         with patch.object(smoke.urllib.request, "build_opener") as build:
             receipt = smoke.run("")
