@@ -2,7 +2,6 @@ package in.aitradingsystem.scanner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -114,7 +113,7 @@ class ResearchScanServiceTest {
             org.mockito.ArgumentMatchers.argThat(snapshot ->
                 snapshot.candleCount() == MindSourceSnapshot.OPENING_RANGE_BARS &&
                 snapshot.lastCandleAt().equals(bars.getLast().candleTime())));
-        assertTrue(bars.size() == MindSourceSnapshot.OPENING_RANGE_BARS);
+        assertEquals(MindSourceSnapshot.OPENING_RANGE_BARS, bars.size());
     }
 
     @Test
