@@ -37,9 +37,10 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
   List<MindPaperCycle> _recent = const [];
   String? _error;
 
-  List<(String, String)> get _intervalChoices => _strategyCode == 'OPENING_RANGE_BREAKOUT_V1'
-      ? const [('ONE_MINUTE', '1m'), ('THREE_MINUTE', '3m'), ('FIVE_MINUTE', '5m')]
-      : const [('FIVE_MINUTE', '5m'), ('FIFTEEN_MINUTE', '15m'), ('ONE_HOUR', '1h'), ('ONE_DAY', '1D')];
+  List<(String, String)> get _intervalChoices =>
+      _strategyCode == 'SMA_TREND_VOLUME_V1'
+          ? const [('FIVE_MINUTE', '5m'), ('FIFTEEN_MINUTE', '15m'), ('ONE_HOUR', '1h'), ('ONE_DAY', '1D')]
+          : const [('ONE_MINUTE', '1m'), ('THREE_MINUTE', '3m'), ('FIVE_MINUTE', '5m')];
 
   Future<(List<MindPaperRoom>, List<MindPaperInstrument>)> _load() async {
     final rooms = await widget.repository.rooms();
@@ -144,11 +145,12 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                 for (final (code, label) in const [
                   ('SMA_TREND_VOLUME_V1', 'SMA Trend'),
                   ('OPENING_RANGE_BREAKOUT_V1', 'Opening Range Breakout'),
+                  ('VWAP_MOMENTUM_V1', 'VWAP Momentum'),
                 ])
                   ChoiceChip(label: Text(label), selected: _strategyCode == code,
                       onSelected: (_) => setState(() {
                         _strategyCode = code;
-                        if (code == 'OPENING_RANGE_BREAKOUT_V1' &&
+                        if (code != 'SMA_TREND_VOLUME_V1' &&
                             !const ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'].contains(_interval)) {
                           _interval = 'FIVE_MINUTE';
                         } else if (code == 'SMA_TREND_VOLUME_V1' &&
