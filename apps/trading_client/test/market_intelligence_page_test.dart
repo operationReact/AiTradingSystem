@@ -27,6 +27,13 @@ class _FixtureNews implements MarketNewsRepository {
           excerpt: 'This is a labelled fixture excerpt.',
           publishedAt: DateTime.utc(2026, 11, 24, 6),
           ingestedAt: DateTime.utc(2026, 11, 24, 6, 5),
+          analysisStatus: 'ANALYZED',
+          stockImpact: const MarketNewsImpact(
+            sentiment: 'NEGATIVE', category: 'EARNINGS', impactedSymbols: ['TCS'],
+            evidence: 'Synthetic earnings evidence.', risks: ['Synthetic uncertainty.'],
+            directionScore: -0.35, confidence: 0.8, materiality: 0.6,
+            horizon: 'MULTI_DAY', ambiguity: true,
+          ),
         ),
       ],
     );
