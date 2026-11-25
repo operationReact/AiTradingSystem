@@ -64,13 +64,13 @@ class BootstrapContractTest(unittest.TestCase):
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.smoke_failure(
             "x"*5000+"\nFNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"))
     def test_smoke_counter_diagnostic_is_bounded_and_exact(self):
-        raw=("FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\\n")
+        raw=("FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\n")
         self.assertEqual((0,0,4,12),ops.parse_smoke_counters(raw))
         self.assertIsNone(ops.parse_smoke_counters(
-            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=13\\n"))
+            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=13\n"))
         self.assertIsNone(ops.parse_smoke_counters(
-            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\\n"
-            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\\n"))
+            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\n"
+            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\n"))
     def test_runner_pins_exact_transitive_worker_modules(self):
         self.assertEqual(ops.PINNED_MODULES,
             ("fno_history_backfill.py", "upstox_fno_backfill_adapters.py"))
