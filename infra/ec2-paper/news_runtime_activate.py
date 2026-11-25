@@ -128,6 +128,11 @@ except (KeyError,ValueError):
     raise SystemExit("ACTIVATION_TIMESTAMP_MISSING")
 url="http://127.0.0.1:8080/api/admin/market-intelligence/health"
 health={}
+def safe_health_exception(exc_type, exc, traceback):
+    print("MINTTICK_NEWS_HEALTH_EXCEPTION:"+exc_type.__name__,file=sys.stderr,flush=True)
+    try: emit_health_snapshot(health)
+    except Exception: pass
+sys.excepthook=safe_health_exception
 def safe_health_snapshot(payload):
     model=payload.get("model",{})
     return {
@@ -258,8 +263,11 @@ def run() -> None:
                        "NEWS_SOURCE_POLICY_NOT_APPROVED", "APP_KEY_INVALID",
                        "ACTIVATION_TIMESTAMP_MISSING", "UNSAFE_RUNTIME_FILE",
                        "DUPLICATE_RUNTIME_KEY", "POLICY_UPDATE_REJECTED",
-                       "POLICY_RECEIPT_INVALID", "POLICY_UPDATE_FAILED"}
+                       "POLICY_RECEIPT_INVALID", "POLICY_UPDATE_FAILED",
+                       "NEWS_HEALTH_EVIDENCE_EVALUATION_ERROR"}
             reason = next((item for item in allowed if item in diagnostics), None)
+            exception_match = re.search(r"MINTTICK_NEWS_HEALTH_EXCEPTION:([A-Za-z][A-Za-z0-9_]*)", diagnostics)
+            if not reason and exception_match: reason = "HEALTH_EXCEPTION_" + exception_match.group(1)
             stage = stage_match.group(1) if stage_match else "UNKNOWN"
             snapshot_match = re.search(r"MINTTICK_NEWS_HEALTH_DIAG:(\{[^\n]{1,3000}\})", diagnostics)
             snapshot = snapshot_match.group(1) if snapshot_match else ""
