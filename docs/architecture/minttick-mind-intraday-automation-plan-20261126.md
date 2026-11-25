@@ -15,7 +15,7 @@ Automate the repeatable intraday workflow: session context, instrument screening
 | P1 | Opening breakout | Opening Range Breakout (ORB) | Wired into Mind PAPER; merged to dev in PR #2033. Walk-forward certification and live authorization remain separate. |
 | P2 | VWAP trend/momentum | VWAP momentum, reclaim, rejection | First next PAPER integration. Keep scanner evaluator distinct from the catalog's anchored-VWAP/reclaim entries until the rule mapping is exact. |
 | P3 | Trend continuation | 20-bar SMA reclaim (existing scanner rule), EMA pullback as a separate future rule, intraday trend continuation | Use a higher-timeframe context filter and avoid duplicate exposure across correlated names. |
-| P4 | Participation breakout | Volume/range expansion, consolidation breakout, previous-day level break | Volume Breakout is now wired in the guarded PAPER cycle in PR #2038; require relative-volume, spread, and post-cost slippage gates. |
+| P4 | Participation breakout | Volume/range expansion, consolidation breakout, previous-day level break | Volume Breakout is now wired in the guarded PAPER cycle in PR #2039; require relative-volume, spread, and post-cost slippage gates. |
 | P5 | Gap setups | Gap continuation and gap-fill reversal | Separate continuation and fade hypotheses; include event/news and gap-size context. |
 | P6 | Mean reversion | VWAP/band reversion, RSI reversal, support/resistance bounce | Permit only under range-compatible regime; abstain in strong trend conditions. |
 | P7 | Failure/reversal | Failed breakout/breakdown, liquidity sweep and reclaim | Require confirmation and a predefined invalidation level. |
