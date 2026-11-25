@@ -50,6 +50,27 @@ MAX_OPTION_PAIRS = 11
 MAX_REQUESTS_PER_RUN = 600
 MIN_REQUEST_GAP = 2.5
 DAILY_CACHE_TTL_SECONDS = 7 * 86400
+SAFE_FAILURES = frozenset({
+    "FNO_DATA_RETENTION_NOT_AUTHORIZED", "FNO_DISCOVERY_AUTH_REJECTED",
+    "FNO_DISCOVERY_INVALID_JSON", "FNO_DISCOVERY_INVALID_RESPONSE",
+    "FNO_DISCOVERY_PROVIDER_REJECTED", "FNO_DISCOVERY_RATE_LIMITED",
+    "FNO_DISCOVERY_TOO_LARGE", "FNO_DISCOVERY_TRANSPORT",
+    "FNO_PRIVATE_DIR_NOT_SECURE", "FNO_PRIVATE_PERMIT_SYMLINK",
+    "FNO_REQUEST_BUDGET_EXHAUSTED", "FNO_STATUS_INVALID_PATH",
+    "FNO_STATUS_TOO_LARGE", "INVALID_FNO_DISCOVERY_ROUTE",
+    "LOST_FNO_JOB_LEASE", "OWNER_PRIVATE_FNO_SCOPE_MISSING_OR_EXPIRED",
+    "UPSTOX_HISTORY_TOKEN_UNAVAILABLE", "UPSTOX_TOKEN_UNAVAILABLE",
+    "WRONG_EC2_RUNTIME",
+})
+
+def safe_failure_reason(exc):
+    """Expose only fixed failure enums; never provider bodies or local paths."""
+    reason = str(exc)
+    if reason in SAFE_FAILURES:
+        return reason
+    if isinstance(exc, sqlite3.Error):
+        return "PRIVATE_DB_ERROR"
+    return "UNCLASSIFIED_SAFE_FAILURE"
 
 def today():
     return datetime.now(ZoneInfo("Asia/Kolkata")).date()
@@ -427,5 +448,5 @@ if __name__=="__main__":
             raise SystemExit("INVALID_FNO_COMMAND")
     except (GateClosed,RuntimeError,ValueError,sqlite3.Error) as exc:
         # Only fixed, safe error category; never provider payload or bearer.
-        print("FNO_BULK_ERROR:"+type(exc).__name__)
+        print("FNO_BULK_ERROR:"+safe_failure_reason(exc))
         raise SystemExit(2)

@@ -26,6 +26,14 @@ class BootstrapContractTest(unittest.TestCase):
         self.assertIsNone(ops.parse_receipt(ops.MARKER+"FAKE|0|0|0"))
         with self.assertRaises(ValueError):
             ops.receipt("STARTED",12,3,4)
+    def test_smoke_failure_receipt_is_allowlisted_and_redacted(self):
+        self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",
+            ops.smoke_failure("FNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"))
+        self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",
+            ops.smoke_failure("FNO_BULK_ERROR:/private/token/value\n"))
+        self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",
+            ops.smoke_failure("FNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"
+                              "FNO_BULK_ERROR:PRIVATE_DB_ERROR\n"))
     def test_single_systemd_unit_is_not_broker_order_service(self):
         unit=ops.unit_text()
         self.assertIn("ExecStart=/usr/bin/python3",unit)
