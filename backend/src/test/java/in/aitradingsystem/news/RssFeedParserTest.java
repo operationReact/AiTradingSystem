@@ -48,6 +48,23 @@ class RssFeedParserTest {
     }
 
     @Test
+    void acceptsOfficialNseAnnouncementLinksAndMapsSymbolsAgainstExpandedUniverse() {
+        String feed = """
+            <rss><channel><item><title>Company files a material update</title>
+              <link>https://nsearchives.nseindia.com/corporate/sample.pdf</link>
+              <description>RELIANCE and HDFCBANK are named in the filing.</description>
+              <pubDate>Tue, 27 Oct 2026 10:00:00 GMT</pubDate>
+            </item></channel></rss>
+            """;
+
+        var parsed = parser.parse(feed.getBytes(StandardCharsets.UTF_8),
+            NewsSource.byId("nse-announcements"), List.of("RELIANCE", "TCS", "HDFCBANK"), 10);
+
+        assertEquals(1, parsed.size());
+        assertEquals(List.of("RELIANCE", "HDFCBANK"), parsed.get(0).linkedSymbols());
+    }
+
+    @Test
     void rejectsOversizedPayloadAndInvalidParserLimits() {
         var source = NewsSource.byId("moneycontrol");
         byte[] valid = "<rss><channel/></rss>".getBytes(StandardCharsets.UTF_8);
