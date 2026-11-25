@@ -17,7 +17,7 @@ class UpstoxFnoManualLiveActivationTests(unittest.TestCase):
         self.assertEqual(req["operation"],
             "activate-confirmed-one-lot-live-upstox-order-policy")
         self.assertEqual(req["authorization"],
-            "OWNER_EXPLICITLY_REQUESTED_LIVE_EXECUTION_2026_11_20")
+            "OWNER_EXPLICITLY_REQUESTED_LIVE_EXECUTION_2026_11_25")
         self.assertEqual(req["expected_backend_release"],activation.EXPECTED_RELEASE)
         self.assertEqual(req["instance_id"],"i-09c01b470fb39b85a")
 
@@ -35,7 +35,7 @@ class UpstoxFnoManualLiveActivationTests(unittest.TestCase):
         self.assertFalse(activation.source_flags_ready(None))
         self.assertFalse(activation.source_flags_ready({}))
         self.assertEqual(activation.EXPECTED_RELEASE,
-            "0a1302f264f37ac71f167d0ace4947dbe4f30577")
+            "1c2bfae773f7ffb10c6c0a0c3406564e6f9962d5")
 
     def test_only_live_flag_is_added_and_other_broker_secrets_remain_byte_identical(self):
         content=b"UPSTOX_CLIENT_SECRET=do-not-log-me\nMINTTICK_UPSTOX_FNO_PAPER_ENABLED=false\n"
