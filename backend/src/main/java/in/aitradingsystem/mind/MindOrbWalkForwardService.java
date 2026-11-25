@@ -53,8 +53,8 @@ public final class MindOrbWalkForwardService {
         int number, LocalDate trainingFrom, LocalDate trainingTo,
         LocalDate validationFrom, LocalDate validationTo,
         BigDecimal trainingCoveragePercent, BigDecimal validationCoveragePercent,
-        String status, MindMaWalkForwardEvaluator.Metrics training,
-        MindMaWalkForwardEvaluator.Metrics validation
+        String status, MindOrbOutOfSampleEvaluator.Metrics training,
+        MindOrbOutOfSampleEvaluator.Metrics validation
     ) {}
 
     public record Report(
@@ -62,7 +62,7 @@ public final class MindOrbWalkForwardService {
         String strategyCode, String strategyVersion,
         String instrument, String interval, String selectionMethod,
         LocalDate from, LocalDate to,
-        MindMaWalkForwardEvaluator.Assumptions assumptions, List<Fold> folds,
+        MindOrbOutOfSampleEvaluator.Assumptions assumptions, List<Fold> folds,
         int completedFolds, int oosTrades, BigDecimal meanOosReturnPercent,
         BigDecimal worstOosDrawdownPercent, BigDecimal oosGrossPnl,
         BigDecimal oosFeeCost, BigDecimal oosSlippageCost, BigDecimal oosNetPnl,
@@ -71,10 +71,10 @@ public final class MindOrbWalkForwardService {
         boolean paperOrderSubmitted, boolean executionEnabled
     ) {}
 
-    public MindMaWalkForwardService(ResearchScanRepository scans,
+    public MindOrbWalkForwardService(ResearchScanRepository scans,
                                    MarketDataRepository candles,
                                    MarketSessionCalendar calendar,
-                                   MindMaWalkForwardEvaluator evaluator,
+                                   MindOrbOutOfSampleEvaluator evaluator,
                                    Clock clock) {
         this.scans = scans;
         this.candles = candles;
