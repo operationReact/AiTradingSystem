@@ -90,7 +90,7 @@ class MindOpeningRangeReplay {
         (interval != null && !_intervals.contains(interval)) ||
         (fingerprint != null &&
             (fingerprint is! String ||
-             !RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint))) {
+             !RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint)))) {
       throw const FormatException('Unverified opening-range source identity');
     }
     if (posture == 'WAIT' &&
