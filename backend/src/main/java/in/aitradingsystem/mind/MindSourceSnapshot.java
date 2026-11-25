@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,6 +26,66 @@ public record MindSourceSnapshot(
 ) {
     private static final String VERSION = "MINT_MA_RECLAIM_SOURCE_V1";
     public static final int BARS = 21;
+    public static final int OPENING_RANGE_BARS = 64;
+    private static final String ORB_STRATEGY = "OPENING_RANGE_BREAKOUT_V1";
+
+    /** Capture the exact 64-candle scanner input for the research-only ORB replay. */
+    public static MindSourceSnapshot captureOpeningRange(
+            List<MarketCandle> candles, ScanCandidate candidate, Instant capturedAt) {
+        if (candidate == null || !ORB_STRATEGY.equals(candidate.strategy())) {
+            throw new IllegalArgumentException("Opening-range candidate is required");
+        }
+        return fromOpeningRangeCandles(candles, candidate.instrumentId(), candidate.exchange(),
+            candidate.tradingSymbol(), candidate.interval(), candidate.candleTime(), capturedAt);
+    }
+
+    /** Rebuild an ORB custody digest without changing the legacy MA_RECLAIM digest contract. */
+    public static MindSourceSnapshot fromOpeningRangeCandles(
+            List<MarketCandle> candles, long instrumentId, String exchange,
+            String symbol, String interval, Instant finalCandleAt, Instant capturedAt) {
+        if (candles == null || candles.size() != OPENING_RANGE_BARS || instrumentId < 1 ||
+                exchange == null || symbol == null ||
+                !Set.of("ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE").contains(interval) ||
+                finalCandleAt == null || capturedAt == null) {
+            throw new IllegalArgumentException("Incomplete opening-range source capture");
+        }
+        List<MarketCandle> input = List.copyOf(candles);
+        if (!CandleSeriesValidator.validate(input, capturedAt, null).valid() ||
+                !finalCandleAt.equals(input.getLast().candleTime())) {
+            throw new IllegalArgumentException("Opening-range candles failed chronology/cutoff checks");
+        }
+        UUID catalogue = input.getFirst().catalogueVersion();
+        if (catalogue == null) throw new IllegalArgumentException("Missing catalogue identity");
+        StringBuilder canonical = new StringBuilder("MINT_ORB_SOURCE_V1");
+        Instant latestFetched = Instant.MIN;
+        String source = input.getFirst().source();
+        if (source == null || source.isBlank() ||
+                source.matches("(?i).*(TEST|FIXTURE|DEMO|MOCK|SYNTHETIC).*")) {
+            throw new IllegalArgumentException("Synthetic or missing source is not capturable");
+        }
+        for (MarketCandle candle : input) {
+            if (candle.instrumentId() != instrumentId ||
+                    !exchange.equals(candle.exchange()) || !symbol.equals(candle.tradingSymbol()) ||
+                    !interval.equals(candle.interval()) || !catalogue.equals(candle.catalogueVersion()) ||
+                    !source.equals(candle.source()) || candle.symbolToken() == null ||
+                    candle.symbolToken().isBlank() || candle.fetchedAt() == null ||
+                    candle.fetchedAt().isAfter(capturedAt) || candle.candleTime().isAfter(capturedAt) ||
+                    candle.volume() <= 0 || !validOhlc(candle)) {
+                throw new IllegalArgumentException("Unverifiable opening-range source");
+            }
+            if (candle.fetchedAt().isAfter(latestFetched)) latestFetched = candle.fetchedAt();
+            append(canonical, String.valueOf(candle.instrumentId()), candle.exchange(),
+                candle.tradingSymbol(), candle.symbolToken(), catalogue.toString(),
+                candle.interval(), candle.candleTime().toString(), decimal(candle.open()),
+                decimal(candle.high()), decimal(candle.low()), decimal(candle.close()),
+                Long.toString(candle.volume()), candle.source(), candle.fetchedAt().toString());
+        }
+        String inputText = canonical.toString();
+        return new MindSourceSnapshot(inputText, sha256(inputText),
+            input.getFirst().candleTime(), input.getLast().candleTime(),
+            latestFetched, catalogue, input.size());
+    }
+
 
     public static MindSourceSnapshot capture(
             List<MarketCandle> candles, ScanCandidate candidate, Instant capturedAt) {
