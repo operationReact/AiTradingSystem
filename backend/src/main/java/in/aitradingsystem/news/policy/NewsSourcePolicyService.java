@@ -81,8 +81,8 @@ public class NewsSourcePolicyService {
             .param("uses", row.permittedUses().isEmpty() ? "{}" : "{" + uses + "}")
             .param("reviewerRef", row.reviewerRef())
             .param("termsRef", row.termsRef())
-            .param("effectiveFrom", row.effectiveFrom().orElse(null))
-            .param("effectiveTo", row.effectiveTo().orElse(null))
+            .param("effectiveFrom", row.effectiveFrom().map(Timestamp::from).orElse(null))
+            .param("effectiveTo", row.effectiveTo().map(Timestamp::from).orElse(null))
             .param("ttl", row.contentTtlDays())
             .param("sourceId", row.sourceId())
             .update();
