@@ -38,6 +38,8 @@ class BulkTest(unittest.TestCase):
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",
                          p.safe_failure_reason(p.GateClosed("UPSTOX_TOKEN_UNAVAILABLE")))
         self.assertEqual("PRIVATE_DB_ERROR",p.safe_failure_reason(sqlite3.Error("/private/path")))
+        self.assertEqual("UPSTOX_EXPIRED_HISTORY_NETWORK_ERROR",
+                         p.safe_failure_reason(OSError("UPSTOX_EXPIRED_HISTORY_NETWORK_ERROR")))
         self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",
                          p.safe_failure_reason(RuntimeError("secret token")))
 
