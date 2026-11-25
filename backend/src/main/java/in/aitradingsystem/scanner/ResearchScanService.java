@@ -162,6 +162,11 @@ public class ResearchScanService {
                                     candles, candidate, evaluatedAt);
                                 scans.recordMindInputCustody(runId, candidate,
                                     strategy.descriptor().version(), frozen);
+                            } else if (OpeningRangeBreakoutStrategy.NAME.equals(candidate.strategy())) {
+                                MindSourceSnapshot frozen = MindSourceSnapshot.captureOpeningRange(
+                                    candles, candidate, evaluatedAt);
+                                scans.recordOpeningRangeMindInputCustody(runId, candidate,
+                                    strategy.descriptor().version(), frozen);
                             }
                             candidateCount++;
                         }

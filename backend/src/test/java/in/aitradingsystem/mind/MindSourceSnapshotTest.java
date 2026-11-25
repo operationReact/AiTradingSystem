@@ -28,6 +28,19 @@ class MindSourceSnapshotTest {
         return result;
     }
 
+    private List<MarketCandle> recordedOpeningRange() {
+        List<MarketCandle> result = new ArrayList<>();
+        for (int i = 0; i < MindSourceSnapshot.OPENING_RANGE_BARS; i++) {
+            result.add(new MarketCandle(
+                i + 1L, 42L, "NSE", "INFY-EQ", "1234", CATALOGUE,
+                "ONE_MINUTE", SIGNAL.minusSeconds((MindSourceSnapshot.OPENING_RANGE_BARS - 1L - i) * 60L),
+                new BigDecimal("100"), new BigDecimal("101"),
+                new BigDecimal("99"), new BigDecimal("100"), 1000,
+                "ANGEL_ONE_SMARTAPI", SIGNAL.minusSeconds(120)));
+        }
+        return result;
+    }
+
     private MindSourceSnapshot freeze(List<MarketCandle> bars) {
         return MindSourceSnapshot.fromCandles(
             bars, 42L, "NSE", "INFY-EQ", "FIVE_MINUTE", SIGNAL, CAPTURE);
@@ -43,6 +56,43 @@ class MindSourceSnapshotTest {
         assertTrue(first.digest().matches("[a-f0-9]{64}"));
         assertEquals(SIGNAL, first.lastCandleAt());
         assertTrue(first.canonicalInput().startsWith("MINT_MA_RECLAIM_SOURCE_V1"));
+    }
+
+    @Test
+    void openingRangeSourceIsCapturedAsAnIndependentExact64BarContract() {
+        var bars = recordedOpeningRange();
+        var first = MindSourceSnapshot.fromOpeningRangeCandles(
+            bars, 42L, "NSE", "INFY-EQ", "ONE_MINUTE", SIGNAL, CAPTURE);
+        var second = MindSourceSnapshot.fromOpeningRangeCandles(
+            List.copyOf(bars), 42L, "NSE", "INFY-EQ", "ONE_MINUTE", SIGNAL, CAPTURE);
+
+        assertEquals(first, second);
+        assertEquals(MindSourceSnapshot.OPENING_RANGE_BARS, first.candleCount());
+        assertEquals(SIGNAL, first.lastCandleAt());
+        assertTrue(first.canonicalInput().startsWith("MINT_ORB_SOURCE_V1"));
+        assertNotEquals(first.digest(), freeze(recorded()).digest());
+    }
+
+    @Test
+    void openingRangeCaptureRejectsWrongIntervalCountAndFutureFetches() {
+        var bars = recordedOpeningRange();
+        assertThrows(IllegalArgumentException.class, () ->
+            MindSourceSnapshot.fromOpeningRangeCandles(
+                bars, 42L, "NSE", "INFY-EQ", "FIVE_MINUTE", SIGNAL, CAPTURE));
+        assertThrows(IllegalArgumentException.class, () ->
+            MindSourceSnapshot.fromOpeningRangeCandles(
+                bars.subList(1, bars.size()), 42L, "NSE", "INFY-EQ", "ONE_MINUTE", SIGNAL, CAPTURE));
+
+        var revised = new ArrayList<>(bars);
+        var last = revised.getLast();
+        revised.set(revised.size() - 1, new MarketCandle(
+            last.id(), last.instrumentId(), last.exchange(), last.tradingSymbol(),
+            last.symbolToken(), last.catalogueVersion(), last.interval(), last.candleTime(),
+            last.open(), last.high(), last.low(), last.close(), last.volume(),
+            last.source(), CAPTURE.plusSeconds(1)));
+        assertThrows(IllegalArgumentException.class, () ->
+            MindSourceSnapshot.fromOpeningRangeCandles(
+                revised, 42L, "NSE", "INFY-EQ", "ONE_MINUTE", SIGNAL, CAPTURE));
     }
 
     @Test
