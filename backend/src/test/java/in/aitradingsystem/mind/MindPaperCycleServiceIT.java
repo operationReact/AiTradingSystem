@@ -329,6 +329,26 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void movingAverageReclaimCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("RELIANCE-EQ", "2885");
+        seedMovingAverageReclaimCandles(instrumentId, "RELIANCE-EQ", "2885");
+        recordTick(instrumentId, "103.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+
+        var entry = service(progress(), SOURCE).run(owner, room, "ma_reclaim_entry01", instrumentId,
+            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.MA_RECLAIM_STRATEGY_CODE);
+
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.MA_RECLAIM_STRATEGY_CODE);
+        assertThat(entry.cycle().signalAction()).isEqualTo("BUY");
+        assertThat(entry.cycle().reasons()).contains("LATEST_CLOSE_RECLAIMED_SLOW_SMA", "FAST_SMA_ABOVE_SLOW_SMA");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(entry.order()).isNotNull();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
     void vwapMomentumCandidateUsesTheGuardedPaperEngine() {
         long instrumentId = instrument("RELIANCE-EQ", "2885");
         seedVwapCandles(instrumentId, "RELIANCE-EQ", "2885");
@@ -463,7 +483,8 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         return new MindPaperCycleService(jdbc, instruments, strategy, orders, wallets, lastTicks, calendar,
             progress, clock, null, permitted, candles, quality,
             new in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy(),
-            new in.aitradingsystem.scanner.VwapMomentumStrategy());
+            new in.aitradingsystem.scanner.VwapMomentumStrategy(),
+            new in.aitradingsystem.scanner.MovingAverageReclaimStrategy());
     }
 
     private void seedOrbCandles(long instrumentId, String symbol, String token) {
@@ -492,6 +513,35 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
                 .param("open", open).param("high", high).param("low", low).param("close", close)
                 .param("volume", volume).param("source", SOURCE)
                 .param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
+    }
+
+    private void seedMovingAverageReclaimCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 21; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 9).plusMinutes(index)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            boolean previous = index == 19;
+            boolean latest = index == 20;
+            BigDecimal open = previous ? new BigDecimal("99.20")
+                : latest ? new BigDecimal("102.50") : new BigDecimal("100.00");
+            BigDecimal high = latest ? new BigDecimal("103.20") : new BigDecimal("100.20");
+            BigDecimal low = previous ? new BigDecimal("98.50") : latest ? new BigDecimal("102.00")
+                : new BigDecimal("99.80");
+            BigDecimal close = previous ? new BigDecimal("99.00")
+                : latest ? new BigDecimal("103.00") : new BigDecimal("100.00");
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                       :open,:high,:low,:close,1000,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", open).param("high", high).param("low", low).param("close", close)
+                .param("source", SOURCE).param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
         }
     }
 
