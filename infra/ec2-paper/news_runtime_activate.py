@@ -154,9 +154,19 @@ def emit_health_snapshot(payload):
     line="MINTTICK_NEWS_HEALTH_DIAG:"+json.dumps(safe_health_snapshot(payload),sort_keys=True)
     print(line,flush=True)
     print(line,file=sys.stderr,flush=True)
-def utc_instant(value):
-    parsed=datetime.datetime.fromisoformat(value.replace("Z","+00:00"))
-    return parsed.replace(tzinfo=datetime.timezone.utc) if parsed.tzinfo is None else parsed
+def utc_instant(value, label):
+    if not isinstance(value,str):
+        raise SystemExit("NEWS_INVALID_"+label+"_TIMESTAMP")
+    match=re.fullmatch(
+      r"(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d+))?(Z|[+-]\\d{2}:\\d{2})?",
+      value.strip())
+    if not match:
+        raise SystemExit("NEWS_INVALID_"+label+"_TIMESTAMP")
+    fraction=(match.group(2) or "")[:6]
+    offset=match.group(3) or "Z"
+    normalized=match.group(1)+(("." + fraction.ljust(6,"0")) if fraction else "")
+    normalized+=("+00:00" if offset=="Z" else offset)
+    return datetime.datetime.fromisoformat(normalized)
 deadline=time.monotonic()+1500
 source_done=False
 gemini_done=False
@@ -186,12 +196,12 @@ while time.monotonic()<deadline:
     source_done=any(
         source.get("latestStatus")=="SUCCESS" and (source.get("lastFetchedItems") or 0)>0
         and source.get("lastFinishedAt") and
-        utc_instant(source["lastFinishedAt"])>=activated
+        utc_instant(source["lastFinishedAt"],"SOURCE")>=activated
         for source in health.get("sources",[]))
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
     gemini_done=bool(attempted_at and
-        utc_instant(attempted_at)>=activated and
+        utc_instant(attempted_at,"GEMINI")>=activated and
         outcome.startswith("COMPLETED_WITH_"))
     if source_done and gemini_done:
         print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
@@ -260,7 +270,8 @@ def run() -> None:
             stage_match = re.search(r"MINTTICK_NEWS_FAILED_STAGE:([A-Z_]+)", diagnostics)
             allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT",
                        "NEWS_RUNTIME_FLAGS_NOT_ACTIVE", "NEWS_GEMINI_NOT_SELECTED",
-                       "NEWS_SOURCE_POLICY_NOT_APPROVED", "APP_KEY_INVALID",
+                       "NEWS_SOURCE_POLICY_NOT_APPROVED", "NEWS_INVALID_SOURCE_TIMESTAMP",
+                       "NEWS_INVALID_GEMINI_TIMESTAMP", "APP_KEY_INVALID",
                        "ACTIVATION_TIMESTAMP_MISSING", "UNSAFE_RUNTIME_FILE",
                        "DUPLICATE_RUNTIME_KEY", "POLICY_UPDATE_REJECTED",
                        "POLICY_RECEIPT_INVALID", "POLICY_UPDATE_FAILED",
