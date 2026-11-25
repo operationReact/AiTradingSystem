@@ -146,6 +146,23 @@ void main() {
     expect(repo.lastInterval, 'FIVE_MINUTE');
   });
 
+  testWidgets('Moving Average Reclaim selector is intraday-only and sends strategy identity', (tester) async {
+    final repo = _Repo();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+        child: MindPaperCyclePanel(repository: repo)))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Moving Average Reclaim'));
+    await tester.pumpAndSettle();
+    expect(find.text('1m'), findsOneWidget);
+    expect(find.text('3m'), findsOneWidget);
+    expect(find.text('5m'), findsOneWidget);
+    expect(find.text('15m'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('mind-paper-run')));
+    await tester.pumpAndSettle();
+    expect(repo.lastStrategyCode, 'MA_RECLAIM_V1');
+    expect(repo.lastInterval, 'FIVE_MINUTE');
+  });
+
   testWidgets('no funded PAPER room means nothing can run', (tester) async {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MindPaperCyclePanel(repository: _Repo(noRooms: true)))));
     await tester.pumpAndSettle();
