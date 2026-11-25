@@ -25,11 +25,13 @@ class NewsIntelligenceAdminHealthControllerIT extends AbstractPostgresIT {
     }
 
     @Test
-    void requiresAdminNotOperatorCustomerOrUnauthenticated() throws Exception {
+    void allowsAdminAndOperatorButRejectsCustomerAndUnauthenticated() throws Exception {
         String path = "/api/admin/market-intelligence/health";
         mvc.perform(get(path)).andExpect(status().isUnauthorized());
         mvc.perform(get(path).header("X-API-Key", API_KEY))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk());
+        mvc.perform(get(path).with(role("OPERATOR")))
+            .andExpect(status().isOk());
         mvc.perform(get(path).with(role("CUSTOMER")))
             .andExpect(status().isForbidden());
         mvc.perform(get(path).with(role("ADMIN")))
