@@ -29,6 +29,26 @@ REQUEST=Path("infra/ec2-paper/requests/fno-owner-private-bulk-start.json")
 MARKER="MINTTICK_FNO_PRIVATE_BULK_START_V1:"
 STATES={"STARTED","ALREADY_RUNNING","OWNER_SCOPE_REJECTED",
         "HOST_REJECTED","CODE_REJECTED","SMOKE_FAILED","UNIT_REJECTED"}
+SAFE_SMOKE_FAILURES=frozenset({
+    "FNO_DATA_RETENTION_NOT_AUTHORIZED", "FNO_DISCOVERY_AUTH_REJECTED",
+    "FNO_DISCOVERY_INVALID_JSON", "FNO_DISCOVERY_INVALID_RESPONSE",
+    "FNO_DISCOVERY_PROVIDER_REJECTED", "FNO_DISCOVERY_RATE_LIMITED",
+    "FNO_DISCOVERY_TOO_LARGE", "FNO_DISCOVERY_TRANSPORT",
+    "FNO_PRIVATE_DIR_NOT_SECURE", "FNO_PRIVATE_PERMIT_SYMLINK",
+    "FNO_REQUEST_BUDGET_EXHAUSTED", "FNO_STATUS_INVALID_PATH",
+    "FNO_STATUS_TOO_LARGE", "INVALID_FNO_DISCOVERY_ROUTE",
+    "LOST_FNO_JOB_LEASE", "OWNER_PRIVATE_FNO_SCOPE_MISSING_OR_EXPIRED",
+    "UPSTOX_HISTORY_TOKEN_UNAVAILABLE", "UPSTOX_TOKEN_UNAVAILABLE",
+    "WRONG_EC2_RUNTIME", "PRIVATE_DB_ERROR", "UNCLASSIFIED_SAFE_FAILURE",
+})
+
+def smoke_failure(stdout):
+    if not isinstance(stdout,str) or len(stdout)>4096:
+        return "UNCLASSIFIED_SAFE_FAILURE"
+    found=re.findall(r"^FNO_BULK_ERROR:([A-Z0-9_]{1,64})$",stdout,re.M)
+    if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
+        return found[0]
+    return "UNCLASSIFIED_SAFE_FAILURE"
 
 def expected_request():
     return {
@@ -163,7 +183,9 @@ def host():
         return 2
     smoke=_call("/usr/bin/python3",str(WORKER),"smoke",timeout=210)
     if smoke is None or smoke.returncode!=0:
+        safe_cause=smoke_failure(smoke.stdout if smoke else "")
         print(receipt("SMOKE_FAILED"),flush=True)
+        print("FNO_BULK_SMOKE_FAILURE:"+safe_cause,flush=True)
         return 2
     m=re.search(r"FNO_BULK_SMOKE:FIRST_BATCH_COMPLETE;complete=(\d+);"
                 r"total=(\d+);rows=(\d+);calls=(\d+)",smoke.stdout)

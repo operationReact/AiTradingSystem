@@ -34,6 +34,13 @@ def candle():
     return ("2025-04-21T00:00:00+05:30",110.,111.,109.,110.5,300,120)
 
 class BulkTest(unittest.TestCase):
+    def test_safe_failure_reason_only_emits_allowlisted_codes(self):
+        self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",
+                         p.safe_failure_reason(p.GateClosed("UPSTOX_TOKEN_UNAVAILABLE")))
+        self.assertEqual("PRIVATE_DB_ERROR",p.safe_failure_reason(sqlite3.Error("/private/path")))
+        self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",
+                         p.safe_failure_reason(RuntimeError("secret token")))
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.path=Path(self.tmp.name)
