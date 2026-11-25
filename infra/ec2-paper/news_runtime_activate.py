@@ -218,7 +218,8 @@ while time.monotonic()<deadline:
             page={}
         candidates=[item for item in page.get("items",[])
             if item.get("source") in ("nse-announcements","moneycontrol","economic-times","sebi")
-            and item.get("publishedAt")
+            and item.get("publishedAt") and isinstance(item.get("excerpt"),str)
+            and item["excerpt"].strip()
             and utc_instant(item["publishedAt"],"ARTICLE")>=activated-datetime.timedelta(days=30)]
         if candidates:
             article=candidates[0]
@@ -231,9 +232,20 @@ while time.monotonic()<deadline:
                     receipt=json.loads(response.read())
             except (urllib.error.URLError,TimeoutError,ValueError):
                 raise SystemExit("NEWS_ANALYSIS_TRIGGER_FAILED")
-            if receipt.get("status")!="ANALYZED" or receipt.get("provider")!="GEMINI" \
-                or not receipt.get("providerRequestId") or not receipt.get("analyzedAt") \
-                or utc_instant(receipt["analyzedAt"],"ANALYSIS")<activated:
+            analysis_time_fresh=False
+            if receipt.get("analyzedAt"):
+                try:
+                    analysis_time_fresh=utc_instant(receipt["analyzedAt"],"ANALYSIS")>=activated
+                except (TypeError,ValueError):
+                    pass
+            receipt_diag={
+                "status":receipt.get("status"),"provider":receipt.get("provider"),
+                "hasProviderRequestId":bool(receipt.get("providerRequestId")),
+                "hasAnalyzedAt":bool(receipt.get("analyzedAt")),
+                "analyzedAtFresh":analysis_time_fresh,"errorCode":receipt.get("errorCode"),
+            }
+            if receipt.get("status")!="ANALYZED" or receipt.get("provider")!="GEMINI" or not analysis_time_fresh:
+                print("MINTTICK_NEWS_ANALYSIS_DIAG:"+json.dumps(receipt_diag,sort_keys=True),file=sys.stderr,flush=True)
                 raise SystemExit("NEWS_ANALYSIS_RESULT_INVALID")
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
@@ -322,7 +334,9 @@ def run() -> None:
             if not reason and exception_match: reason = "HEALTH_EXCEPTION_" + exception_match.group(1)
             stage = stage_match.group(1) if stage_match else "UNKNOWN"
             snapshot_match = re.search(r"MINTTICK_NEWS_HEALTH_DIAG:(\{[^\n]{1,3000}\})", diagnostics)
-            snapshot = snapshot_match.group(1) if snapshot_match else ""
+            analysis_match = re.search(r"MINTTICK_NEWS_ANALYSIS_DIAG:(\{[^\n]{1,1000}\})", diagnostics)
+            snapshot = snapshot_match.group(1) if snapshot_match else (
+                analysis_match.group(1) if analysis_match else "")
             raise RuntimeError("NEWS_ACTIVATION_FAILED:" + stage + ":" +
                                (reason or result.get("Status", "UNKNOWN")) +
                                (":" + snapshot if snapshot else ""))
