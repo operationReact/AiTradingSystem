@@ -1,9 +1,9 @@
 {
   "kind": "minttick-gemini-runtime-verify-v1",
+  "provider": "GEMINI",
   "account": "098859530205",
   "region": "ap-south-1",
   "instance_id": "i-09c01b470fb39b85a",
-  "provider": "GEMINI",
   "calls": 1,
   "synthetic_only": true,
   "store": false,
@@ -11,5 +11,3 @@
   "orders": false,
   "database_writes": false
 }
-
-
