@@ -193,9 +193,8 @@ abstract interface class MarketNewsRepository {
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol});
 }
 
-/// Customer-scoped endpoint. No publisher feed or Gemini key is accessed by Flutter.
-/// Until the corresponding backend read API is deployed, the UI displays an honest
-/// unavailable state, never local fixture articles.
+/// Customer-scoped endpoint. Flutter never contacts publisher feeds or Gemini directly.
+/// Source approval and analysis status come from the backend; no fixture fallback is used.
 class HttpMarketNewsRepository implements MarketNewsRepository {
   const HttpMarketNewsRepository(this.api);
 
