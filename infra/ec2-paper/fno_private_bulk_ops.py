@@ -94,6 +94,14 @@ def parse_receipt(raw):
         return None
     return values[0],*nums
 
+def parse_smoke_failure(raw):
+    if not isinstance(raw,str) or len(raw)>8000:
+        return "UNCLASSIFIED_SAFE_FAILURE"
+    found=re.findall(r"^FNO_BULK_SMOKE_FAILURE:([A-Z0-9_]{1,64})$",raw,re.M)
+    if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
+        return found[0]
+    return "UNCLASSIFIED_SAFE_FAILURE"
+
 def _call(*args,timeout=45):
     try:
         return subprocess.run(args,stdout=subprocess.PIPE,
@@ -285,13 +293,16 @@ def runner():
                       "--instance-id",INSTANCE)
         state=response.get("Status")
         if state in {"Success","Failed","TimedOut","Cancelled"}:
-            result=parse_receipt(response.get("StandardOutputContent") or "")
+            stdout=response.get("StandardOutputContent") or ""
+            result=parse_receipt(stdout)
             if result is None:
                 raise SystemExit("FNO_BULK_NO_SAFE_RECEIPT")
             code,done,total,rows=result
+            failure=("; cause="+parse_smoke_failure(stdout)
+                     if code=="SMOKE_FAILED" else "")
             print(f"FNO PRIVATE BULK: state={code}; finished={done}; "
                   f"planned={total}; persistedRows={rows}; "
-                  "singleService=true; redistribution=false; "
+                  "singleService=true; redistribution=false"+failure+"; "
                   "ownerScopeExpiry=2026-11-28; providerLicenceUnverified=true",
                   flush=True)
             if state!="Success" or code not in {"STARTED","ALREADY_RUNNING"}:
