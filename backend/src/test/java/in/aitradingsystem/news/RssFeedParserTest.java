@@ -28,6 +28,23 @@ class RssFeedParserTest {
     }
 
     @Test
+    void parsesMoneycontrolHindiMarketRssAndLinksWatchlistSymbols() {
+        String feed = """
+            <rss><channel><item><title>टाटा मोटर्स अपडेट</title>
+              <link>https://hindi.moneycontrol.com/news/markets/tata-motors-update.html</link>
+              <description>टाटा मोटर्स और TCS से जुड़ी खबर</description>
+              <pubDate>Wed, 25 Nov 2026 10:00:00 GMT</pubDate>
+            </item></channel></rss>
+            """;
+
+        var parsed = parser.parse(feed.getBytes(StandardCharsets.UTF_8),
+            NewsSource.byId("moneycontrol"), List.of("TCS", "INFY"), 10);
+
+        assertEquals(1, parsed.size());
+        assertEquals(List.of("TCS"), parsed.get(0).linkedSymbols());
+    }
+
+    @Test
     void rejectsDtdAndDoesNotResolveExternalEntities() {
         String feed = """
             <!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
