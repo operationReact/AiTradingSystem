@@ -43,7 +43,6 @@ jobs:
           role-duration-seconds: 900
           aws-region: ap-south-1
           retry-max-attempts: 2
-          allowed-account-ids: '098859530205'
       - name: Verify production account and exact running managed host
         run: |
           python3 - <<'PY'
