@@ -6,6 +6,7 @@
     "environment": "PAPER",
     "operation": "activate",
     "source_ids": [
+        "nse-announcements",
         "moneycontrol",
         "economic-times",
         "sebi"
