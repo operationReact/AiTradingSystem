@@ -104,14 +104,36 @@ public class NewsService {
     }
 
     public PageResponse<ArticleView> articles(int page, int size) {
+        return articles(page, size, null);
+    }
+
+    /** Returns only the latest successfully analyzed items whose exact impacted-symbol list matches. */
+    public PageResponse<ArticleView> articles(int page, int size, String symbol) {
         // The customer-facing list must not expose content from unknown, unapproved,
         // expired or revoked sources merely because articles remain in the audit DB.
-        long total = jdbc.sql("SELECT count(*) FROM news_articles a " + DISPLAY_ALLOWED)
-            .query(Long.class).single();
-        List<ArticleView> items = jdbc.sql(ARTICLE_SELECT + DISPLAY_ALLOWED + """
+        // A stock-filtered result requires a current successful analysis for that exact symbol.
+        String symbolFilter = symbol == null ? "" : """
+            AND EXISTS (
+                SELECT 1 FROM (
+                    SELECT x.status, x.impacted_symbols FROM news_analyses x
+                     WHERE x.article_id = a.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1
+                ) latest
+                 WHERE latest.status = 'ANALYZED'
+                   AND CAST(latest.impacted_symbols AS jsonb) @> CAST(:symbolJson AS jsonb)
+            )
+            """;
+        var countQuery = jdbc.sql("SELECT count(*) FROM news_articles a " + DISPLAY_ALLOWED + symbolFilter);
+        var itemQuery = jdbc.sql(ARTICLE_SELECT + DISPLAY_ALLOWED + symbolFilter + """
                 ORDER BY a.published_at DESC
                 LIMIT :limit OFFSET :offset
-                """)
+                """);
+        if (symbol != null) {
+            String symbolJson = mapper.createArrayNode().add(symbol).toString();
+            countQuery.param("symbolJson", symbolJson);
+            itemQuery.param("symbolJson", symbolJson);
+        }
+        long total = countQuery.query(Long.class).single();
+        List<ArticleView> items = itemQuery
             .param("limit", size)
             .param("offset", (long) page * size)
             .query(this::mapArticle)
