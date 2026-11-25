@@ -4,7 +4,6 @@
   "account": "098859530205",
   "region": "ap-south-1",
   "instance_id": "i-09c01b470fb39b85a",
-  "expected_backend_release": "691454e4b7995f54ee0ac5c4e14e44ed53ffbf48",
-  "authorization": "OWNER_EXPLICITLY_REQUESTED_LIVE_EXECUTION_2026_11_20"
+  "expected_backend_release": "1c2bfae773f7ffb10c6c0a0c3406564e6f9962d5",
+  "authorization": "OWNER_EXPLICITLY_REQUESTED_LIVE_EXECUTION_2026_11_25"
 }
-  
