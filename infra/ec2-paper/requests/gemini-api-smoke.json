@@ -1,6 +1,6 @@
 {
-  "kind": "minttick-gemini-api-smoke-v1",
   "provider": "GEMINI",
+  "kind": "minttick-gemini-api-smoke-v1",
   "calls": 1,
   "synthetic_only": true,
   "store": false,
