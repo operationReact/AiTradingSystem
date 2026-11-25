@@ -146,6 +146,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                   ('SMA_TREND_VOLUME_V1', 'SMA Trend'),
                   ('OPENING_RANGE_BREAKOUT_V1', 'Opening Range Breakout'),
                   ('VWAP_MOMENTUM_V1', 'VWAP Momentum'),
+                  ('MA_RECLAIM_V1', 'Moving Average Reclaim'),
                 ])
                   ChoiceChip(label: Text(label), selected: _strategyCode == code,
                       onSelected: (_) => setState(() {
