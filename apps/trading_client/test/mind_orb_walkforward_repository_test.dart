@@ -81,7 +81,7 @@ void main() {
 
     final report = await repository.load();
 
-    expect(report.decisionPosture, 'ABSTAIN');
+    expect(report.status, 'INSUFFICIENT_COVERAGE');
     expect(report.status, 'INSUFFICIENT_COVERAGE');
     expect(report.costLabel, contains('ILLUSTRATIVE'));
     expect(report.executionEnabled, isFalse);
