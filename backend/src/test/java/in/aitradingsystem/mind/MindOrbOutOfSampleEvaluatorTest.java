@@ -25,7 +25,8 @@ class MindOrbOutOfSampleEvaluatorTest {
             boolean signal = trigger && i == 3;
             boolean entry = trigger && i == 4;
             boolean target = trigger && i == 5;
-            BigDecimal o = entry ? new BigDecimal("102") : new BigDecimal("100");
+            BigDecimal o = entry ? new BigDecimal("102")
+                    : target ? new BigDecimal("103") : new BigDecimal("100");
             BigDecimal h = i < 3 ? new BigDecimal("101")
                     : target ? new BigDecimal("108")
                     : signal ? new BigDecimal("104") : new BigDecimal("100.5");
