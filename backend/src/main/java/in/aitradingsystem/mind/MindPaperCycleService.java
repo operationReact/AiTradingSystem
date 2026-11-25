@@ -11,12 +11,12 @@ import in.aitradingsystem.marketdata.MarketLastTickStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.mind.MindCapabilityProgressService.EventType;
 import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
-import in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy;
 import in.aitradingsystem.scanner.MovingAverageReclaimStrategy;
+import in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy;
 import in.aitradingsystem.scanner.ScanCandidate;
 import in.aitradingsystem.scanner.ScanContext;
-import in.aitradingsystem.scanner.VwapMomentumStrategy;
 import in.aitradingsystem.scanner.ScannerStrategy;
+import in.aitradingsystem.scanner.VwapMomentumStrategy;
 import in.aitradingsystem.strategy.StrategyEvaluation;
 import in.aitradingsystem.strategy.StrategyService;
 import in.aitradingsystem.strategy.StrategySignal;
@@ -29,9 +29,9 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,8 +53,8 @@ import org.springframework.web.server.ResponseStatusException;
  * First end-to-end Mintick Mind PAPER vertical slice (issue #998 PR C).
  *
  * <pre>
- * permitted stored candles + quality gate (StrategyService or the deterministic ORB evaluator)
- *   -> SMA_TREND_VOLUME_V1 or OPENING_RANGE_BREAKOUT_V1 candidate
+ * permitted stored candles + quality gate (SMA, ORB, VWAP momentum, or moving-average reclaim)
+ *   -> guarded intraday strategy candidate
  *   -> candle freshness / source permission / existing-position policy
  *   -> fresh broker-verified LTP (never a historical candle) + divergence guard
  *   -> automatic risk sizing (1% risk budget, 20% exposure cap, cash)
@@ -295,7 +295,8 @@ public class MindPaperCycleService {
                 return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
             }
             if (signal == null) {
-                signal = new CycleSignal((isOrb ? "ORB_HOLD_" : "VWAP_HOLD_")
+                signal = new CycleSignal((isOrb ? "ORB_HOLD_"
+                    : VWAP_STRATEGY_CODE.equals(strategyCode) ? "VWAP_HOLD_" : "MA_RECLAIM_HOLD_")
                     + hash(instrumentId + "|" + interval + "|" + d.candleTime).substring(0, 32),
                     "HOLD", evaluation.latestClose(), null, null, d.candleTime, d.source, List.of());
                 d.reasons.add(isOrb ? "NO_NEW_ORB_ENTRY_SIGNAL"
@@ -946,7 +947,7 @@ public class MindPaperCycleService {
 
     /**
      * Strict market + holding-horizon boundary for the supported SMA and ORB
-     * cash-equity PAPER strategies. Other strategy families must add their own
+     * cash-equity intraday PAPER strategies. Other strategy families must add their own
      * tested room-focus compatibility before execution.
      *
      * A daily candle is research input for Swing; this does NOT force any
