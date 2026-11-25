@@ -160,7 +160,7 @@ def make_command(action: str, sha: str = "", digest: str = "") -> str:
 
 def safe_preflight_failure_stage(output: str) -> str | None:
     """Extract only an explicitly allowed host-stage marker from SSM output."""
-    match = re.search(r"MINTTICK_PREFLIGHT_FAILED_STAGE:([a-z_]+)(?:\\s|$)", output)
+    match = re.search(r"MINTTICK_PREFLIGHT_FAILED_STAGE:([a-z_]+)(?:\s|$)", output)
     if match and match.group(1) in PREFLIGHT_STAGES:
         return match.group(1)
     return None
