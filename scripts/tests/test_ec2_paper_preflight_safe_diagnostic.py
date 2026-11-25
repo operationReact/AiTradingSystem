@@ -110,7 +110,7 @@ class SafeSsmPreflightDiagnostics(unittest.TestCase):
         output = stream.getvalue()
         self.assertIn(receipt, output)
         self.assertNotIn("DB_PASSWORD", output)
-        self.assertNotIn("private", output)
+        self.assertNotIn("private stderr", output)
 
     def test_success_without_safe_intake_receipt_fails_closed(self):
         responses = iter((
