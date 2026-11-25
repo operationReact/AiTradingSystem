@@ -37,6 +37,36 @@ class ExtendedScannerStrategiesTest {
     }
 
     @Test
+    void openingRangeBreakoutRejectsIncompleteOneAndThreeMinuteRanges() {
+        OpeningRangeBreakoutStrategy strategy = new OpeningRangeBreakoutStrategy();
+
+        for (var interval : List.of(
+                new IntervalFixture("ONE_MINUTE", 1),
+                new IntervalFixture("THREE_MINUTE", 3))) {
+            List<MarketCandle> bars = orbBars(interval.name(), interval.stepMinutes(), 3);
+            ScanContext context = context(bars, Instant.parse("2026-10-28T04:01:00Z"), interval.name());
+
+            assertTrue(strategy.evaluate(context).isEmpty(), interval.name());
+        }
+    }
+
+    @Test
+    void openingRangeBreakoutAcceptsCompleteThreeMinuteRange() {
+        List<MarketCandle> bars = orbBars("THREE_MINUTE", 3, 5);
+        ScanContext context = context(bars, Instant.parse("2026-10-28T04:01:00Z"), "THREE_MINUTE");
+
+        assertTrue(new OpeningRangeBreakoutStrategy().evaluate(context).isPresent());
+    }
+
+    @Test
+    void openingRangeBreakoutRejectsCandlesFromAnotherInterval() {
+        List<MarketCandle> bars = orbBars("FIVE_MINUTE", 5, 3);
+        ScanContext context = context(bars, Instant.parse("2026-10-28T04:01:00Z"), "ONE_MINUTE");
+
+        assertTrue(new OpeningRangeBreakoutStrategy().evaluate(context).isEmpty());
+    }
+
+    @Test
     void vwapMomentumRequiresPriceAndVolumeConfirmation() {
         List<MarketCandle> bars = new ArrayList<>();
         Instant start = Instant.parse("2026-10-28T03:45:00Z");
@@ -117,8 +147,33 @@ class ExtendedScannerStrategiesTest {
     }
 
     private static ScanContext context(List<MarketCandle> bars, Instant evaluatedAt) {
-        return new ScanContext(1L, "RELIANCE-EQ", "NSE", "FIVE_MINUTE", evaluatedAt, bars);
+        return context(bars, evaluatedAt, "FIVE_MINUTE");
     }
+
+    private static ScanContext context(List<MarketCandle> bars, Instant evaluatedAt, String interval) {
+        return new ScanContext(1L, "RELIANCE-EQ", "NSE", interval, evaluatedAt, bars);
+    }
+
+    private static List<MarketCandle> orbBars(String interval, int stepMinutes, int openingBars) {
+        Instant open = Instant.parse("2026-10-28T03:45:00Z");
+        List<MarketCandle> bars = new ArrayList<>();
+        for (int i = 0; i < openingBars; i++) {
+            bars.add(orbCandle(i + 1, open.plusSeconds(i * stepMinutes * 60L),
+                    "100", "101.5", "99.5", "100.5", 1000, interval));
+        }
+        bars.add(orbCandle(openingBars + 1, Instant.parse("2026-10-28T04:00:00Z"),
+                "101.5", "103.5", "101.3", "103", 1500, interval));
+        return List.copyOf(bars);
+    }
+
+    private static MarketCandle orbCandle(long id, Instant time, String open, String high,
+                                           String low, String close, long volume, String interval) {
+        return new MarketCandle(id, 1L, "NSE", "RELIANCE-EQ", "2885", null, interval, time,
+                new BigDecimal(open), new BigDecimal(high), new BigDecimal(low), new BigDecimal(close),
+                volume, "TEST_FIXTURE", time.plusSeconds(1));
+    }
+
+    private record IntervalFixture(String name, int stepMinutes) {}
 
     private static MarketCandle candle(long id, String time, String open, String high, String low, String close, long volume) {
         return candle(id, Instant.parse(time), new BigDecimal(open), new BigDecimal(high), new BigDecimal(low), new BigDecimal(close), volume);
