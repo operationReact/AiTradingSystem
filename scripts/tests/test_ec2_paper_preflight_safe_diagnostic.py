@@ -70,6 +70,64 @@ class SafeSsmPreflightDiagnostics(unittest.TestCase):
         self.assertNotIn("DB_PASSWORD", message)
         self.assertNotIn("private", message)
 
+    def test_only_fixed_boolean_intake_receipt_is_accepted(self):
+        receipt = (
+            "STR176_INTAKE enabled=true reviewerKeyPresent=true "
+            "privateDirectory=true backendConfigWired=true readonlyMount=true"
+        )
+        self.assertEqual(gate.safe_preflight_intake_receipt(receipt), receipt)
+        self.assertIsNone(
+            gate.safe_preflight_intake_receipt(receipt + " private=value")
+        )
+        self.assertIsNone(
+            gate.safe_preflight_intake_receipt(
+                "STR176_INTAKE enabled=yes reviewerKeyPresent=true "
+                "privateDirectory=true backendConfigWired=true readonlyMount=true"
+            )
+        )
+
+    def test_successful_preflight_prints_only_boolean_receipt(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        receipt = (
+            "STR176_INTAKE enabled=false reviewerKeyPresent=false "
+            "privateDirectory=false backendConfigWired=false readonlyMount=false"
+        )
+        responses = iter((
+            {"Command": {"CommandId": "12345678-1234-1234-1234-123456789abc"}},
+            {
+                "Status": "Success",
+                "StandardOutputContent": receipt + "\nDB_PASSWORD=private",
+                "StandardErrorContent": "private stderr",
+            },
+        ))
+        stream = StringIO()
+        with patch.object(gate, "aws_json", side_effect=lambda *args: next(responses)):
+            with patch.object(gate.time, "sleep"):
+                with redirect_stdout(stream):
+                    gate.send_command("preflight")
+        output = stream.getvalue()
+        self.assertIn(receipt, output)
+        self.assertNotIn("DB_PASSWORD", output)
+        self.assertNotIn("private stderr", output)
+
+    def test_success_without_safe_intake_receipt_fails_closed(self):
+        responses = iter((
+            {"Command": {"CommandId": "12345678-1234-1234-1234-123456789abc"}},
+            {
+                "Status": "Success",
+                "StandardOutputContent": "DB_PASSWORD=private",
+                "StandardErrorContent": "",
+            },
+        ))
+        with patch.object(gate, "aws_json", side_effect=lambda *args: next(responses)):
+            with patch.object(gate.time, "sleep"):
+                with self.assertRaises(gate.Rejected) as caught:
+                    gate.send_command("preflight")
+        self.assertNotIn("private", str(caught.exception))
+        self.assertIn("receipt was absent", str(caught.exception))
+
     def test_remote_preflight_has_safe_stage_trap_and_parses_cleanly(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("MINTTICK_PREFLIGHT_FAILED_STAGE:%s", source)

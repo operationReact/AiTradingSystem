@@ -166,6 +166,17 @@ def safe_preflight_failure_stage(output: str) -> str | None:
     return None
 
 
+def safe_preflight_intake_receipt(output: str) -> str | None:
+    """Return the fixed boolean-only STR176 intake receipt, never raw SSM output."""
+    pattern = (
+        r"(?m)^STR176_INTAKE enabled=(true|false) "
+        r"reviewerKeyPresent=(true|false) privateDirectory=(true|false) "
+        r"backendConfigWired=(true|false) readonlyMount=(true|false)$"
+    )
+    match = re.search(pattern, output)
+    return match.group(0) if match else None
+
+
 def send_command(action: str, sha: str = "", digest: str = "") -> None:
     command = make_command(action, sha, digest)
     params = json.dumps({"commands": [command]})
@@ -195,6 +206,13 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
             raise
         status = result.get("Status")
         if status == "Success":
+            if action == "preflight":
+                combined = (str(result.get("StandardOutputContent") or "") +
+                            "\n" + str(result.get("StandardErrorContent") or ""))
+                receipt = safe_preflight_intake_receipt(combined)
+                if not receipt:
+                    raise Rejected("SSM preflight passed but safe intake receipt was absent")
+                print(receipt, flush=True)
             print(f"SSM {action} completed successfully; no cloud changes outside exact host", flush=True)
             return
         if status in {"Cancelled", "Failed", "TimedOut", "Cancelling"}:
