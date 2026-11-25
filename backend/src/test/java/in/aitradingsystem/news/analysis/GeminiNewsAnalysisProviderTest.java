@@ -82,6 +82,28 @@ class GeminiNewsAnalysisProviderTest {
     }
 
     @Test
+    void usesSupportedV1betaInteractionsEndpoint() throws Exception {
+        var observedPath = new java.util.concurrent.atomic.AtomicReference<String>();
+        JsonNode response = mapper.readTree("""
+            {"status":"completed","id":"synthetic-id","steps":[
+              {"type":"model_output","content":[{"type":"text","text":"{}"}]}]}
+            """);
+        NewsProperties props = new NewsProperties("GEMINI", "gemini-2.5-flash",
+            "claude-test", "test-key", "", 1000, 5000, 2);
+        var provider = new GeminiNewsAnalysisProvider(props, mapper) {
+            @Override
+            protected JsonNode post(String path, Map<String, String> headers, Object body) {
+                observedPath.set(path);
+                return response;
+            }
+        };
+
+        provider.complete("system", "synthetic diagnostic");
+
+        assertThat(observedPath).hasValue("/v1beta/interactions");
+    }
+
+    @Test
     void processObservationSeparatesResponseWithIdFromLaterFailure() throws Exception {
         // Stub the transport boundary: these fixtures do not verify real Gemini.
         JsonNode response = mapper.readTree("""
