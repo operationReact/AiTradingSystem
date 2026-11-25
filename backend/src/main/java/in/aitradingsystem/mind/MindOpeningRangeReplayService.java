@@ -154,7 +154,7 @@ public final class MindOpeningRangeReplayService {
                 candidate.instrumentId() > 0 && candidate.exchange() != null &&
                 Set.of("NSE", "BSE").contains(candidate.exchange()) &&
                 candidate.tradingSymbol() != null && candidate.tradingSymbol().endsWith("-EQ") &&
-                INTERVALS.contains(candidate.interval()) &&
+                candidate.interval() != null && INTERVALS.contains(candidate.interval()) &&
                 candidate.candleTime() != null && candidate.dataCutoffAt() != null &&
                 candidate.candleTime().equals(candidate.dataCutoffAt()) &&
                 !candidate.candleTime().isAfter(run.startedAt()) &&
