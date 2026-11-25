@@ -60,3 +60,40 @@ jobs:
           assert nodes[0]["PingStatus"] == "Online"
           print('{"mainOidcVerified":true,"exactHostSsmOnline":true,"hostMutationAttempted":false}')
           PY
+      - name: Read sanitized news runtime flags from the exact backend container
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re, subprocess, time
+          region='ap-south-1'
+          instance='i-09c01b470fb39b85a'
+          marker='MINTTICK_NEWS_RUNTIME_FLAGS:'
+          remote = r'''set -eu
+          ids="$(docker ps --filter label=com.docker.compose.project=aitradingsystem-paper --filter label=com.docker.compose.service=backend --format '{{.ID}}')"
+          test "$(printf '%s\\n' "$ids" | sed '/^$/d' | wc -l)" -eq 1
+          docker inspect --format '{{json .Config.Env}}' "$ids" | python3 -c 'import json,sys; rows=json.load(sys.stdin); e={}; [(e.__setitem__(x.split("=",1)[0],x.split("=",1)[1])) for x in rows if "=" in x]; keys=("NEWS_INGESTION_ENABLED","NEWS_ANALYSIS_PROVIDER","NEWS_ANALYSIS_SCHEDULER_ENABLED","NEWS_ANALYZER_BRIDGE_ENABLED","NEWS_ANALYZER_APPROVED_SOURCES","GEMINI_MODEL"); out={"flags":{k:e.get(k,"<unset>") for k in keys},"geminiApiKeyPresent":bool(e.get("GEMINI_API_KEY",""))}; print("MINTTICK_NEWS_RUNTIME_FLAGS:"+json.dumps(out,sort_keys=True))'
+          '''
+          def aws(*args):
+              p=subprocess.run(['aws',*args,'--region',region,'--output','json','--no-cli-pager'],capture_output=True,text=True,timeout=35)
+              if p.returncode: raise SystemExit('NEWS_RUNTIME_AWS_READ_FAILED')
+              return json.loads(p.stdout)
+          sent=aws('ssm','send-command','--document-name','AWS-RunShellScript','--instance-ids',instance,'--timeout-seconds','45','--comment','MintTick sanitized read-only news runtime configuration','--parameters',json.dumps({'commands':[remote]}))
+          command_id=sent.get('Command',{}).get('CommandId','')
+          if not re.fullmatch(r'[0-9a-f-]{36}',command_id): raise SystemExit('NEWS_RUNTIME_SSM_COMMAND_INVALID')
+          for _ in range(30):
+              time.sleep(2)
+              result=aws('ssm','get-command-invocation','--command-id',command_id,'--instance-id',instance)
+              state=result.get('Status')
+              if state=='Success':
+                  lines=(result.get('StandardOutputContent') or '').splitlines()
+                  matches=[x[len(marker):] for x in lines if x.startswith(marker)]
+                  if len(matches)!=1: raise SystemExit('NEWS_RUNTIME_RECEIPT_INVALID')
+                  receipt=json.loads(matches[0])
+                  if set(receipt)!={'flags','geminiApiKeyPresent'} or set(receipt['flags'])!={'NEWS_INGESTION_ENABLED','NEWS_ANALYSIS_PROVIDER','NEWS_ANALYSIS_SCHEDULER_ENABLED','NEWS_ANALYZER_BRIDGE_ENABLED','NEWS_ANALYZER_APPROVED_SOURCES','GEMINI_MODEL'}:
+                      raise SystemExit('NEWS_RUNTIME_RECEIPT_INVALID')
+                  print(json.dumps({'instanceId':instance,'configurationMutationAttempted':False,**receipt},sort_keys=True))
+                  break
+              if state not in {'Pending','InProgress','Delayed'}: raise SystemExit('NEWS_RUNTIME_SSM_READ_FAILED:'+str(state))
+          else: raise SystemExit('NEWS_RUNTIME_SSM_READ_TIMEOUT')
+          PY
