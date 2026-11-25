@@ -54,6 +54,8 @@ class BootstrapContractTest(unittest.TestCase):
             "Traceback (most recent call last):\nRuntimeError: private payload"))
         self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",ops.smoke_failure(
             "FNO_BULK_ERROR:UNCLASSIFIED_SAFE_FAILURE\n", ""))
+        self.assertEqual("WORKER_EXCEPTION_RUNTIME_ERROR",ops.smoke_failure(
+            "FNO_BULK_ERROR:WORKER_EXCEPTION_RUNTIME_ERROR\n"))
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.parse_smoke_failure(
             "FNO_BULK_SMOKE_FAILURE:UPSTOX_TOKEN_UNAVAILABLE\r\n"))
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.smoke_failure(

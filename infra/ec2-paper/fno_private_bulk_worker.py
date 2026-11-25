@@ -81,7 +81,7 @@ SAFE_FAILURES = frozenset({
 })
 
 def safe_failure_reason(exc):
-    """Expose only fixed failure enums; never provider bodies or local paths."""
+    """Expose a fixed reason or exception class, never messages or paths."""
     reason = str(exc)
     if reason in SAFE_FAILURES:
         return reason
@@ -89,15 +89,16 @@ def safe_failure_reason(exc):
         return "PRIVATE_DB_ERROR"
     if isinstance(exc, OSError):
         return "PRIVATE_STORAGE_ERROR"
-    if isinstance(exc, GateClosed):
-        return "UNCLASSIFIED_GATE_BLOCK"
-    if isinstance(exc, RuntimeError):
-        return "UNCLASSIFIED_RUNTIME_FAILURE"
-    if isinstance(exc, ValueError):
-        return "UNCLASSIFIED_VALIDATION_FAILURE"
-    if isinstance(exc, (KeyError,TypeError,AttributeError)):
-        return "UNCLASSIFIED_PROVIDER_SCHEMA_FAILURE"
-    return "UNCLASSIFIED_SAFE_FAILURE"
+    exception_classes = {
+        GateClosed: "WORKER_EXCEPTION_GATE_CLOSED",
+        RuntimeError: "WORKER_EXCEPTION_RUNTIME_ERROR",
+        ValueError: "WORKER_EXCEPTION_VALIDATION_ERROR",
+        KeyError: "WORKER_EXCEPTION_KEY_ERROR",
+        TypeError: "WORKER_EXCEPTION_TYPE_ERROR",
+        AttributeError: "WORKER_EXCEPTION_ATTRIBUTE_ERROR",
+    }
+    failure = exception_classes.get(type(exc))
+    return failure or "UNCLASSIFIED_SAFE_FAILURE"
 
 def today():
     return datetime.now(ZoneInfo("Asia/Kolkata")).date()
