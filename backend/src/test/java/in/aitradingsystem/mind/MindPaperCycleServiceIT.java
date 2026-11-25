@@ -330,8 +330,8 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
 
     @Test
     void movingAverageReclaimCandidateUsesTheGuardedPaperEngine() {
-        long instrumentId = instrument("RELIANCE-EQ", "2885");
-        seedMovingAverageReclaimCandles(instrumentId, "RELIANCE-EQ", "2885");
+        long instrumentId = instrument("TCS-EQ", "11536");
+        seedMovingAverageReclaimCandles(instrumentId, "TCS-EQ", "11536");
         recordTick(instrumentId, "103.00", NOW.minusSeconds(2));
         UUID owner = customer();
         UUID room = fundedRoom(owner);
