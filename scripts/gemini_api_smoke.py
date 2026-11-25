@@ -103,6 +103,11 @@ def summarize(raw: bytes) -> tuple[bool, bool]:
     return False, False
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        return None
+
+
 def run(api_key: str, model: str = "gemini-2.5-flash") -> dict:
     result = {
         "status": "FAILED",
@@ -128,9 +133,7 @@ def run(api_key: str, model: str = "gemini-2.5-flash") -> dict:
     )
     result["providerCallAttempted"] = True
     try:
-        with urllib.request.build_opener(
-            urllib.request.HTTPRedirectHandler()
-        ).open(req, timeout=35) as response:
+        with urllib.request.build_opener(NoRedirect()).open(req, timeout=35) as response:
             raw = response.read(65537)
             result["httpStatus"] = response.status
         ok, request_id = summarize(raw)
