@@ -57,7 +57,7 @@ jobs:
             p=Path("infra/ec2-paper/requests/news-runtime-activate.json")
             assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1500
             assert json.loads(p.read_text()) == expected
-            PY
+          PY
           fi
 
   activate:
