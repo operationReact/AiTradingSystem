@@ -108,7 +108,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def run(api_key: str, model: str = "gemini-2.5-flash") -> dict:
+def run(api_key: str, model: str = "gemini-3.5-flash-lite") -> dict:
     result = {
         "status": "FAILED",
         "providerCallAttempted": False,
