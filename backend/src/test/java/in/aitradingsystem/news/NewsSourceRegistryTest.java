@@ -6,6 +6,18 @@ import org.junit.jupiter.api.Test;
 
 class NewsSourceRegistryTest {
     @Test
+    void moneycontrolUsesPublisherMarketRssAndAllowsOnlyPublisherArticleHosts() {
+        NewsSource moneycontrol = NewsSource.byId("moneycontrol");
+
+        assertThat(moneycontrol.feedUri().toString())
+            .isEqualTo("https://hindi.moneycontrol.com/news/rss/feeds/markets.xml");
+        assertThat(NewsUrlValidator.isAllowedArticleUrl(
+            "https://hindi.moneycontrol.com/news/markets/sample.html", moneycontrol)).isTrue();
+        assertThat(NewsUrlValidator.isAllowedArticleUrl(
+            "https://attacker.example/news/markets/sample.html", moneycontrol)).isFalse();
+    }
+
+    @Test
     void nseAnnouncementsFeedAndArticleLinksAreRestrictedToOfficialHosts() {
         NewsSource nse = NewsSource.byId("nse-announcements");
 
