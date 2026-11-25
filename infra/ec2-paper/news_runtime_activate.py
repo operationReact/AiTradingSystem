@@ -44,7 +44,7 @@ chmod 0600 "$root/runtime.env"
 stage=POLICY
 python3 - "$root/runtime.env" <<'PY'
 import json, os, re, stat, sys, tempfile, urllib.error, urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 p=Path(sys.argv[1])
 if not p.is_file() or p.is_symlink() or stat.S_IMODE(p.stat().st_mode) != 0o600:
@@ -66,7 +66,7 @@ for source in sources:
       "licenseState":"APPROVED","permittedUses":uses,
       "reviewerRef":"owner-attestation:2026-11-25",
       "termsRef":"owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
-      "effectiveFrom":now,"effectiveTo":None,"contentTtlDays":30
+      "effectiveFrom":now,"effectiveTo":(datetime.now(timezone.utc)+timedelta(days=30)).isoformat(),"contentTtlDays":30
     }).encode()
     req=urllib.request.Request(
       "http://127.0.0.1:8080/api/admin/market-intelligence/sources/"+source+"/policy",
