@@ -207,11 +207,7 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
     }
     final normalized = symbol?.trim().toUpperCase();
     if (normalized != null && normalized.isNotEmpty &&
-        !RegExp(r'^[A-Z0-9&.-]{1,20}
-    return MarketNewsPage.fromJson(response);
-  }
-}
-).hasMatch(normalized)) {
+        !RegExp(r'^[A-Z0-9&.-]{1,20}$').hasMatch(normalized)) {
       throw ArgumentError('Invalid stock symbol');
     }
     final response = await api.getJson('/api/customer/market-intelligence/articles',
