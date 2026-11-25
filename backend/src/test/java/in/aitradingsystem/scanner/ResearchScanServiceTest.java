@@ -2,6 +2,7 @@ package in.aitradingsystem.scanner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketDataRepository;
+import in.aitradingsystem.marketdata.MarketCandle;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -69,6 +71,49 @@ class ResearchScanServiceTest {
             eq("INCOMPLETE_HISTORY_COVERAGE"),
             eq("1 instrument(s) lack the 64-candle research window"));
         verify(scans, never()).finishRun(any(UUID.class), eq(1), eq(0));
+    }
+
+    @Test
+    void freezesOpeningRangeCandidateInputsForMindReplay() {
+        Instant evaluatedAt = Instant.parse("2026-10-28T09:45:00Z");
+        Clock scanClock = Clock.fixed(evaluatedAt, ZoneOffset.UTC);
+        ResearchScanService service = new ResearchScanService(scans, marketData, scanClock, 10, 60);
+        UUID catalogue = UUID.randomUUID();
+        Instrument stock = new Instrument(42L, "NSE_CM", "NSE", "42",
+            "TEST-EQ", "Test equity", "EQ", null, null, 1,
+            new BigDecimal("0.05"), catalogue);
+        when(scans.activeCashEquityUniverse(1)).thenReturn(List.of(stock));
+        List<MarketCandle> bars = new java.util.ArrayList<>();
+        Instant first = Instant.parse("2026-10-28T03:45:00Z");
+        for (int i = 0; i < 64; i++) {
+            Instant candleTime = first.plusSeconds(i * 300L);
+            boolean breakout = i == 63;
+            BigDecimal open = breakout ? new BigDecimal("101.5") : new BigDecimal("100");
+            BigDecimal high = breakout ? new BigDecimal("104") : new BigDecimal("101");
+            BigDecimal low = breakout ? new BigDecimal("101.2") : new BigDecimal("99");
+            BigDecimal close = breakout ? new BigDecimal("103") : new BigDecimal("100");
+            bars.add(new MarketCandle(i + 1L, 42L, "NSE", "TEST-EQ", "42", catalogue,
+                "FIVE_MINUTE", candleTime, open, high, low, close, breakout ? 2000L : 1000L,
+                "ANGEL_ONE_SMARTAPI", candleTime.plusSeconds(30)));
+        }
+        when(marketData.recentCandles(42L, "FIVE_MINUTE", 64)).thenReturn(List.copyOf(bars));
+        when(scans.saveCandidate(any(UUID.class), any(ScanCandidate.class), any(), any(), any(), any()))
+            .thenReturn(true);
+        when(scans.requireRun(any(UUID.class))).thenReturn(new ResearchScanSummary(
+            UUID.randomUUID(), "FIVE_MINUTE", "SUCCEEDED", 1, 1, 0,
+            OpeningRangeBreakoutStrategy.NAME, evaluatedAt, evaluatedAt, null, null));
+
+        service.run(HistoricalCandleInterval.FIVE_MINUTE, 1);
+
+        verify(scans).recordOpeningRangeMindInputCustody(
+            any(UUID.class),
+            org.mockito.ArgumentMatchers.argThat(c ->
+                OpeningRangeBreakoutStrategy.NAME.equals(c.strategy())),
+            eq("1"),
+            org.mockito.ArgumentMatchers.argThat(snapshot ->
+                snapshot.candleCount() == MindSourceSnapshot.OPENING_RANGE_BARS &&
+                snapshot.lastCandleAt().equals(bars.getLast().candleTime())));
+        assertTrue(bars.size() == MindSourceSnapshot.OPENING_RANGE_BARS);
     }
 
     @Test
