@@ -20,6 +20,16 @@ class NewsSourceCoverageTest {
     }
 
     @Test
+    void includesCurrentMoneycontrolMarketRssSource() {
+        NewsSource moneycontrol = NewsSource.byId("moneycontrol");
+
+        assertThat(moneycontrol.publisher()).isEqualTo("Moneycontrol");
+        assertThat(moneycontrol.feedUri().toString())
+            .isEqualTo("https://hindi.moneycontrol.com/news/rss/feeds/markets.xml");
+        assertThat(moneycontrol.articleHosts()).contains("hindi.moneycontrol.com");
+    }
+
+    @Test
     void includesVerifiedSebiRegulatoryRssSource() {
         NewsSource sebi = NewsSource.byId("sebi");
 

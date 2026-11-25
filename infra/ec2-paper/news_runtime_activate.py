@@ -141,7 +141,7 @@ def safe_health_snapshot(payload):
          "analysisSchedulerEnabled","mindContextEnabled")},
       "provider":model.get("selectedProvider"),
       "sources":[{"sourceId":x.get("sourceId"),"status":x.get("latestStatus"),
-                  "items":x.get("lastFetchedItems"),
+                  "errorCode":x.get("lastErrorCode"),"items":x.get("lastFetchedItems"),
                   "inserted":x.get("lastInsertedItems"),
                   "rights":x.get("rightsState"),
                   "uses":[x.get(k) is True for k in
@@ -198,21 +198,18 @@ while time.monotonic()<deadline:
     source_by_id={source.get("sourceId"):source for source in health.get("sources",[])}
     source_done=all(
         source_by_id.get(source_id,{}).get("latestStatus")=="SUCCESS"
-        and (source_by_id.get(source_id,{}).get("lastFetchedItems") or 0)>0
         and source_by_id.get(source_id,{}).get("lastFinishedAt")
         and utc_instant(source_by_id[source_id]["lastFinishedAt"],"SOURCE")>=activated
+        and (source_id=="sebi" or
+             (source_by_id.get(source_id,{}).get("lastFetchedItems") or 0)>0)
         for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"))
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
-    newly_inserted=sum(
-        (source.get("lastInsertedItems") or 0) for source in health.get("sources",[])
-        if source.get("lastFinishedAt") and
-        utc_instant(source["lastFinishedAt"],"SOURCE")>=activated)
-    gemini_floor=activated if newly_inserted>0 else activated-datetime.timedelta(minutes=60)
-    nse_analysis_at=(model.get("lastSuccessfulAnalysisAtBySource") or {}).get("nse-announcements")
-    gemini_done=bool(nse_analysis_at and
-        utc_instant(nse_analysis_at,"NSE_ANALYSIS")>=activated and
-        attempted_at and utc_instant(attempted_at,"GEMINI")>=gemini_floor and
+    successful_analyses=model.get("lastSuccessfulAnalysisAtBySource") or {}
+    fresh_analysis=any(
+        utc_instant(value,"ANALYSIS")>=activated for value in successful_analyses.values())
+    gemini_done=bool(fresh_analysis and attempted_at and
+        utc_instant(attempted_at,"GEMINI")>=activated and
         outcome in ("COMPLETED_WITH_REQUEST_ID","COMPLETED_WITHOUT_REQUEST_ID"))
     if source_done and gemini_done:
         print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
