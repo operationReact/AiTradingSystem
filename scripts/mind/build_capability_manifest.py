@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 10837)
-Total output lines: 650
+Warning: truncated output (original token count: 10664)
+Total output lines: 641
 
 #!/usr/bin/env python3
 """Build the audited Mintick Mind capability manifest (issue #998, PR A).
@@ -270,7 +270,7 @@ SCREEN_AUDIT: dict[str, dict] = {
     "experiment-detail": {
         "status": "IMPLEMENTING",
         "blockerCode": "FIXTURE_CARDS_REMAIN_WITHOUT_SERVER_RECORD",
-        "note": "With the server walk-forward record wired, shows only that report (research only, no order a…2837 tokens truncated…ger": "fundamentals feed",
+        "note": "With the server walk-forward record wired, shows only that report (research only, no order a…2664 tokens truncated…porate-events feed", "Fundamental & Multibagger": "fundamentals feed",
     "Factor & Portfolio": "fundamentals + cross-sectional universe", "Market Microstructure": "order-book depth feed",
     "Futures": "F&O contracts + OI feed", "Options — Directional": "option chain feed",
     "Options — Volatility": "option chain + IV feed", "Options — Hedging": "option chain + greeks feed",
@@ -420,9 +420,8 @@ def build() -> dict:
             implementation = {k: impl.get(k) for k in ("code", "version", "match", "runtime")}
             implementation["version"] = implementation["version"] or "research"
             evidence = [{"kind": "SOURCE", "path": p} for p in impl["paths"]] + [{"kind": "TEST", "path": p} for p in impl["tests"]]
-            missing = impl.get("missing", ["Connect to Mind strategy-to-PAPER orchestration",
-                       "Backtest + walk-forward evidence per strategy",
-                       "Runtime evaluation evidence on deployed revision"])
+            missing = ["Connect to Mind strategy-to-PAPER orchestration", "Backtest + walk-forward evidence per strategy",
+                       "Runtime evaluation evidence on deployed revision"]
             note = impl.get("note")
         else:
             status = "DATA_BLOCKED" if dep else "NOT_STARTED"
