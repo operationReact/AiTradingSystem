@@ -75,7 +75,12 @@ def smoke_failure(stdout,stderr=""):
     # bounded tails for exact fixed markers and exception class names.
     stdout=stdout[-4096:]
     found=re.findall(r"^FNO_BULK_ERROR:([A-Z0-9_]{1,64})$",stdout,re.M)
-    if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
+    generic={
+        "UNCLASSIFIED_GATE_BLOCK", "UNCLASSIFIED_RUNTIME_FAILURE",
+        "UNCLASSIFIED_VALIDATION_FAILURE", "UNCLASSIFIED_PROVIDER_SCHEMA_FAILURE",
+        "UNCLASSIFIED_SAFE_FAILURE",
+    }
+    if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES and found[0] not in generic:
         return found[0]
     outcomes=re.findall(r"^FNO_BULK_SMOKE:([A-Z_]+);complete=(\d+);"
                         r"total=(\d+);rows=(\d+);calls=(\d+)$",stdout,re.M)
@@ -97,6 +102,8 @@ def smoke_failure(stdout,stderr=""):
         if "Traceback (most recent call last)" in stderr:
             return "WORKER_RUNTIME_EXCEPTION"
         return "WORKER_TRACEBACK_UNCLASSIFIED"
+    if len(found)==1 and found[0] in generic:
+        return found[0]
     return "UNCLASSIFIED_SAFE_FAILURE"
 
 def expected_request():
@@ -175,6 +182,7 @@ def parse_receipt(raw):
 def parse_smoke_failure(raw):
     if not isinstance(raw,str) or len(raw)>8000:
         return "UNCLASSIFIED_SAFE_FAILURE"
+    raw=raw.replace("\r\n","\n")
     found=re.findall(r"^FNO_BULK_SMOKE_FAILURE:([A-Z0-9_]{1,64})$",raw,re.M)
     if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
         return found[0]
