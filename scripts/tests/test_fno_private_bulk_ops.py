@@ -43,6 +43,14 @@ class BootstrapContractTest(unittest.TestCase):
             "FNO_BULK_SMOKE_FAILURE:/private/token\n"))
         self.assertEqual("SMOKE_NO_VALID_ROWS",ops.smoke_failure(
             "FNO_BULK_SMOKE:NO_VALID_ROWS;complete=0;total=0;rows=0;calls=7\n"))
+        self.assertEqual("WORKER_DEPENDENCY_UNAVAILABLE",ops.smoke_failure(
+            "", "Traceback (most recent call last):\nModuleNotFoundError: /private/path/token"))
+        self.assertEqual("WORKER_SOURCE_INCOMPATIBLE",ops.smoke_failure(
+            "", "SyntaxError: /private/path/secret.py"))
+        self.assertEqual("WORKER_RUNTIME_EXCEPTION",ops.smoke_failure(
+            "", "Traceback (most recent call last):\nRuntimeError: private payload"))
+        self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.smoke_failure(
+            "x"*5000+"\nFNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"))
     def test_runner_pins_exact_transitive_worker_modules(self):
         self.assertEqual(ops.PINNED_MODULES,
             ("fno_history_backfill.py", "upstox_fno_backfill_adapters.py"))
