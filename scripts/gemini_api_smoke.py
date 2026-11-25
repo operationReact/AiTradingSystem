@@ -122,7 +122,7 @@ def run(api_key: str, model: str = "gemini-2.5-flash") -> dict:
         return result
     body = json.dumps(request_body(model), separators=(",", ":")).encode()
     req = urllib.request.Request(
-        "https://generativelanguage.googleapis.com/v1/interactions",
+        "https://generativelanguage.googleapis.com/v1beta/interactions",
         data=body,
         headers={
             "x-goog-api-key": api_key,
