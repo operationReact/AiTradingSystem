@@ -15,6 +15,14 @@ Map<String, dynamic> fixtureArticle({String url = 'https://news.example.test/art
   'excerpt': 'Synthetic excerpt for contract testing only.',
   'publishedAt': '2026-11-24T04:00:00Z',
   'ingestedAt': '2026-11-24T04:05:00Z',
+  'analysisStatus': 'ANALYZED',
+  'stockImpact': {
+    'sentiment': 'NEGATIVE', 'directionScore': -0.35, 'category': 'EARNINGS',
+    'confidence': 0.8, 'materiality': 0.6, 'horizon': 'MULTI_DAY',
+    'contradiction': false, 'ambiguity': true,
+    'impactedSymbols': ['TCS'], 'evidence': 'Synthetic guidance evidence.',
+    'risks': ['Synthetic risk.'], 'analyzedAt': '2026-11-24T04:06:00Z',
+  },
 };
 
 void main() {
@@ -31,17 +39,22 @@ void main() {
     final api = AuthenticatedApiClient(
       session: session, client: client, baseUri: Uri.parse('http://example.test'),
     );
-    final page = await HttpMarketNewsRepository(api).articles(page: 0);
+    final page = await HttpMarketNewsRepository(api).articles(page: 0, symbol: ' tcs ');
 
     expect(request.method, 'GET');
     expect(request.url.path, '/api/customer/market-intelligence/articles');
     expect(request.url.queryParameters['page'], '0');
     expect(request.url.queryParameters['size'], '20');
+    expect(request.url.queryParameters['symbol'], 'TCS');
     expect(request.headers['X-API-Key'], 'test-operator-key');
     expect(page.hasNext, isTrue);
     expect(page.items.single.source, 'TEST SOURCE');
     expect(page.items.single.ingestedAt.isUtc, isTrue);
     expect(page.items.single.excerpt, contains('Synthetic excerpt'));
+    expect(page.items.single.analysisStatus, 'ANALYZED');
+    expect(page.items.single.stockImpact?.sentiment, 'NEGATIVE');
+    expect(page.items.single.stockImpact?.impactedSymbols, ['TCS']);
+    expect(page.items.single.stockImpact?.directionScore, -0.35);
     client.close();
   });
 
