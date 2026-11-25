@@ -1,0 +1,62 @@
+name: MintTick main production OIDC readiness
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/minttick-main-oidc-readiness.yml']
+  push:
+    branches: [main]
+    paths: ['.github/workflows/minttick-main-oidc-readiness.yml']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate repository and branch context
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -eu
+          test "$REPOSITORY" = operationReact/AiTradingSystem
+          if [ "$EVENT" = pull_request ]; then
+            test "$BASE_REF" = main
+          else
+            test "$REF" = refs/heads/main
+          fi
+  inspect:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Verify existing SSM role trusts the main branch
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-main-readiness-${{ github.run_id }}
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+          retry-max-attempts: 2
+      - name: Verify production account and exact running managed host
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          def aws(*args):
+              result = subprocess.run(["aws", *args, "--region", "ap-south-1", "--output", "json", "--no-cli-pager"], capture_output=True, text=True, timeout=30)
+              if result.returncode:
+                  raise SystemExit("MAIN_OIDC_READINESS_AWS_READ_FAILED")
+              return json.loads(result.stdout)
+          actor = aws("sts", "get-caller-identity")
+          assert actor["Account"] == "098859530205"
+          assert actor["Arn"].startswith("arn:aws:sts::098859530205:assumed-role/aitrading-paper-ec2-ssm-deploy/")
+          nodes = aws("ssm", "describe-instance-information", "--filters", "Key=InstanceIds,Values=i-09c01b470fb39b85a")["InstanceInformationList"]
+          assert len(nodes) == 1 and nodes[0]["InstanceId"] == "i-09c01b470fb39b85a"
+          assert nodes[0]["PingStatus"] == "Online"
+          print('{"mainOidcVerified":true,"exactHostSsmOnline":true,"hostMutationAttempted":false}')
+          PY

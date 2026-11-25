@@ -1,0 +1,94 @@
+name: MintTick Gemini production activation (existing PAPER release)
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/minttick-gemini-production-activate.yml','infra/ec2-paper/**','scripts/tests/test_gemini_secret_bind.py','scripts/tests/test_gemini_runtime_verify.py']
+  push:
+    branches: [main]
+    paths: ['infra/ec2-paper/requests/gemini-runtime-verify.json']
+permissions:
+  contents: read
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Validate request and activation code
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "$GITHUB_REF" = refs/heads/main
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = infra/ec2-paper/requests/gemini-runtime-verify.json
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected={"kind":"minttick-gemini-runtime-verify-v1","account":"098859530205","region":"ap-south-1","instance_id":"i-09c01b470fb39b85a","provider":"GEMINI","calls":1,"synthetic_only":True,"store":False,"secret_export":False,"orders":False,"database_writes":False}
+          p=Path("infra/ec2-paper/requests/gemini-runtime-verify.json")
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size < 1500
+          assert json.loads(p.read_text()) == expected
+          PY
+          python3 -m py_compile infra/ec2-paper/gemini_secret_bind.py infra/ec2-paper/gemini_runtime_verify.py infra/ec2-paper/gemini_runtime_activate.py infra/ec2-paper/verify_ssm_release.py
+          python3 -m unittest discover -s scripts/tests -p test_gemini_secret_bind.py -v
+          python3 -m unittest discover -s scripts/tests -p test_gemini_runtime_verify.py -v
+  activate:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assume existing main OIDC SSM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-gemini-prod-${{ github.run_id }}
+          role-duration-seconds: 900
+      - name: Check only Gemini secret format metadata
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          raw=os.environ.get("GEMINI_API_KEY", "")
+          value=raw.strip()
+          report={
+              "secretPresent": bool(raw),
+              "lengthInExpectedRange": 1 <= len(value) <= 512,
+              "allowedKeyCharactersOnly": bool(re.fullmatch(r"[!-~]{1,512}", value)),
+              "expectedGooglePrefix": value.startswith("AIza"),
+              "surroundingQuotes": value[:1] in ("'", '"') and value[-1:] == value[:1],
+          }
+          print(json.dumps(report, sort_keys=True))
+          PY
+      - name: Bind secret through host-generated RSA-OAEP envelope
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python3 infra/ec2-paper/gemini_secret_bind.py runner
+      - name: Reload existing pinned PAPER backend and check backend, database, and web health
+        run: python3 infra/ec2-paper/gemini_runtime_activate.py
+      - name: Make one synthetic nonpersistent Gemini call from the production host
+        run: python3 infra/ec2-paper/gemini_runtime_verify.py runner
+      - name: Save sanitized runtime receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-production-runtime-receipt
+          path: gemini-runtime-verify.json
+          if-no-files-found: ignore
+          retention-days: 14
