@@ -27,6 +27,8 @@ WORKER=ROOT/"infra/ec2-paper/fno_private_bulk_worker.py"
 UNIT="/etc/systemd/system/minttick-fno-private-backfill.service"
 REQUEST=Path("infra/ec2-paper/requests/fno-owner-private-bulk-start.json")
 MARKER="MINTTICK_FNO_PRIVATE_BULK_START_V1:"
+PINNED_MODULES=("fno_history_backfill.py", "upstox_fno_backfill_adapters.py")
+MAX_MODULE_PACKAGE=12000
 STATES={"STARTED","ALREADY_RUNNING","OWNER_SCOPE_REJECTED",
         "HOST_REJECTED","CODE_REJECTED","SMOKE_FAILED","UNIT_REJECTED"}
 SAFE_SMOKE_FAILURES=frozenset({
@@ -104,6 +106,35 @@ def receipt(status,complete=0,total=0,rows=0):
             or complete>total):
         raise ValueError("BAD_FNO_START_RECEIPT")
     return MARKER+f"{status}|{complete}|{total}|{rows}"
+
+def package_source(filename):
+    """Return bounded exact source bytes for host-side import dependencies."""
+    if filename not in PINNED_MODULES:
+        raise ValueError("FNO_BULK_SOURCE_NOT_ALLOWLISTED")
+    path=Path("infra/ec2-paper")/filename
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("FNO_BULK_SOURCE_UNAVAILABLE")
+    source=path.read_bytes()
+    if not 1<=len(source)<=40000:
+        raise ValueError("FNO_BULK_SOURCE_SIZE_INVALID")
+    encoded=base64.b64encode(gzip.compress(source,mtime=0)).decode("ascii")
+    if len(encoded)>MAX_MODULE_PACKAGE or not re.fullmatch(r"[A-Za-z0-9+/=]+",encoded):
+        raise ValueError("FNO_BULK_SOURCE_PACKAGE_INVALID")
+    return hashlib.sha256(source).hexdigest(),encoded
+
+def stage_source_command(filename,digest,encoded):
+    """Build one fixed-path SSM statement; all paths come from the code allowlist."""
+    if filename not in PINNED_MODULES or not re.fullmatch(r"[a-f0-9]{64}",digest):
+        raise ValueError("FNO_BULK_SOURCE_NOT_ALLOWLISTED")
+    if not re.fullmatch(r"[A-Za-z0-9+/=]+",encoded) or len(encoded)>MAX_MODULE_PACKAGE:
+        raise ValueError("FNO_BULK_SOURCE_PACKAGE_INVALID")
+    root="/opt/aitradingsystem-paper/infra/ec2-paper"
+    target=f"{root}/{filename}"
+    temp=f"{root}/.{filename}.stage.tmp"
+    return (f"printf '%s' '{encoded}' | base64 -d | gzip -dc > '{temp}'\n"
+            f"printf '%s  %s\\n' '{digest}' '{temp}' | sha256sum -c - >/dev/null\n"
+            f"chmod 600 '{temp}'\n"
+            f"mv -f '{temp}' '{target}'\n")
 
 def parse_receipt(raw):
     if not isinstance(raw,str) or len(raw)>8000:
@@ -293,6 +324,7 @@ def runner():
     worker_pkg=base64.b64encode(gzip.compress(worker_src,mtime=0)).decode()
     host_src=Path(__file__).read_bytes()
     host_pkg=base64.b64encode(gzip.compress(host_src,mtime=0)).decode()
+    pinned_modules={name:package_source(name) for name in PINNED_MODULES}
     if (max(len(worker_pkg),len(host_pkg))>60000
             or not re.fullmatch("[A-Za-z0-9+/=]+",worker_pkg)
             or not re.fullmatch("[A-Za-z0-9+/=]+",host_pkg)):
@@ -300,6 +332,7 @@ def runner():
     shell=("set -eu\n"
            "umask 077\n"
            "test -d /opt/aitradingsystem-paper/infra/ec2-paper\n"
+           +"".join(stage_source_command(name,*pinned_modules[name]) for name in PINNED_MODULES)+
            "printf '%s' '"+worker_pkg+"' | base64 -d | gzip -dc "
            "> /opt/aitradingsystem-paper/infra/ec2-paper/.fno-owner-stage.tmp\n"
            "printf '%s  %s\\n' '"+worker_sha+"' "
