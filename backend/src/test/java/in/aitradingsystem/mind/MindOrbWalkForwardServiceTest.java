@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 
 class MindOrbWalkForwardServiceTest {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final Instant NOW = Instant.parse("2026-11-09T12:00:00Z");
+    private static final Instant NOW = Instant.parse("2026-11-09T09:10:00Z");
     private static final UUID RUN = UUID.randomUUID();
     private static final UUID CATALOGUE = UUID.randomUUID();
     private static final String FINGERPRINT = "a".repeat(64);
