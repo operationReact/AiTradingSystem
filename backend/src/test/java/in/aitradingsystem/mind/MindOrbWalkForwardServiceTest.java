@@ -58,7 +58,7 @@ class MindOrbWalkForwardServiceTest {
         when(scans.rankedCandidates(RUN, 200)).thenReturn(List.of(candidate));
         var frozen = MindSourceSnapshot.fromOpeningRangeCandles(
             referenceBars(), 42L, "NSE", "INFY-EQ", "FIVE_MINUTE",
-            NOW.minusSeconds(600), NOW.minusSeconds(600));
+            NOW.minusSeconds(600), NOW.minusSeconds(240));
         when(scans.findMindInputCustody(RUN, FINGERPRINT)).thenReturn(
             Optional.of(new ResearchScanRepository.MindInputCustody(
                 frozen.digest(), frozen.canonicalInput(), NOW.minusSeconds(240),
