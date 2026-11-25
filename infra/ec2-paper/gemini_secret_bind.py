@@ -100,7 +100,7 @@ for path in (runtime, key_path):
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
         raise SystemExit(31)
 key = key_path.read_text(encoding="ascii")
-if not re.fullmatch(r"[A-Za-z0-9_-]{20,256}", key):
+if not re.fullmatch(r"[!-~]{1,512}", key):
     raise SystemExit(32)
 lines = runtime.read_text(encoding="utf-8").splitlines()
 names = {"GEMINI_API_KEY", "NEWS_ANALYSIS_PROVIDER", "GEMINI_MODEL"}

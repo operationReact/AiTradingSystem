@@ -63,6 +63,8 @@ class GeminiSecretBindTests(unittest.TestCase):
         self.assertNotIn(secret, command)
         self.assertIn("runtime.env", command)
         self.assertIn("GEMINI_API_KEY", command)
+        self.assertIn('re.fullmatch(r"[!-~]{1,512}", key)', command)
+        self.assertNotIn('[A-Za-z0-9_-]{20,256}', command)
         self.assertIn("NEWS_ANALYSIS_PROVIDER=GEMINI", command)
 
     def test_invalid_ciphertext_is_rejected(self):
