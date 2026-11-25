@@ -108,7 +108,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(MintickMindScreens.all.length, 43);
+    expect(MintickMindScreens.all.length, 44);
     // The standard Overview intentionally does not render the workspace
     // topbar. Navigate to the existing Coverage route through its sidebar
     // before exercising the new header shortcut.

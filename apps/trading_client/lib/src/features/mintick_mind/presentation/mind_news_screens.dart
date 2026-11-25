@@ -97,6 +97,8 @@ const _mindNewsPreviewItems = <_MindNewsPreview>[
   ),
 ];
 
+const _newsTabs = <String>['Overview', 'Feed', 'Coverage', 'Activity'];
+
 extension _MindNewsScreens on _MindWorkspaceState {
   bool get _newsDemoMode => widget.marketNewsRepository == null;
 

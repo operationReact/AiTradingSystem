@@ -2,7 +2,7 @@
 
 **Source of truth:** `dev` Flutter registry, `MintickMindScreens.all`, `MindFixtures.models` and `_catalog`, plus live Java/Python backend inspection on 2026-11-10.
 **Machine-readable contract:** [mintick-mind-golden-source-requirements.v1.json](mintick-mind-golden-source-requirements.v1.json). Source-path drift is checked in `scripts/tests/test_mind_golden_source_requirements.py`.
-**Audit outcome:** 43 registered routes, 18 *UI model catalogue records*, 20 strategy families, 232 strategy templates and 24 distinct data-source families.
+**Audit outcome:** 44 registered routes, 18 *UI model catalogue records*, 20 strategy families, 232 strategy templates and 24 distinct data-source families.
 
 > A UI fixture, mock AUC, mock Sharpe or a research module is **not** a verified, trained, licensed, running production model. This matrix specifies what needs to be available, not what is already populated.
 
@@ -10,11 +10,11 @@
 
 1. **Raw cash OHLCV is necessary but insufficient.** Temporal security identity, adjustments, dated fundamentals, ownership, news, index/sector memberships, FII/DII flow, market depth, futures/options, macro data, broker costs, portfolio ledger, and model evidence all have separate authoritative origins.
 2. The currently checked private account has a cash catalogue with 2,778 eligible equities but reported **zero 64-bar historical coverage**. The Angel One private one-session historical probe passed; full-vendor 20-year retention and redistribution rights remain unverified. Avoid claiming completed history.
-3. **43 routed screens are mostly explicit mock workspace UI.** The Overview page has injected read-only readiness/strategy/prospective panels, and the agent Evidence screen can be server-backed; elsewhere prototype values should not be promoted to customer-visible facts.
+3. **44 routed screens are mostly explicit mock workspace UI.** The Overview page has injected read-only readiness/strategy/prospective panels, the agent Evidence screen can be server-backed, and News Analyzer reads the authenticated customer articles API; elsewhere prototype values should not be promoted to customer-visible facts.
 4. **232 templates are a strategy taxonomy, not 232 running strategies.** Model family pipelines need independent data contracts, time horizons, backtest/fair-comparison models, and licensing gates.
 5. **20 years targets daily equity history per actual listing date**, plus necessary source histories where reliable/licensed. It does not require 20 years of full L2 depth, option chains or every fundamental disclosure if no such source exists. Record `NO_DATA` and degrade readiness rather than invent values.
 
-## All 43 registered screen dependencies
+## All 44 registered screen dependencies
 
 | Route / screen | Mandatory source families | Additional inputs | Current UI state |
 |---|---|---|---|
@@ -30,6 +30,7 @@
 | `institutional-flow` — FII / DII Flow | `flows_fii_dii`, `index_breadth_vix` | `market_depth_delivery` | synthetic or demo until wired |
 | `daily-verdict` — Daily Market Verdict | `live_quotes`, `index_breadth_vix`, `model_registry_receipts` | `news_events`, `flows_fii_dii` | synthetic or demo until wired |
 | `culprit-catcher` — Culprit Catcher | `model_registry_receipts`, `operations_health`, `backtest_outcomes` | `risk_execution_controls` | synthetic or demo until wired |
+| `news-analyzer` — News Analyzer | `news_events` | `security_identity` | authenticated customer API; coverage and processing diagnostics remain unavailable |
 | `trading-rooms` — Trading Rooms | `trading_room_strategy`, `risk_execution_controls` | `portfolio_ledger`, `model_registry_receipts` | synthetic or demo until wired |
 | `strategies` — Strategy Universe | `trading_room_strategy`, `backtest_outcomes`, `costs_liquidity` | `model_registry_receipts` | synthetic or demo until wired |
 | `strategy-detail` — Strategy Detail | `trading_room_strategy`, `backtest_outcomes`, `model_features` | `risk_execution_controls` | synthetic or demo until wired |
@@ -154,7 +155,7 @@ For each `(model_version, listing_id, decision_as_of)`, publish `READY`, `NOT_LI
 
 ## Prioritized implementation with explicit acceptance
 
-1. **D20-01A — This audit**: source requirements and machine-checkable crosswalk for all 43/18/232, independent from AWS and orders.
+1. **D20-01A — This audit**: source requirements and machine-checkable crosswalk for all 44/18/232, independent from AWS and orders.
 2. **D20-01B — Typed contracts and fail-closed readiness**: implement the per-source and model manifest/version/available-at validators with synthetic/time-travel tests; no provider calls.
 3. **D20-02 — Stable issuer/listing identity + corporate actions**: forward-only schema, alias and point-in-time delisted/merger fixtures, separate raw/split-adjusted/total-return view.
 4. **D20-03 — Licensed provider registry**: rights by retain/train/derive/display/redistribute, verified historical coverage, provider pricing/rate limits and immutable source evidence.

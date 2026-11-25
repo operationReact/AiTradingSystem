@@ -11,7 +11,7 @@
 
 ## Code
 
-- `scripts/golden_source_fleet_preflight.py` consumes the **existing canonical** 24-source, 18-model, 43-screen, 20-family/232-template requirements JSON. Nothing is claimed ready from UI fixtures, catalogue entries or completed probe counts.
+- `scripts/golden_source_fleet_preflight.py` consumes the **existing canonical** 24-source, 18-model, 44-screen, 20-family/232-template requirements JSON. Nothing is claimed ready from UI fixtures, catalogue entries or completed probe counts.
 - Optionally accepts a **manually reviewed exact V77 listing-episode inventory export** as a file to count eligible listing periods from each real listing date to delisting-exclusive. It does not verify who supplied that JSON, does not promote it to an independently attested source, does not query broker tokens, and never emits a runnable download job. Missing or malformed inventory fails closed.
 - Outputs per-domain consumer dependencies (required model, screen and strategy families), historical field counts and rights statuses, each model's mandatory data families and missing-verified-source state, and aggregated 2000-day vendor read requests vs 31-day immutable archive segments. Defaults to ZERO supplied/verified historical listings, ZERO authorized bulk downloads, ZERO ready models, explicit unavailable statuses.
 - The planned first/last per-listing dates are research **scope estimates**, never point-in-time mapping of current symbols, trading-calendar evidence, permitted data, or guaranteed vendor source response.

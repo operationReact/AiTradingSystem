@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the audited Mintick Mind capability manifest (issue #998, PR A).
 
-The 43 screen descriptors and the 232-entry strategy catalog are parsed from
+The 44 screen descriptors and the 232-entry strategy catalog are parsed from
 the approved Flutter source so identifiers can never drift from the UI. Only
 implementation links verified by file + test existence in this repository are
 recorded. Declared statuses never exceed TESTED: DEPLOYED / RUNTIME_VERIFIED /
@@ -29,6 +29,12 @@ DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
 # Screen audit: every route renders. Status describes the data behind it.
 # --------------------------------------------------------------------------
 SCREEN_AUDIT: dict[str, dict] = {
+    "news-analyzer": {
+        "status": "IMPLEMENTING",
+        "note": "Customer-authorized publisher articles and stored analysis fields use the authenticated read-only news API. Internal ingestion diagnostics remain admin-only; the surface is research-only.",
+        "endpoints": ["/api/customer/market-intelligence/articles"],
+        "missing": ["Customer-visible source health and ingestion event stream", "Full-universe source coverage evidence", "Flutter web/Android/iOS runtime evidence"],
+    },
     "overview": {
         "status": "IMPLEMENTING",
         "note": "Readiness + 6 research evidence panels call real /api/customer/mind/v1 endpoints; "
@@ -504,8 +510,8 @@ PAPER_ITEMS = [
 def parse_screens() -> list[tuple[str, str, str]]:
     src = (MIND / "presentation/mind_workspace_page.dart").read_text()
     found = re.findall(r"MindScreenDescriptor\('([^']+)', '([^']+)', Icons\.\w+, '([A-Z]+)'\)", src)
-    if len(found) != 43:
-        raise SystemExit(f"expected 43 screens, found {len(found)}")
+    if len(found) != 44:
+        raise SystemExit(f"expected 44 screens, found {len(found)}")
     return found
 
 
@@ -622,7 +628,7 @@ def build() -> dict:
         raise SystemExit("duplicate capability ids")
     return {"manifestVersion": MANIFEST_VERSION, "auditedAt": AUDITED_AT,
             "sourceIssues": ["#997", "#998", "#924"],
-            "denominators": {"SCREEN": 43, "STRATEGY": 232, "MODEL": 18}, "items": items}
+            "denominators": {"SCREEN": 44, "STRATEGY": 232, "MODEL": 18}, "items": items}
 
 
 def main() -> None:

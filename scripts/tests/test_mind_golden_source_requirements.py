@@ -116,7 +116,7 @@ class GoldenSourceRequirementsTest(unittest.TestCase):
 
     def test_complete_and_current_registered_ui_and_model_source_audit(self):
         self.assertEqual(verify_contract(self.data), 232)
-        self.assertEqual(len(self.data["screens"]), 43)
+        self.assertEqual(len(self.data["screens"]), 44)
         self.assertEqual(len(self.data["models"]), 18)
 
     def test_derivatives_are_not_misclassified_as_daily_cash_candles(self):

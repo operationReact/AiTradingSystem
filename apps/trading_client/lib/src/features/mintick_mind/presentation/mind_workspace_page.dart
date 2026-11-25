@@ -468,7 +468,9 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   Future<void> _loadMindNews({required bool reset}) async {
     final repository = widget.marketNewsRepository;
     if (repository == null ||
-        (!reset && (_newsLoading || _newsLoadingMore))) return;
+        (!reset && (_newsLoading || _newsLoadingMore))) {
+      return;
+    }
     final generation = ++_newsRequestGeneration;
     final requestedPage = reset ? 0 : _newsPage + 1;
     setState(() {

@@ -7,7 +7,7 @@ validate LIVE trading, the other 41 screens' functionality, or model training.
 ## Inventory (audited 2026-11-13 against `dev` f11c2a7)
 
 `scripts/mind/build_capability_manifest.py` parses the approved Flutter source
-(43 `MintickMindScreens.all` routes, 232 `MindFixtures` strategies in 20
+(44 `MintickMindScreens.all` routes, 232 `MindFixtures` strategies in 20
 families, 18 `MindFixtures.models`) and writes
 `backend/src/main/resources/mind/capability-manifest.v1.json`. An implementation
 link is recorded only when its source and test files exist; the script fails
@@ -16,7 +16,7 @@ test `mind_progress_repository_test.dart` fails if the manifest and UI diverge.
 
 | Kind | Denominator | Audit result |
 |---|---|---|
-| Screens | 43 | 23 IMPLEMENTING (overview, agent-evidence, coverage, room-detail, strategies, strategy-detail, models, model-detail, portfolio, risk, decisions, decision-detail, journal, performance, controls, dependencies, trading-rooms, culprit-catcher, signal-scorecard, charts, research, shadow-arena, app-home), 3 DATA_BLOCKED with real registry blocker (derivatives, options-chain, option-builder), 10 DATA_BLOCKED with no backend source (intelligence-hub, agent-council, regime-weights, confidence-lab, institutional-flow, daily-verdict, multibagger, thesis-detail, events, regimes), 7 MOCK |
+| Screens | 44 | 24 IMPLEMENTING (overview, agent-evidence, coverage, room-detail, strategies, strategy-detail, models, model-detail, portfolio, risk, decisions, decision-detail, journal, performance, controls, dependencies, trading-rooms, culprit-catcher, signal-scorecard, charts, research, shadow-arena, app-home, news-analyzer), 3 DATA_BLOCKED with real registry blocker (derivatives, options-chain, option-builder), 10 DATA_BLOCKED with no backend source (intelligence-hub, agent-council, regime-weights, confidence-lab, institutional-flow, daily-verdict, multibagger, thesis-detail, events, regimes), 7 MOCK |
 | Strategies | 232 | 21 TESTED code links (6 Java evaluators, 6 Java risk gates, 9 Python research), 1 RIGHTS_BLOCKED, 113 DATA_BLOCKED, 97 catalog name only |
 | Models | 18 | 12 TESTED Python research code, 3 RIGHTS_BLOCKED, 1 IMPLEMENTING, 2 not implemented; no deployed trained artifact |
 
