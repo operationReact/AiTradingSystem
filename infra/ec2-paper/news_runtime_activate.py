@@ -308,7 +308,8 @@ def run() -> None:
             output = result.get("StandardOutputContent") or ""
             diagnostics = error + "\n" + output
             stage_match = re.search(r"MINTTICK_NEWS_FAILED_STAGE:([A-Z_]+)", diagnostics)
-            allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT", "NEWS_ANALYSIS_TRIGGER_FAILED",\n                       "NEWS_ANALYSIS_RESULT_INVALID",
+            allowed = {"NEWS_SOURCE_EVIDENCE_TIMEOUT", "NEWS_GEMINI_EVIDENCE_TIMEOUT", "NEWS_ANALYSIS_TRIGGER_FAILED",
+                       "NEWS_ANALYSIS_RESULT_INVALID",
                        "NEWS_RUNTIME_FLAGS_NOT_ACTIVE", "NEWS_GEMINI_NOT_SELECTED",
                        "NEWS_SOURCE_POLICY_NOT_APPROVED", "NEWS_INVALID_SOURCE_TIMESTAMP",
                        "NEWS_INVALID_GEMINI_TIMESTAMP", "APP_KEY_INVALID",
