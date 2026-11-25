@@ -146,7 +146,12 @@ def safe_health_snapshot(payload):
       "geminiOutcome":model.get("lastGeminiAttemptOutcome"),
     }
 def emit_health_snapshot(payload):
-    print("MINTTICK_NEWS_HEALTH_DIAG:"+json.dumps(safe_health_snapshot(payload),sort_keys=True))
+    line="MINTTICK_NEWS_HEALTH_DIAG:"+json.dumps(safe_health_snapshot(payload),sort_keys=True)
+    print(line,flush=True)
+    print(line,file=sys.stderr,flush=True)
+def utc_instant(value):
+    parsed=datetime.datetime.fromisoformat(value.replace("Z","+00:00"))
+    return parsed.replace(tzinfo=datetime.timezone.utc) if parsed.tzinfo is None else parsed
 deadline=time.monotonic()+1500
 source_done=False
 gemini_done=False
@@ -176,12 +181,12 @@ while time.monotonic()<deadline:
     source_done=any(
         source.get("latestStatus")=="SUCCESS" and (source.get("lastFetchedItems") or 0)>0
         and source.get("lastFinishedAt") and
-        datetime.datetime.fromisoformat(source["lastFinishedAt"].replace("Z","+00:00"))>=activated
+        utc_instant(source["lastFinishedAt"])>=activated
         for source in health.get("sources",[]))
     attempted_at=model.get("lastGeminiAttemptAt")
     outcome=model.get("lastGeminiAttemptOutcome") or ""
     gemini_done=bool(attempted_at and
-        datetime.datetime.fromisoformat(attempted_at.replace("Z","+00:00"))>=activated and
+        utc_instant(attempted_at)>=activated and
         outcome.startswith("COMPLETED_WITH_"))
     if source_done and gemini_done:
         print("MINTTICK_NEWS_SOURCE_AND_GEMINI:VERIFIED")
