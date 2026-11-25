@@ -63,6 +63,7 @@ SAFE_SMOKE_FAILURES=frozenset({
     "INVALID_FNO_STATE", "INVALID_FNO_RECEIPT", "INVALID_RATE_LIMIT",
     "ORIGINAL_HTTP_RECEIPT_SINK_REQUIRED",
     "SMOKE_NO_VALID_ROWS", "SMOKE_UNEXPECTED_OUTCOME", "SMOKE_OUTPUT_INVALID",
+    "SMOKE_OUTPUT_MISSING",
     "WORKER_DEPENDENCY_UNAVAILABLE", "WORKER_IMPORT_FAILED",
     "WORKER_SOURCE_INCOMPATIBLE", "WORKER_RUNTIME_EXCEPTION",
     "WORKER_TRACEBACK_UNCLASSIFIED", "WORKER_EXCEPTION_GATE_CLOSED",
@@ -77,6 +78,8 @@ def smoke_failure(stdout,stderr=""):
     # A noisy child must never be copied into the workflow log. Only inspect
     # bounded tails for exact fixed markers and exception class names.
     stdout=stdout[-4096:]
+    if not stdout.strip() and not (isinstance(stderr,str) and stderr):
+        return "SMOKE_OUTPUT_MISSING"
     found=re.findall(r"^FNO_BULK_ERROR:([A-Z0-9_]{1,64})$",stdout,re.M)
     generic={
         "UNCLASSIFIED_GATE_BLOCK", "UNCLASSIFIED_RUNTIME_FAILURE",
@@ -289,7 +292,9 @@ def host():
     m=re.search(r"FNO_BULK_SMOKE:FIRST_BATCH_COMPLETE;complete=(\d+);"
                 r"total=(\d+);rows=(\d+);calls=(\d+)",smoke.stdout)
     if not m:
+        safe_cause=smoke_failure(smoke.stdout,smoke.stderr)
         print(receipt("SMOKE_FAILED"),flush=True)
+        print("FNO_BULK_SMOKE_FAILURE:"+safe_cause,flush=True)
         return 2
     done,total,rows,calls=map(int,m.groups())
     if not (0<done<=total<=20000 and rows>0 and 0<calls<=12):
