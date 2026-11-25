@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../data/customer_home_summary_repository.dart';
+import '../../mintick_mind/data/mind_paper_portfolio_repository.dart';
+import '../../mintick_mind/data/mind_decision_history_repository.dart';
+import '../../mintick_mind/data/mind_progress_repository.dart';
 import '../domain/trading_room_draft.dart';
 import '../domain/trading_workspace_mode.dart';
 import 'minttick_customer_widgets.dart';
@@ -11,6 +14,8 @@ import 'minttick_mode_switcher.dart';
 class MintTickHomeCommandCentre extends StatefulWidget {
   const MintTickHomeCommandCentre({
     required this.loadProfile, required this.summaryRepository,
+    this.paperPortfolioRepository, this.mindHistoryRepository,
+    this.mindProgressRepository,
     required this.drafts, required this.mode,
     required this.onCreateRoom, required this.onOpenRoom,
     required this.onRooms, required this.onMarkets,
@@ -22,6 +27,9 @@ class MintTickHomeCommandCentre extends StatefulWidget {
 
   final Future<Map<String, dynamic>> Function() loadProfile;
   final CustomerHomeSummaryRepository summaryRepository;
+  final MindPaperPortfolioRepository? paperPortfolioRepository;
+  final MindDecisionHistoryRepository? mindHistoryRepository;
+  final MindProgressRepository? mindProgressRepository;
   final TradingRoomDraftStore drafts;
   final TradingWorkspaceMode mode;
   final VoidCallback onCreateRoom;
@@ -47,6 +55,9 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
   String? _identityError;
   String? _summaryError;
   CustomerHomeSummary? _summary;
+  MindPaperPortfolio? _paperPortfolio;
+  MindDecisionHistory? _mindHistory;
+  MindProgressDetail? _multibaggerProgress;
   int _generation = 0;
 
   @override
@@ -120,7 +131,20 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
           result.mode != widget.mode.selected) {
         return;
       }
-      setState(() => _summary = result);
+      MindPaperPortfolio? portfolio;
+      MindDecisionHistory? history;
+      MindProgressDetail? multibagger;
+      if (mode == 'PAPER' && widget.paperPortfolioRepository != null) {
+        try { portfolio = await widget.paperPortfolioRepository!.load(); } catch (_) {}
+      }
+      if (widget.mindHistoryRepository != null) {
+        try { history = await widget.mindHistoryRepository!.load(); } catch (_) {}
+      }
+      if (widget.mindProgressRepository != null) {
+        try { multibagger = await widget.mindProgressRepository!.detail('screen.multibagger'); } catch (_) {}
+      }
+      if (!mounted || request != _generation || mode != widget.mode.selected) return;
+      setState(() { _summary = result; _paperPortfolio = portfolio; _mindHistory = history; _multibaggerProgress = multibagger; });
     } catch (_) {
       if (!mounted || request != _generation) return;
       setState(() => _summaryError =
@@ -141,50 +165,6 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
     }
     // The authoritative room list may have updated since this Home snapshot.
     widget.onRooms();
-  }
-
-  void _next(HomeAction action) {
-    switch (action.destination) {
-      case 'CREATE_ROOM':
-        widget.onCreateRoom();
-        return;
-      case 'ROOM':
-        _openRoom(action.roomId);
-        return;
-      case 'BROKERS':
-        widget.onBroker();
-        return;
-    }
-  }
-
-  String _nextTitle(String action) => switch (action) {
-    'CREATE_PAPER_ROOM' => 'Create your first Paper Room',
-    'COMPLETE_PAPER_ROOM' => 'Finish your Paper Room setup',
-    'REVIEW_PAPER_ROOM' => 'Review your funded Paper Room',
-    'VERIFY_BROKER' => 'Verify broker connectivity',
-    'CONNECT_BROKER' => 'Connect your brokerage account',
-    'PLAN_LIVE_ROOM' => 'Plan your first Live Room',
-    'REVIEW_LIVE_ROOM' => 'Review your Live Room',
-    _ => 'Review your workspace',
-  };
-
-  String _nextDetail(String action) => switch (action) {
-    'CREATE_PAPER_ROOM' => 'Start a plan using simulated funds',
-    'COMPLETE_PAPER_ROOM' => 'Draft saved · funds not allocated',
-    'REVIEW_PAPER_ROOM' => 'Virtual wallet funded · execution disabled',
-    'VERIFY_BROKER' => 'Connection status could not be verified',
-    'CONNECT_BROKER' => 'Angel One and Upstox · account read access',
-    'PLAN_LIVE_ROOM' => 'Broker linked · no live order authorization',
-    'REVIEW_LIVE_ROOM' => 'Plan saved · execution still disabled',
-    _ => 'Check your workspace setup',
-  };
-
-  String _brokerLabel(HomeBrokers broker) {
-    if (!broker.complete) return 'Broker status unavailable';
-    if (broker.connected == 0) return 'No connected brokers';
-    if (broker.connected == 2) return 'Angel One + Upstox linked';
-    return broker.angelOne == 'CONNECTED'
-        ? 'Angel One linked' : 'Upstox linked';
   }
 
   String _recorded(HomeEvidence evidence, {bool market = false}) {
@@ -234,15 +214,15 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
     return Material(
       key: key,
       color: colors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 55),
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: colors.outlineVariant),
           ),
           child: Row(children: [
@@ -275,95 +255,63 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
     );
   }
 
-  Widget _metric(String amount, String label) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme;
-    return Expanded(child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: color.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.outlineVariant)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(amount, style: theme.textTheme.titleLarge?.copyWith(
-          fontSize: 19, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 2),
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelSmall?.copyWith(
-            fontSize: 10, color: color.onSurfaceVariant)),
-      ]),
-    ));
-  }
-
-  Widget _nextCard(CustomerHomeSummary summary) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme;
-    final action = summary.nextAction;
-    return Material(
-      key: const ValueKey('home-next-action'),
-      borderRadius: BorderRadius.circular(14),
-      color: color.primaryContainer.withValues(alpha: .34),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _next(action),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            border: Border.all(color: color.primary.withValues(alpha: .3)),
-            borderRadius: BorderRadius.circular(14)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text('YOUR NEXT ACTION',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w800, color: color.primary,
-                  letterSpacing: .6))),
-              const Icon(Icons.arrow_outward_rounded, size: 17),
-            ]),
-            const SizedBox(height: 6),
-            Text(_nextTitle(action.code), style:
-              theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800)),
-            const SizedBox(height: 3),
-            Text(_nextDetail(action.code),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: color.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            Row(children: [
-              Expanded(child: Text(
-                summary.mode == 'PAPER'
-                  ? '${formatPaperRupees(summary.rooms.plannedBudgetInr)} planned · not funded cash'
-                  : _brokerLabel(summary.brokers),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: color.onSurfaceVariant))),
-              Text('Continue', style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700, color: color.primary)),
-              const Icon(Icons.chevron_right_rounded, size: 17),
-            ]),
-          ]),
-        ),
-      ),
-    );
-  }
-
   List<Widget> _verifiedContent(CustomerHomeSummary s) {
     final paper = s.mode == 'PAPER';
     final featured = s.rooms.featured;
-    final wallet = s.rooms.availablePaperCashPaise;
+    final p = _paperPortfolio;
+    final pnl = p != null && p.unrealizedPnlPaise != null
+        ? p.realizedPnlPaise + p.unrealizedPnlPaise! : null;
+    final pnlColor = pnl == null ? null : pnl >= 0 ? const Color(0xFF42A879) : const Color(0xFFE16B6B);
+    final candidates = _mindHistory?.decisions.take(2).toList() ?? const [];
     return [
-      _nextCard(s),
-      const SizedBox(height: 9),
-      Row(children: [
-        _metric('${s.rooms.count}', 'Rooms'),
-        const SizedBox(width: 7),
-        _metric(paper ? '${s.rooms.funded}' :
-          s.brokers.complete ? '${s.brokers.connected}' : '—',
-          paper ? 'Funded' : 'Brokers'),
-        const SizedBox(width: 7),
-        _metric('Off', 'Execution'),
-      ]),
-      const SizedBox(height: 10),
-      _heading('Your Trading Rooms', 'View all', widget.onRooms),
+      // One compact performance module replaces the repeated metric/status cards.
+      Material(
+        key: const ValueKey('home-portfolio-performance'),
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(onTap: widget.onPortfolio, borderRadius: BorderRadius.circular(14),
+          child: Container(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: pnlColor?.withValues(alpha: .45) ?? Theme.of(context).colorScheme.outlineVariant)),
+            child: Row(children: [
+              Icon(pnl == null ? Icons.account_balance_wallet_outlined : pnl >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                color: pnlColor ?? Theme.of(context).colorScheme.primary, size: 22),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(paper ? 'Paper portfolio' : 'Portfolio', style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+                Text(pnl == null ? (paper ? 'P&L unavailable · marks not verified' : 'Open portfolio for broker values')
+                    : '${pnl >= 0 ? '+' : ''}${_cash(pnl)} total P&L · ${p!.staleOrMissingMarks == 0 ? 'marks current' : '${p.staleOrMissingMarks} stale / missing marks'}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: pnlColor ?? Theme.of(context).colorScheme.onSurfaceVariant)),
+              ])),
+              Text(p?.equityPaise == null ? '—' : _cash(p!.equityPaise!),
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const Icon(Icons.chevron_right_rounded, size: 18),
+            ])),
+        ),
+      ),
+      const SizedBox(height: 8),
+      _heading('MintTick Mind', 'Explore', widget.onMind),
+      if (candidates.isEmpty)
+        _row('Mind findings', s.mind.research.status == 'UNAVAILABLE'
+            ? 'No verified research candidates available' : 'Research scan history is unavailable',
+          Icons.psychology_outlined, widget.onMind, key: const ValueKey('home-mind-status'))
+      else ...[
+        for (final candidate in candidates)
+          _row('${candidate.tradingSymbol} · ${candidate.exchange}',
+            '${candidate.strategy} · ${candidate.interval} · research candidate only',
+            Icons.psychology_outlined, widget.onMind,
+            key: ValueKey('home-mind-${candidate.candidateFingerprint}')),
+        Padding(padding: const EdgeInsets.only(top: 2), child: Text('Recorded candidates are research evidence, not multibagger predictions or buy calls.',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+      ],
+      _row('Potential multibaggers', _multibaggerProgress?.item.status == MindProgressStatus.dataBlocked
+          ? 'No validated stock list · data source blocked'
+          : _multibaggerProgress?.item.status.label ?? 'Mind status unavailable',
+        Icons.auto_awesome_outlined, widget.onMind,
+        key: const ValueKey('home-multibagger-status')),
+      const SizedBox(height: 5),
+      _heading('Trading Rooms', '${s.rooms.count} · View all', widget.onRooms),
       if (featured.isEmpty)
         _row('No ${paper ? 'Paper' : 'Live'} Rooms',
           'Create a plan · no automated orders enabled',
@@ -378,41 +326,15 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
             key: ValueKey('home-room-${room.id}')),
           const SizedBox(height: 5),
         ],
-      const SizedBox(height: 2),
-      _heading('Market pulse', 'Markets', widget.onMarkets),
-      _row('NSE / BSE · Market evidence',
-        _recorded(s.mind.market, market: true),
-        Icons.show_chart_rounded, widget.onMarkets,
-        key: const ValueKey('home-market-pulse')),
-      const SizedBox(height: 3),
-      _heading('Mintick Mind', 'Explore', widget.onMind),
-      _row('Research & readiness',
-        '${_recorded(s.mind.research)} · execution off',
-        Icons.psychology_outlined, widget.onMind,
-        key: const ValueKey('home-mind-status')),
-      const SizedBox(height: 3),
-      _heading('Portfolio & accounts', 'View', widget.onPortfolio),
-      _row(paper ? 'Paper portfolio' : 'Broker investments',
-        paper ? (wallet == null
-          ? 'Virtual wallet balance unverified'
-          : '${_cash(wallet)} virtual available · not real money')
-          : '${_brokerLabel(s.brokers)} · read-only account view',
-        Icons.account_balance_wallet_outlined, widget.onPortfolio,
-        key: const ValueKey('home-portfolio-status')),
-      const SizedBox(height: 3),
-      _heading('Recent activity', 'View all', widget.onActivity),
-      _row(s.activity == null ? 'No verified room activity'
-          : s.activity!.kind == 'ROOM_PLAN_SAVED'
-            ? 'Trading Room plan saved' : 'Paper wallet ledger event',
-        s.activity == null
-          ? 'No order activity inferred from plans'
-          : 'Persisted in your workspace',
-        Icons.history_rounded,
-        widget.onActivity,
-        key: const ValueKey('home-recent-activity')),
-      const SizedBox(height: 8),
-      Text('Planned room allocations are not actual balances. '
-        'Paper cash is virtual. Mode selection does not enable execution.',
+      const SizedBox(height: 5),
+      InkWell(onTap: widget.onMarkets, child: Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [
+        Icon(Icons.show_chart_rounded, color: Theme.of(context).colorScheme.primary, size: 17),
+        const SizedBox(width: 7), Expanded(child: Text('Market data · ${_recorded(s.mind.market, market: true)}', maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+        Text('Markets', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
+      ]))),
+      const SizedBox(height: 5),
+      Text('Virtual Paper values only. Mind candidates are research-only. Selecting Live does not enable order execution.',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: Theme.of(context).colorScheme.onSurfaceVariant,
           height: 1.3)),

@@ -86,25 +86,22 @@ void main() {
       addTearDown(mode.dispose);
       addTearDown(drafts.dispose);
       final repo = _SummaryRepo();
-      var openedRoom = 0;
       var openedMind = 0;
-      var openedBroker = 0;
       await tester.pumpWidget(MaterialApp(
         theme: buildTheme(Brightness.dark),
         home: MintTickHomeCommandCentre(
           loadProfile: () async => _profile,
           summaryRepository: repo, drafts: drafts, mode: mode,
-          onOpenRoom: (_) => openedRoom++,
+          onOpenRoom: (_) {},
           onCreateRoom: () {}, onRooms: () {},
           onMarkets: () {}, onMind: () => openedMind++,
           onPortfolio: () {}, onActivity: () {},
-          onBroker: () => openedBroker++,
+          onBroker: () {},
           onAccount: () {}, onNotifications: () {},
         ),
       ));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('home-next-action')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home-market-pulse')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-portfolio-performance')), findsOneWidget);
       expect(find.text('Long-term Compounding'), findsOneWidget);
       expect(find.textContaining('20,000 planned'), findsWidgets);
       // 320dp ListViews build offscreen rows lazily; scroll before checking.
@@ -115,22 +112,12 @@ void main() {
       // The disclaimer is intentionally below the fold. Verify by actually
       // scrolling the same compact viewport a customer uses.
       await tester.scrollUntilVisible(
-        find.textContaining('Mode selection does not enable execution'),
+        find.textContaining('Selecting Live does not enable order execution'),
         180, scrollable: find.byType(Scrollable).first);
-      expect(find.textContaining('Mode selection does not enable execution'),
+      expect(find.textContaining('Selecting Live does not enable order execution'),
           findsWidgets);
-      expect(find.textContaining('P&L'), findsNothing);
+      expect(find.text('Paper portfolio'), findsOneWidget);
       expect(tester.takeException(), isNull);
-
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('home-next-action')),
-        -200, scrollable: find.byType(Scrollable).first);
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('home-next-action')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('home-next-action')));
-      await tester.pumpAndSettle();
-      expect(openedRoom, 1);
 
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-mind-status')),
@@ -145,16 +132,10 @@ void main() {
       mode.select('LIVE');
       await tester.pumpAndSettle();
       expect(repo.requested, containsAllInOrder(['PAPER', 'LIVE']));
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('home-next-action')),
-        -200, scrollable: find.byType(Scrollable).first);
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('home-next-action')));
+      await tester.ensureVisible(find.text('Live'));
       await tester.pumpAndSettle();
-      expect(find.text('Connect your brokerage account'), findsOneWidget);
       expect(find.textContaining('20,000 planned'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('home-next-action')));
-      expect(openedBroker, 1);
+      expect(find.byKey(const ValueKey('home-portfolio-performance')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
