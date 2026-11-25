@@ -39,6 +39,8 @@ class BootstrapContractTest(unittest.TestCase):
                               "FNO_BULK_ERROR:PRIVATE_DB_ERROR\n"))
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.parse_smoke_failure(
             "FNO_BULK_SMOKE_FAILURE:UPSTOX_TOKEN_UNAVAILABLE\n"))
+        self.assertEqual("SMOKE_COUNTERS_INVALID",ops.parse_smoke_failure(
+            "FNO_BULK_SMOKE_FAILURE:SMOKE_COUNTERS_INVALID\n"))
         self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",ops.parse_smoke_failure(
             "FNO_BULK_SMOKE_FAILURE:/private/token\n"))
         self.assertEqual("SMOKE_NO_VALID_ROWS",ops.smoke_failure(
