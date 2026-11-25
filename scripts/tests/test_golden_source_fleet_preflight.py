@@ -90,7 +90,7 @@ class FleetPreflightTest(unittest.TestCase):
     def test_every_model_screen_strategy_and_data_source_is_covered(self):
         report = fleet.generate()
         self.assertEqual(len(report["models"]), 18)
-        self.assertEqual(report["screens_total"], 44
+        self.assertEqual(report["screens_total"], 44)
         self.assertEqual(report["strategy_families_total"], 20)
         self.assertEqual(report["strategy_templates_total"], 232)
         self.assertEqual(report["data_families_total"], 24)
