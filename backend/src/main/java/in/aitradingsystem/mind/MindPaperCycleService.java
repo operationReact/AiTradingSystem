@@ -241,7 +241,8 @@ public class MindPaperCycleService {
                 orbExitOnly = true;
                 d.stage("DATA_GATE", "EXIT_ONLY", evaluation.blockingReason());
                 d.reasons.add("ORB_ENTRY_DATA_BLOCKED");
-                signal = new CycleSignal("ORB_EXIT_ONLY_" + hash(instrumentId + "|" + interval + "|" + d.candleTime),
+                signal = new CycleSignal("ORB_EXIT_ONLY_" + hash(instrumentId + "|" + interval + "|" + d.candleTime)
+                    .substring(0, 32),
                     "HOLD", evaluation.latestClose(), null, null, d.candleTime, d.source, List.of());
             } else {
                 signal = evaluation.signal();
@@ -254,7 +255,8 @@ public class MindPaperCycleService {
                 return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
             }
             if (signal == null) {
-                signal = new CycleSignal("ORB_HOLD_" + hash(instrumentId + "|" + interval + "|" + d.candleTime),
+                signal = new CycleSignal("ORB_HOLD_" + hash(instrumentId + "|" + interval + "|" + d.candleTime)
+                    .substring(0, 32),
                     "HOLD", evaluation.latestClose(), null, null, d.candleTime, d.source, List.of());
                 d.reasons.add("NO_NEW_ORB_ENTRY_SIGNAL");
             }
