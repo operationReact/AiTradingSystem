@@ -25,13 +25,14 @@ class MindOrbOutOfSampleEvaluatorTest {
             boolean signal = trigger && i == 3;
             boolean entry = trigger && i == 4;
             boolean target = trigger && i == 5;
-            BigDecimal o = entry ? new BigDecimal("102") : new BigDecimal("100");
+            BigDecimal o = entry ? new BigDecimal("102")
+                    : target ? new BigDecimal("103") : new BigDecimal("100");
             BigDecimal h = i < 3 ? new BigDecimal("101")
                     : target ? new BigDecimal("108")
-                    : signal ? new BigDecimal("104") : new BigDecimal("100.5");
+                    : signal || entry ? new BigDecimal("104") : new BigDecimal("100.5");
             BigDecimal l = i < 3 ? new BigDecimal("99")
-                    : entry ? new BigDecimal("102") : new BigDecimal("99.5");
-            BigDecimal c = signal ? new BigDecimal("103")
+                    : entry || target ? new BigDecimal("102") : new BigDecimal("99.5");
+            BigDecimal c = signal || entry ? new BigDecimal("103")
                     : target ? new BigDecimal("106") : new BigDecimal("100");
             bars.add(new MarketCandle(i + 1L, 42L, "NSE", "INFY-EQ", "1234",
                     CATALOGUE, "FIVE_MINUTE", time, o, h, l, c,
