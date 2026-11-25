@@ -199,8 +199,8 @@ def parse_smoke_counters(raw):
     if not isinstance(raw,str) or len(raw)>8000:
         return None
     found=re.findall(
-        r"^FNO_BULK_SMOKE_COUNTERS:complete=(\\d{1,5});total=(\\d{1,5});"
-        r"rows=(\\d{1,5});calls=(\\d{1,3})$",raw,re.M)
+        r"^FNO_BULK_SMOKE_COUNTERS:complete=(\d{1,5});total=(\d{1,5});"
+        r"rows=(\d{1,5});calls=(\d{1,3})$",raw,re.M)
     if len(found)!=1:
         return None
     try:
