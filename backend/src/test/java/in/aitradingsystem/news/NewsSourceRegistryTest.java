@@ -6,13 +6,13 @@ import org.junit.jupiter.api.Test;
 
 class NewsSourceRegistryTest {
     @Test
-    void moneycontrolUsesPublisherMarketRssAndAllowsOnlyPublisherArticleHosts() {
+    void moneycontrolUsesEnglishPublisherMarketRssAndAllowsOnlyPublisherArticleHosts() {
         NewsSource moneycontrol = NewsSource.byId("moneycontrol");
 
         assertThat(moneycontrol.feedUri().toString())
-            .isEqualTo("https://hindi.moneycontrol.com/news/rss/feeds/markets.xml");
+            .isEqualTo("https://www.moneycontrol.com/rss/marketreports.xml");
         assertThat(NewsUrlValidator.isAllowedArticleUrl(
-            "https://hindi.moneycontrol.com/news/markets/sample.html", moneycontrol)).isTrue();
+            "https://www.moneycontrol.com/news/markets/sample.html", moneycontrol)).isTrue();
         assertThat(NewsUrlValidator.isAllowedArticleUrl(
             "https://attacker.example/news/markets/sample.html", moneycontrol)).isFalse();
     }
