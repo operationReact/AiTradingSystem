@@ -40,6 +40,8 @@ class GeminiNewsAnalysisProviderTest {
         Map<String, Object> schema = (Map<String, Object>) responseFormat.get("schema");
         assertThat(schema).containsEntry("additionalProperties", false);
         assertThat(schema.get("required")).isEqualTo(List.of(
+            "headlineEnglish",
+            "summaryEnglish",
             "sentiment",
             "directionScore",
             "category",
@@ -49,6 +51,8 @@ class GeminiNewsAnalysisProviderTest {
             "novelty",
             "contradiction",
             "ambiguity",
+            "eventType",
+            "financialMetrics",
             "impactedSymbols",
             "evidence",
             "risks"));

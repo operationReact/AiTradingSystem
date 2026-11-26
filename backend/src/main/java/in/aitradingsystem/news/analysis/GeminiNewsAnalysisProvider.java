@@ -116,6 +116,8 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
 
     private static Map<String, Object> responseSchema() {
         Map<String, Object> properties = Map.ofEntries(
+            Map.entry("headlineEnglish", Map.of("type", "string", "maxLength", 500)),
+            Map.entry("summaryEnglish", Map.of("type", "string", "maxLength", 2000)),
             Map.entry("sentiment", Map.of(
                 "type", "string",
                 "enum", List.of("POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"))),
@@ -141,6 +143,25 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
             Map.entry("novelty", Map.of("type", "number", "minimum", 0, "maximum", 1)),
             Map.entry("contradiction", Map.of("type", "boolean")),
             Map.entry("ambiguity", Map.of("type", "boolean")),
+            Map.entry("eventType", Map.of("type", "string", "enum", List.of(
+                "QUARTERLY_RESULTS", "ANNUAL_RESULTS", "RESULT_GUIDANCE", "DIVIDEND",
+                "SPLIT_BONUS_RIGHTS", "BUYBACK", "ORDER_WIN", "MERGER_ACQUISITION",
+                "OWNERSHIP_CHANGE", "MANAGEMENT_CHANGE", "REGULATORY", "MACRO", "SECTOR", "OTHER", "UNKNOWN"))),
+            Map.entry("financialMetrics", Map.of(
+                "type", "array", "maxItems", 12,
+                "items", Map.of("type", "object", "additionalProperties", false,
+                    "properties", Map.of(
+                        "name", Map.of("type", "string", "enum", List.of(
+                            "REVENUE", "REVENUE_GROWTH_YOY_PCT", "REVENUE_GROWTH_QOQ_PCT",
+                            "EBITDA", "EBITDA_MARGIN_PCT", "OPERATING_PROFIT", "PAT",
+                            "PAT_GROWTH_YOY_PCT", "PAT_GROWTH_QOQ_PCT", "EPS",
+                            "DIVIDEND_PER_SHARE", "ORDER_VALUE", "DEBT", "GUIDANCE_VALUE")),
+                        "value", Map.of("type", "number"),
+                        "unit", Map.of("type", "string", "enum", List.of(
+                            "INR_CRORE", "INR_LAKH", "INR_PER_SHARE", "PERCENT", "COUNT", "UNKNOWN")),
+                        "period", Map.of("type", "string", "maxLength", 40),
+                        "evidence", Map.of("type", "string", "maxLength", 240)),
+                    "required", List.of("name", "value", "unit", "period", "evidence")))),
             Map.entry("impactedSymbols", Map.of(
                 "type", "array",
                 "maxItems", 10,
@@ -155,6 +176,8 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
             "additionalProperties", false,
             "properties", properties,
             "required", List.of(
+                "headlineEnglish",
+                "summaryEnglish",
                 "sentiment",
                 "directionScore",
                 "category",
@@ -164,6 +187,8 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
                 "novelty",
                 "contradiction",
                 "ambiguity",
+                "eventType",
+                "financialMetrics",
                 "impactedSymbols",
                 "evidence",
                 "risks"));

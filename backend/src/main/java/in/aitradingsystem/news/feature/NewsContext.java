@@ -3,6 +3,7 @@ package in.aitradingsystem.news.feature;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import in.aitradingsystem.news.analysis.NewsAnalysisParser.FinancialMetric;
 
 /**
  * Advisory, as-of news context for one instrument. Research annotation only: it never changes
@@ -55,10 +56,25 @@ public record NewsContext(
         boolean included,
         /** Advisory event class from the analyzer category (NewsEventClassifier.EventClass name). */
         String eventClass,
+        /** Fine-grained event label from the immutable article analysis. */
+        String eventType,
+        /** Source-evidenced figures extracted from the article; never estimates. */
+        List<FinancialMetric> financialMetrics,
         /** FRESH, AGING or UNKNOWN relative to the item's validity window at asOf. */
         String freshness,
         /** End of this item's blackout window, or null when it opens none. */
-        Instant blackoutUntil) {}
+        Instant blackoutUntil) {
+        /** Backward-compatible constructor for existing fixtures and stored-context tooling. */
+        public Evidence(String articleId, String source, String title, String url, Instant publishedAt,
+                Instant analysisAvailableAt, Instant validUntil, String horizon, String sentiment,
+                BigDecimal directionScore, BigDecimal confidence, BigDecimal materiality, String provider,
+                String model, String evidenceSummary, String status, boolean included, String eventClass,
+                String freshness, Instant blackoutUntil) {
+            this(articleId, source, title, url, publishedAt, analysisAvailableAt, validUntil, horizon,
+                sentiment, directionScore, confidence, materiality, provider, model, evidenceSummary,
+                status, included, eventClass, "UNKNOWN", List.of(), freshness, blackoutUntil);
+        }
+    }
 
     public static final List<String> LIMITATIONS = List.of(
         "Advisory LLM classification of article text. Direction is evidence direction, not a trade recommendation.",

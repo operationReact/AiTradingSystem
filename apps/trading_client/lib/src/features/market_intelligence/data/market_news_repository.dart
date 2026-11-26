@@ -81,6 +81,8 @@ class MarketNewsImpact {
     this.horizon,
     this.contradiction,
     this.ambiguity,
+    this.eventType = 'UNKNOWN',
+    this.financialMetrics = const <MarketNewsFinancialMetric>[],
     this.analyzedAt,
     this.provider,
     this.model,
@@ -97,6 +99,8 @@ class MarketNewsImpact {
   final String? horizon;
   final bool? contradiction;
   final bool? ambiguity;
+  final String eventType;
+  final List<MarketNewsFinancialMetric> financialMetrics;
   final DateTime? analyzedAt;
   final String? provider;
   final String? model;
@@ -116,6 +120,11 @@ class MarketNewsImpact {
     final horizon = raw['horizon'];
     final contradiction = raw['contradiction'];
     final ambiguity = raw['ambiguity'];
+    final eventType = raw['eventType'] ?? 'UNKNOWN';
+    final metricsRaw = raw['financialMetrics'] ?? const <Object>[];
+    final metrics = metricsRaw is List
+        ? metricsRaw.map(MarketNewsFinancialMetric.fromJson).toList(growable: false)
+        : throw const FormatException('Invalid financial metrics');
     final analyzed = raw['analyzedAt'];
     final analyzedAt = analyzed == null ? null : DateTime.tryParse('$analyzed');
     if (sentiment is! String ||
@@ -127,6 +136,7 @@ class MarketNewsImpact {
         (horizon != null && !{'INTRADAY', 'MULTI_DAY', 'LONGER_TERM', 'UNKNOWN'}.contains(horizon)) ||
         (contradiction != null && contradiction is! bool) ||
         (ambiguity != null && ambiguity is! bool) ||
+        eventType is! String ||
         (analyzed != null && analyzedAt == null)) {
       throw const FormatException('Invalid stock impact analysis fields');
     }
@@ -142,6 +152,8 @@ class MarketNewsImpact {
       horizon: horizon as String?,
       contradiction: contradiction as bool?,
       ambiguity: ambiguity as bool?,
+      eventType: eventType,
+      financialMetrics: List.unmodifiable(metrics),
       analyzedAt: analyzedAt?.toUtc(),
       provider: raw['provider'] as String?,
       model: raw['model'] as String?,
@@ -154,6 +166,28 @@ class MarketNewsImpact {
       throw const FormatException('Impact score is out of range');
     }
     return value.toDouble();
+  }
+}
+
+class MarketNewsFinancialMetric {
+  const MarketNewsFinancialMetric({required this.name, required this.value,
+    required this.unit, required this.period, required this.evidence});
+  final String name;
+  final double value;
+  final String unit;
+  final String period;
+  final String evidence;
+
+  factory MarketNewsFinancialMetric.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['name'] is! String ||
+        raw['value'] is! num || !(raw['value'] as num).isFinite ||
+        raw['unit'] is! String || raw['period'] is! String || raw['evidence'] is! String ||
+        (raw['evidence'] as String).trim().isEmpty) {
+      throw const FormatException('Invalid source-evidenced financial metric');
+    }
+    return MarketNewsFinancialMetric(name: raw['name'] as String,
+      value: (raw['value'] as num).toDouble(), unit: raw['unit'] as String,
+      period: raw['period'] as String, evidence: raw['evidence'] as String);
   }
 }
 
@@ -219,9 +253,7 @@ class MarketNewsSource {
     final finished = raw['finishedAt'] == null ? null : DateTime.tryParse('${raw['finishedAt']}');
     final age = raw['ageSeconds'];
     if (age != null && age is! int || (raw['finishedAt'] != null && finished == null) ||
-        (age is int && age < 0)) {
-      throw const FormatException('Invalid news source health fields');
-    }
+        (age is int && age < 0)) throw const FormatException('Invalid news source health fields');
     return MarketNewsSource(sourceId: raw['sourceId'] as String,
       publisher: raw['publisher'] as String, status: raw['status'] as String,
       fetchedItems: raw['fetchedItems'] as int, insertedItems: raw['insertedItems'] as int,

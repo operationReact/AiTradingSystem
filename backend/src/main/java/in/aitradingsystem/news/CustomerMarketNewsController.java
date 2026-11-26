@@ -3,6 +3,7 @@ package in.aitradingsystem.news;
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.news.NewsService.ArticleView;
 import in.aitradingsystem.news.NewsService.AnalysisView;
+import in.aitradingsystem.news.analysis.NewsAnalysisParser.FinancialMetric;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -80,13 +81,15 @@ public class CustomerMarketNewsController {
     public record StockImpact(
         String provider, String model, String sentiment, BigDecimal directionScore, String category,
         BigDecimal confidence, BigDecimal materiality, String horizon, Boolean contradiction,
-        Boolean ambiguity, List<String> impactedSymbols, String evidence, List<String> risks,
+        Boolean ambiguity, String eventType, List<FinancialMetric> financialMetrics,
+        List<String> impactedSymbols, String evidence, List<String> risks,
         Instant analyzedAt) {
         static StockImpact from(AnalysisView analysis) {
             if (analysis == null || !"ANALYZED".equals(analysis.status())) return null;
             return new StockImpact(analysis.provider(), analysis.model(), analysis.sentiment(),
                 analysis.directionScore(), analysis.category(), analysis.confidence(), analysis.materiality(),
                 analysis.horizon(), analysis.contradiction(), analysis.ambiguity(),
+                analysis.eventType(), analysis.financialMetrics(),
                 analysis.impactedSymbols(), analysis.evidence(), analysis.risks(), analysis.analyzedAt());
         }
     }
@@ -97,9 +100,20 @@ public class CustomerMarketNewsController {
         static ArticleSummary from(ArticleView article) {
             AnalysisView analysis = article.analysis();
             String status = analysis == null ? "NOT_ANALYZED" : analysis.status();
-            return new ArticleSummary(article.id(), article.source(), article.title(),
-                article.url(), article.excerpt(), article.publishedAt(), article.ingestedAt(),
+            String translatedTitle = analysis == null ? null : analysis.headlineEnglish();
+            String translatedSummary = analysis == null ? null : analysis.summaryEnglish();
+            return new ArticleSummary(article.id(), article.source(),
+                englishProjection(translatedTitle, article.title()),
+                article.url(), englishProjection(translatedSummary, article.excerpt()), article.publishedAt(), article.ingestedAt(),
                 status, StockImpact.from(analysis));
+        }
+
+        private static String englishProjection(String preferred, String sourceText) {
+            if (preferred != null && !preferred.isBlank()) return preferred;
+            if (sourceText == null || sourceText.isBlank()) return "";
+            boolean hasNonLatinLetters = sourceText.codePoints().anyMatch(cp -> Character.isLetter(cp)
+                && Character.UnicodeScript.of(cp) != Character.UnicodeScript.LATIN);
+            return hasNonLatinLetters ? "English translation pending" : sourceText;
         }
     }
 }

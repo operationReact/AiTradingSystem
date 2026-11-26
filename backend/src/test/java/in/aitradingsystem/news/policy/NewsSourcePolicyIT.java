@@ -25,7 +25,9 @@ class NewsSourcePolicyIT extends AbstractPostgresIT {
 
     @Test
     void seededPublishersStartDefaultDenied() {
-        for (String seeded : new String[] {"nse-announcements", "moneycontrol", "economic-times", "sebi"}) {
+        for (String seeded : new String[] {"nse-announcements", "moneycontrol", "economic-times", "sebi",
+            "business-standard-markets", "business-standard-stock-market", "livemint-markets",
+            "livemint-companies", "rbi-press-releases", "rbi-notifications", "rbi-speeches"}) {
             NewsSourcePolicyTestSupport.resetToPending(jdbc, seeded);
             assertThat(policy.decide(seeded, Use.INGEST, Instant.now())).isEqualTo(Decision.DENY_REVIEW_PENDING);
             assertThat(policy.decide(seeded, Use.NLP_TRANSFER, Instant.now())).isEqualTo(Decision.DENY_REVIEW_PENDING);

@@ -159,44 +159,36 @@ extension _MindNewsScreens on _MindWorkspaceState {
   );
 
   Widget _newsSourceSummary() {
-    const names=['NSE','Moneycontrol','Economic Times','SEBI'];
-    String key(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-    MarketNewsSource? sourceFor(String name) {
-      final wanted = key(name);
-      for (final source in _newsSources) {
-        final candidate = key('${source.sourceId} ${source.publisher}');
-        if (candidate.contains(wanted) || wanted.contains(key(source.sourceId))) return source;
-      }
-      return null;
-    }
-    Widget sourceCard(String name) {
-      final source = sourceFor(name);
-      final ok = source?.status.toUpperCase() == 'SUCCESS';
-      return Expanded(child: Container(
-        margin: EdgeInsets.only(right: name == names.last ? 0 : 6),
+    final connected = _newsSources.where((source) => source.status.toUpperCase() == 'SUCCESS').length;
+    Widget sourceCard(MarketNewsSource source) {
+      final ok = source.status.toUpperCase() == 'SUCCESS';
+      return Container(
+        width: 104,
+        margin: const EdgeInsets.only(right: 6),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         decoration: BoxDecoration(color: MindPalette.panel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: MindPalette.border)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          Text(source.publisher, maxLines: 1, overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: MindPalette.muted, fontSize: 9,
               fontWeight: FontWeight.w600)),
-          Text(source == null ? '—' : '${source.fetchedItems}',
+          Text('${source.fetchedItems}',
             style: const TextStyle(color: MindPalette.text, fontSize: 16,
               fontWeight: FontWeight.w800)),
-          Text(source == null ? 'health n/a' : ok ? 'fetched' : source.status.toLowerCase(),
+          Text(ok ? 'fetched' : source.status.toLowerCase(),
             maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: source == null ? MindPalette.muted :
-              ok ? MindPalette.mint : MindPalette.yellow, fontSize: 8)),
+            style: TextStyle(color: ok ? MindPalette.mint : MindPalette.yellow, fontSize: 8)),
         ]),
-      ));
+      );
     }
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       Row(children:[const Expanded(child:Text('LATEST SOURCE CHECK',style:TextStyle(color:MindPalette.muted,fontSize:10,fontWeight:FontWeight.w700))),
-        Text(_newsSourceHealthError ?? (_newsSources.isEmpty?'Checking sources':'Backend health'),style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
+        Text(_newsSourceHealthError ?? (_newsSources.isEmpty?'Checking sources':'$connected/${_newsSources.length} feeds OK'),style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
       const SizedBox(height:5),
-      Row(children: [for (final name in names) sourceCard(name)]),
+      if (_newsSources.isNotEmpty) SizedBox(height: 55,
+        child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(children: [for (final source in _newsSources) sourceCard(source)]))),
     ]);
   }
 
@@ -417,6 +409,7 @@ extension _MindNewsScreens on _MindWorkspaceState {
           const MindSectionTitle(title: 'MintTick Mind analysis',
               icon: Icons.psychology_outlined),
           _newsDetailRow('Category', item.category),
+          _newsDetailRow('Event type', item.article?.stockImpact?.eventType ?? 'Unavailable'),
           _newsDetailRow('Analysis provider', item.article?.stockImpact?.provider ?? 'Unavailable'),
           if (item.article?.stockImpact?.model != null)
             _newsDetailRow('Model', item.article!.stockImpact!.model!),
@@ -431,6 +424,18 @@ extension _MindNewsScreens on _MindWorkspaceState {
           _newsDetailRow('Ambiguous / conflicting', item.article?.stockImpact == null
               ? 'Unavailable' : '${item.article!.stockImpact!.ambiguity == true ? 'Ambiguous' : 'No ambiguity flagged'} · ${item.article!.stockImpact!.contradiction == true ? 'Conflict flagged' : 'No conflict flagged'}'),
           _newsDetailRow('Symbols mentioned', '${item.symbols.length}'),
+          if (item.article?.stockImpact?.financialMetrics.isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            const Text('Reported figures · source evidence only', style: TextStyle(
+                color: MindPalette.muted, fontWeight: FontWeight.w700, fontSize: 11)),
+            for (final metric in item.article!.stockImpact!.financialMetrics) ...[
+              _newsDetailRow(metric.name.replaceAll('_', ' '),
+                  '${metric.value} ${metric.unit}${metric.period.isEmpty ? '' : ' · ${metric.period}'}'),
+              Padding(padding: const EdgeInsets.only(bottom: 5),
+                child: Text(metric.evidence, style: const TextStyle(
+                    color: MindPalette.muted, fontSize: 9, height: 1.3))),
+            ],
+          ],
           const SizedBox(height: 9),
           Text(item.article?.excerpt ?? item.summary,
               style: const TextStyle(color: MindPalette.text,

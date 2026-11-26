@@ -57,8 +57,10 @@ class CustomerMarketNewsControllerIT extends AbstractPostgresIT {
 
         JsonNode response = mapper.readTree(body);
         assertThat(response.isArray()).isTrue();
-        assertThat(response.size()).isEqualTo(4);
-        assertThat(body).contains("nse-announcements", "moneycontrol", "economic-times", "sebi", "NEVER_RUN");
+        assertThat(response.size()).isEqualTo(11);
+        assertThat(body).contains("nse-announcements", "moneycontrol", "economic-times", "sebi",
+            "business-standard-markets", "business-standard-stock-market", "livemint-markets",
+            "livemint-companies", "rbi-press-releases", "rbi-notifications", "rbi-speeches", "NEVER_RUN");
         assertThat(body).doesNotContain("errorDetail", "termsRef", "reviewerRef");
     }
 
