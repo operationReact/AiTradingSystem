@@ -28,11 +28,11 @@ class RssFeedParserTest {
     }
 
     @Test
-    void parsesMoneycontrolHindiMarketRssAndLinksWatchlistSymbols() {
+    void parsesEnglishMoneycontrolMarketRssAndLinksWatchlistSymbols() {
         String feed = """
-            <rss><channel><item><title>टाटा मोटर्स अपडेट</title>
-              <link>https://hindi.moneycontrol.com/news/markets/tata-motors-update.html</link>
-              <description>टाटा मोटर्स और TCS से जुड़ी खबर</description>
+            <rss><channel><item><title>Tata Motors announces quarterly results</title>
+              <link>https://www.moneycontrol.com/news/markets/tata-motors-results.html</link>
+              <description>Tata Motors update also mentions TCS.</description>
               <pubDate>Wed, 25 Nov 2026 10:00:00 GMT</pubDate>
             </item></channel></rss>
             """;
