@@ -169,7 +169,8 @@ class ArchiveMeanReversion {
                 "NSE_RETAINED_EOD", new BigDecimal(input.next()), new BigDecimal(input.next()),
                 new BigDecimal(input.next()), new BigDecimal(input.next()), true, observed,
                 new BigDecimal(input.next()).longValueExact(),
-                new BigDecimal(input.next()).longValueExact(), observed));
+                new BigDecimal(input.next()).longValueExact(), observed,
+                Long.valueOf(new BigDecimal(input.next()).longValueExact())));
         }
         if (rows.size() != 10 || input.hasNext()) throw new IllegalArgumentException("Session count");
         var contract = new FnoFuturesMeanReversionV1.Contract(instrument, "NSE_INDEX|Nifty 50",
@@ -406,9 +407,14 @@ def retained_str177_research():
         raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
     as_of = max(observations)
     lines = [f"{as_of.isoformat().replace('+00:00','Z')} {RESEARCH_EXPIRY} {lot}"]
-    for row, observed in zip(window, observations):
+    # Each session carries the exchange-reported per-session OI change
+    # (NSE ChngInOpnIntrst, identities[i][1]) so the evaluator can reconcile a
+    # genuine large OI move against the exchange's own value rather than
+    # rejecting it as a data outlier. The value is preserved exactly as parsed.
+    for row, observed, identity in zip(window, observations, identities):
         stamp = observed.isoformat().replace("+00:00","Z")
-        lines.append(" ".join(map(str, (row[0], stamp, *row[1:]))))
+        reported_oi_change = identity[1]
+        lines.append(" ".join(map(str, (row[0], stamp, *row[1:], reported_oi_change))))
     with tempfile.TemporaryDirectory(prefix="minttick-str177-") as temp:
         jar = Path(temp)/"archive-research.jar"
         jar.write_bytes(STR177_CLASSES)
