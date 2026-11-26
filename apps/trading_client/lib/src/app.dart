@@ -252,6 +252,7 @@ class _TradingAppState extends State<TradingApp> {
                 homeSummaryRepository: HttpCustomerHomeSummaryRepository(_api),
                 assistantRepository: HttpMindAssistantRepository(_api),
                 researchEngineRepository: HttpMindResearchEngineRepository(_api),
+                marketNewsRepository: HttpMarketNewsRepository(_api),
               )
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
