@@ -69,7 +69,8 @@ jobs:
 
           live = Path(".github/workflows/mind-live-verify.yml").read_text()
           assert "scripts/mind/walk_progress_inventory.py" in live, "walker not wired into live verify"
-          assert "313" in live, "expected inventory total not pinned in live verify"
+          assert 'walk_progress_inventory.py "https://api.minttick.com" "$RUNNER_TEMP/verify_walk_token"' in live, "walker invocation missing"
+          assert 'verify_walk_token" 313' not in live, "live verify must not pin the inventory total"
           assert "rm -f \"$RUNNER_TEMP/verify_walk_token\"" in live, "walker token file not removed"
 
           import re

@@ -140,7 +140,7 @@ jobs:
           # summary percentages recomputed from the walked items. Prints counts and bytes only.
           umask 077
           printf '%s' "$token" > "$RUNNER_TEMP/verify_walk_token"
-          if python3 scripts/mind/walk_progress_inventory.py "https://api.minttick.com" "$RUNNER_TEMP/verify_walk_token" 313; then
+          if python3 scripts/mind/walk_progress_inventory.py "https://api.minttick.com" "$RUNNER_TEMP/verify_walk_token"; then
             echo "PASS authenticated full progress inventory walk"
           else
             echo "FAIL authenticated full progress inventory walk"; fail=1
