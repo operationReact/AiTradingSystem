@@ -17,6 +17,7 @@ Map<String, dynamic> fixtureArticle({String url = 'https://news.example.test/art
   'ingestedAt': '2026-11-24T04:05:00Z',
   'analysisStatus': 'ANALYZED',
   'stockImpact': {
+    'provider': 'GEMINI', 'model': 'gemini-test',
     'sentiment': 'NEGATIVE', 'directionScore': -0.35, 'category': 'EARNINGS',
     'confidence': 0.8, 'materiality': 0.6, 'horizon': 'MULTI_DAY',
     'contradiction': false, 'ambiguity': true,
@@ -53,8 +54,31 @@ void main() {
     expect(page.items.single.excerpt, contains('Synthetic excerpt'));
     expect(page.items.single.analysisStatus, 'ANALYZED');
     expect(page.items.single.stockImpact?.sentiment, 'NEGATIVE');
+    expect(page.items.single.stockImpact?.provider, 'GEMINI');
+    expect(page.items.single.stockImpact?.model, 'gemini-test');
     expect(page.items.single.stockImpact?.impactedSymbols, ['TCS']);
     expect(page.items.single.stockImpact?.directionScore, -0.35);
+    client.close();
+  });
+
+  test('reads source health separately from article counts', () async {
+    final session = OperatorSession()..setOperatorKey('test-operator-key');
+    late http.Request request;
+    final client = MockClient((captured) async {
+      request = captured;
+      return http.Response(jsonEncode([{
+        'sourceId': 'moneycontrol', 'publisher': 'Moneycontrol', 'status': 'SUCCESS',
+        'startedAt': '2026-11-26T04:00:00Z', 'finishedAt': '2026-11-26T04:00:05Z',
+        'ageSeconds': 60, 'fetchedItems': 30, 'insertedItems': 4, 'errorCode': null,
+      }]), 200, headers: {'content-type': 'application/json'});
+    });
+    final api = AuthenticatedApiClient(session: session, client: client,
+      baseUri: Uri.parse('http://example.test'));
+    final sources = await HttpMarketNewsRepository(api).sources();
+    expect(request.url.path, '/api/customer/market-intelligence/sources');
+    expect(sources.single.fetchedItems, 30);
+    expect(sources.single.insertedItems, 4);
+    expect(sources.single.status, 'SUCCESS');
     client.close();
   });
 
