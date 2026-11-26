@@ -69,7 +69,7 @@ jobs:
 
           live = Path(".github/workflows/mind-live-verify.yml").read_text()
           assert "scripts/mind/walk_progress_inventory.py" in live, "walker not wired into live verify"
-          assert "313" in live, "expected inventory total not pinned in live verify"
+          assert not re.search(r"walk_progress_inventory\.py[^\n]*verify_walk_token[^\n]*\\s313\\b", live), "live verify must not pin the inventory total"
           assert "rm -f \"$RUNNER_TEMP/verify_walk_token\"" in live, "walker token file not removed"
 
           import re
