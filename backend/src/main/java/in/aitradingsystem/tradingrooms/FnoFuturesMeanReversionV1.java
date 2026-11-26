@@ -24,6 +24,23 @@ import java.util.Objects;
  * <p>Standard deviation is calculated only from the first eight sessions.
  * Nothing is estimated from future observations. The calculation is not a
  * profit forecast, order request, or evidence of market-data rights.
+ *
+ * <p><b>Open-interest change integrity rule.</b> A large single-session change
+ * in open interest is normally a sign of corrupt or misattributed data (for
+ * example a stale row, a decimal error, or a value read from the wrong
+ * contract), so the {@code maxOiChangePerStepBps} guard rejects it. But a real
+ * NIFTY future legitimately sees very large OI changes around rollover and in
+ * the expiry week. The exchange publishes, independently of the day-end OI
+ * level, a per-session change field (NSE UDiFF {@code ChngInOpnIntrst}). When a
+ * session carries that exchange-reported change and it reconciles <em>exactly</em>
+ * with the day-over-day delta of the retained OI series, the move is confirmed
+ * to be authentic exchange data: the guard is satisfied and the original
+ * exchange value is preserved and used unchanged. When the exchange-reported
+ * change is present but contradicts the computed delta, the OI series is
+ * internally inconsistent and the row is rejected as corrupt. When no exchange
+ * change field is available (for example the broker-analytics source), the
+ * magnitude guard applies as before. Thresholds are never loosened to admit a
+ * change; only an independently exchange-reconciled change is admitted.
  */
 public final class FnoFuturesMeanReversionV1 {
     public static final String STRATEGY_ID = "strategy.STR-177";
@@ -47,13 +64,40 @@ public final class FnoFuturesMeanReversionV1 {
     public record Contract(String instrumentKey, String underlyingKey, LocalDate listedFrom,
                            LocalDate expiry, int lotSize, boolean providerVerified) {}
 
-    /** Both finalized close/volume and OI have original as-of publication timestamps. */
+    /**
+     * Both finalized close/volume and OI have original as-of publication timestamps.
+     *
+     * <p>{@code exchangeReportedOiChangeUnits} is the signed per-session change in
+     * open interest as published independently by the exchange (NSE UDiFF
+     * {@code ChngInOpnIntrst}), in the same units as {@code openInterestUnits}, or
+     * {@code null} when the source does not publish an independent change field.
+     * It is retained exactly as received to cross-validate the OI series; it is
+     * never used as a price, a forecast, or an order input.
+     */
     public record CompletedSession(LocalDate sessionDate, boolean sessionVerified,
                                    String instrumentKey, String provider,
                                    BigDecimal open, BigDecimal high, BigDecimal low,
                                    BigDecimal close, boolean ohlcvVerified,
                                    Instant ohlcvFirstObservedAt, long volumeUnits,
-                                   long openInterestUnits, Instant oiFirstObservedAt) {}
+                                   long openInterestUnits, Instant oiFirstObservedAt,
+                                   Long exchangeReportedOiChangeUnits) {
+        /**
+         * Backward-compatible session without an independent exchange-reported OI
+         * change (for example the broker-analytics source, or callers that predate
+         * the reconciliation rule). Behaves exactly as before: the OI magnitude
+         * guard applies with no exchange reconciliation available.
+         */
+        public CompletedSession(LocalDate sessionDate, boolean sessionVerified,
+                                String instrumentKey, String provider,
+                                BigDecimal open, BigDecimal high, BigDecimal low,
+                                BigDecimal close, boolean ohlcvVerified,
+                                Instant ohlcvFirstObservedAt, long volumeUnits,
+                                long openInterestUnits, Instant oiFirstObservedAt) {
+            this(sessionDate, sessionVerified, instrumentKey, provider, open, high, low,
+                close, ohlcvVerified, ohlcvFirstObservedAt, volumeUnits,
+                openInterestUnits, oiFirstObservedAt, null);
+        }
+    }
 
     /** Internal research rights are independent of display and F&O order permissions. */
     public record SourceRights(boolean ohlcvResearchVerified, boolean oiResearchVerified,
@@ -135,14 +179,34 @@ public final class FnoFuturesMeanReversionV1 {
             if (previous != null) {
                 BigDecimal closeChange = bps(
                     b.close().subtract(previous.close(), MC), previous.close()).abs();
-                BigDecimal oiChange = bps(
-                    BigDecimal.valueOf(b.openInterestUnits())
-                        .subtract(BigDecimal.valueOf(previous.openInterestUnits())).abs(),
-                    BigDecimal.valueOf(previous.openInterestUnits()));
                 if (closeChange.compareTo(
-                        BigDecimal.valueOf(thresholds.maxSingleSessionCloseMoveBps())) > 0
-                        || oiChange.compareTo(
-                        BigDecimal.valueOf(thresholds.maxOiChangePerStepBps())) > 0) {
+                        BigDecimal.valueOf(thresholds.maxSingleSessionCloseMoveBps())) > 0) {
+                    return blocked(Status.BLOCKED_DATA, "FUT_MR_DAILY_CHANGE_OUTLIER", asOf);
+                }
+                // Both OI levels are validated to lie in [1, MAX_UNITS], so the
+                // signed day-over-day delta always fits in a long without overflow.
+                long computedOiDelta = b.openInterestUnits() - previous.openInterestUnits();
+                Long reportedOiChange = b.exchangeReportedOiChangeUnits();
+                boolean oiReconciledWithExchange =
+                    reportedOiChange != null && reportedOiChange.longValue() == computedOiDelta;
+                if (reportedOiChange != null && !oiReconciledWithExchange) {
+                    // The exchange independently published a per-session OI change
+                    // (NSE ChngInOpnIntrst) that disagrees with the computed delta of
+                    // the retained OI series: the two fields are internally
+                    // inconsistent, so the row is rejected rather than silently used.
+                    return blocked(Status.BLOCKED_DATA,
+                        "FUT_MR_OI_CHANGE_CONTRADICTS_EXCHANGE", asOf);
+                }
+                BigDecimal oiChange = bps(
+                    BigDecimal.valueOf(Math.abs(computedOiDelta)),
+                    BigDecimal.valueOf(previous.openInterestUnits()));
+                if (oiChange.compareTo(
+                        BigDecimal.valueOf(thresholds.maxOiChangePerStepBps())) > 0
+                        && !oiReconciledWithExchange) {
+                    // Large OI move with no reconciling exchange-reported change:
+                    // treat as a data-integrity outlier. A change that the exchange
+                    // itself reported (rollover / expiry-week build) is authentic and
+                    // is preserved and used unchanged.
                     return blocked(Status.BLOCKED_DATA, "FUT_MR_DAILY_CHANGE_OUTLIER", asOf);
                 }
             }

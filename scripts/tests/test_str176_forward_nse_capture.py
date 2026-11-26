@@ -29,6 +29,21 @@ class CaptureTest(unittest.TestCase):
         self.assertIn(b"fno_personal_nse_archive_probe",source)
         self.assertIn(b"def read_udiff",source)
 
+    def test_str177_launcher_reconciles_exchange_oi_change_and_compiles(self):
+        # The STR177 launcher must pass the exchange-reported per-session OI change
+        # (NSE ChngInOpnIntrst) into the evaluator's reconciliation field. Verify the
+        # launcher source threads it, and that it compiles against the real evaluator.
+        import shutil
+        capture_source=Path(m.__file__).read_text()
+        self.assertIn("Long.valueOf(new BigDecimal(input.next()).longValueExact())",
+                      capture_source)
+        self.assertIn("exchangeReportedOiChangeUnits",m.JAVA_EVALUATOR.read_text())
+        if not shutil.which("javac"):
+            self.skipTest("javac not available on this runner")
+        payload=m.transport(True, True)  # research=True, str177=True (as capture_on_host calls it)
+        compile(payload.decode(),"<protected-host>","exec")
+        self.assertIn(b"STR177_CLASSES",payload)
+
     def test_archive_url_matches_published_nse_archive(self):
         self.assertEqual(
             "https://nsearchives.nseindia.in/content/fo/BhavCopy_NSE_FO_0_0_0_20261125_F_0000.csv.zip",

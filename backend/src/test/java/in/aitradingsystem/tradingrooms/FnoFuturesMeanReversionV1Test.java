@@ -344,6 +344,116 @@ class FnoFuturesMeanReversionV1Test {
             evaluate(listedLate,lowRebound(),RIGHTS,THRESHOLDS,AS_OF).reasonCode());
     }
 
+    // ---- Open-interest change integrity: distinguish a genuine exchange-reported
+    // ---- change (NSE ChngInOpnIntrst) from corrupt data. ----
+
+    /** Archive-style NSE session carrying the exchange-reported per-session OI change. */
+    private static CompletedSession archiveBar(int i, String price, long volume, long oi,
+                                               Long reportedOiChange) {
+        LocalDate day = DATES[i];
+        BigDecimal p = n(price);
+        return new CompletedSession(day, true, CONTRACT.instrumentKey(), "NSE_RETAINED_EOD",
+            p, p.add(n("0.4")), p.subtract(n("0.4")), p, true,
+            AS_OF, volume, oi, AS_OF, reportedOiChange);
+    }
+    // Baseline/extreme/latest closes reproducing a clean low-extreme rebound,
+    // with a large open-interest jump across the 18->19 Nov step (indices 7->8).
+    private static final String[] ARCHIVE_CLOSES =
+        {"100","101","99","100","100.5","99.5","101","99","95","96.5"};
+    private static final long[] ARCHIVE_VOL =
+        {30000,30000,30000,30000,30000,30000,30000,30000,45000,50000};
+    // OI flat at 100000, then jumps to 160000 from the 19 Nov session onward
+    // (+60000 == +6000bps, above the 5000bps guard) and holds.
+    private static final long[] ARCHIVE_OI =
+        {100000,100000,100000,100000,100000,100000,100000,100000,160000,160000};
+    private static List<CompletedSession> archiveWindow(java.util.function.IntUnaryOperator reportedAt) {
+        var bars = new ArrayList<CompletedSession>();
+        for (int i = 0; i < 10; i++) {
+            Long reported = i == 0 ? null : Long.valueOf(reportedAt.applyAsInt(i));
+            bars.add(archiveBar(i, ARCHIVE_CLOSES[i], ARCHIVE_VOL[i], ARCHIVE_OI[i], reported));
+        }
+        return bars;
+    }
+    private static int trueOiDelta(int i) {
+        return (int) (ARCHIVE_OI[i] - ARCHIVE_OI[i - 1]);
+    }
+
+    @Test
+    void exchangeReconciledLargeOiChangeIsNotADataOutlier() {
+        // The +60000 OI jump across 18->19 Nov reconciles exactly with the
+        // exchange-reported ChngInOpnIntrst, so it is authentic data: the guard is
+        // satisfied and the unchanged mean-reversion logic proceeds to a verdict.
+        Decision d = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, archiveWindow(FnoFuturesMeanReversionV1Test::trueOiDelta), THRESHOLDS, AS_OF);
+        assertEquals(Status.RESEARCH_CANDIDATE, d.status());
+        assertEquals(Pattern.LOW_EXTREME_REBOUND, d.pattern());
+        assertEquals("FUT_MR_LOW_EXTREME_REBOUND_OBSERVED", d.reasonCode());
+        assertFalse(d.executable());
+    }
+
+    @Test
+    void exchangeReportedChangeThatContradictsSeriesFailsClosed() {
+        // Exchange reports no change (0) while the retained OI series jumped 60000:
+        // the two fields are internally inconsistent, so the row is corrupt.
+        Decision d = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, archiveWindow(i -> i == 8 ? 0 : trueOiDelta(i)), THRESHOLDS, AS_OF);
+        assertEquals(Status.BLOCKED_DATA, d.status());
+        assertEquals("FUT_MR_OI_CHANGE_CONTRADICTS_EXCHANGE", d.reasonCode());
+    }
+
+    @Test
+    void largeOiChangeWithoutAnyExchangeReconciliationStillBlocks() {
+        // No independent exchange change field (null, e.g. broker-analytics source):
+        // the magnitude guard applies exactly as before.
+        Decision d = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, archiveWindow(i -> 0 /*unused*/).stream()
+                .map(b -> new CompletedSession(b.sessionDate(), true, b.instrumentKey(),
+                    b.provider(), b.open(), b.high(), b.low(), b.close(), true,
+                    b.ohlcvFirstObservedAt(), b.volumeUnits(), b.openInterestUnits(),
+                    b.oiFirstObservedAt())) // 13-arg ctor => null reported change
+                .toList(),
+            THRESHOLDS, AS_OF);
+        assertEquals(Status.BLOCKED_DATA, d.status());
+        assertEquals("FUT_MR_DAILY_CHANGE_OUTLIER", d.reasonCode());
+    }
+
+    @Test
+    void reconciliationIsEnforcedEvenForSmallOiChanges() {
+        // A below-threshold OI change still must agree with the exchange-reported
+        // value when that value is present; a mismatch is a data defect.
+        // Flat OI everywhere (delta 0) but claim the exchange reported +5 on day 1.
+        var flat = new ArrayList<CompletedSession>();
+        for (int i = 0; i < 10; i++) {
+            Long reported = i == 1 ? Long.valueOf(5) : (i == 0 ? null : Long.valueOf(0));
+            flat.add(archiveBar(i, ARCHIVE_CLOSES[i], ARCHIVE_VOL[i], 100000L, reported));
+        }
+        Decision d = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, flat, THRESHOLDS, AS_OF);
+        assertEquals(Status.BLOCKED_DATA, d.status());
+        assertEquals("FUT_MR_OI_CHANGE_CONTRADICTS_EXCHANGE", d.reasonCode());
+    }
+
+    @Test
+    void backwardCompatibleConstructorLeavesExchangeChangeUnset() {
+        CompletedSession legacy = bar(0, "100", 30000, 100000);
+        assertNull(legacy.exchangeReportedOiChangeUnits());
+        CompletedSession full = archiveBar(0, "100", 30000, 100000, Long.valueOf(-42));
+        assertEquals(Long.valueOf(-42), full.exchangeReportedOiChangeUnits());
+    }
+
+    @Test
+    void reconciledExchangeChangeDoesNotBypassPriceOrRangeIntegrity() {
+        // Even with a reconciled OI change, an impossible intraday close jump is
+        // still rejected: the OI rule never relaxes price-data integrity.
+        var window = new ArrayList<>(archiveWindow(FnoFuturesMeanReversionV1Test::trueOiDelta));
+        var jumped = archiveBar(9, "140", 50000, 160000, Long.valueOf(0));
+        window.set(9, jumped);
+        Decision d = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, window, THRESHOLDS, AS_OF);
+        assertEquals(Status.BLOCKED_DATA, d.status());
+        assertEquals("FUT_MR_DAILY_CHANGE_OUTLIER", d.reasonCode());
+    }
+
     @Test
     void explicitThresholdValidationAndDeterministicEvaluation() {
         assertEquals(Status.BLOCKED_DATA,
