@@ -42,6 +42,7 @@ FIXED_REQUEST={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTA
 BACKFILL_DAYS=tuple(date(2026,11,day) for day in (17,18,19,20))
 BACKFILL_START=datetime(2026,11,26,18,30,tzinfo=IST)
 BACKFILL_END=BACKFILL_START+timedelta(hours=36)
+STR177_BACKFILL_DAYS=tuple(date(2026,11,day) for day in (12,13,16))
 RESEARCH_DAY=date(2026,11,27)
 RESEARCH_EXPIRY=date(2026,12,29)
 RESEARCH_DAYS=BACKFILL_DAYS+tuple(date(2026,11,day) for day in (23,25,26))
@@ -117,9 +118,12 @@ def load_request(path,now):
         return "research"
     if type(data) is dict and "session_dates" in data:
         requested=data.pop("session_dates")
-        if requested!=[day.isoformat() for day in BACKFILL_DAYS] or not BACKFILL_START<=now<=BACKFILL_END:
+        if not BACKFILL_START<=now<=BACKFILL_END:
             raise Blocked("OWNER_REQUEST_REQUIRED")
-        return tuple(request_date({**data,"session_date":day.isoformat()},now) for day in BACKFILL_DAYS)
+        for allowed_days in (BACKFILL_DAYS,STR177_BACKFILL_DAYS):
+            if requested==[day.isoformat() for day in allowed_days]:
+                return tuple(request_date({**data,"session_date":day.isoformat()},now) for day in allowed_days)
+        raise Blocked("OWNER_REQUEST_REQUIRED")
     return request_date(data,now)
 
 def transport(research=False):
@@ -166,7 +170,7 @@ def require_scope(day,now):
     # The owner request selects a session date; this window prevents stale
     # archive retrieval. A missing file is a safe failure, never a holiday proof.
     cutoff=datetime.combine(day,dt_time(18,30),tzinfo=IST)
-    if day in BACKFILL_DAYS and BACKFILL_START<=now<=BACKFILL_END:
+    if day in BACKFILL_DAYS+STR177_BACKFILL_DAYS and BACKFILL_START<=now<=BACKFILL_END:
         return
     if not cutoff<=now.astimezone(IST)<=cutoff+timedelta(hours=36):
         raise Blocked("SOURCE_OBSERVATION_WINDOW_EXPIRED")
