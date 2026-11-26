@@ -39,9 +39,9 @@ class MindProgressInventoryTest {
         var summary = service.summary(null, Map.of(), NOW);
 
         assertThat(bytes(summary)).isLessThan(16_000);
-        assertThat(summary.overall().total()).isEqualTo(313);
-        assertThat(summary.overall().done() + summary.overall().pending()).isEqualTo(313);
-        double expected = Math.round(summary.overall().done() * 1000.0 / 313) / 10.0;
+        assertThat(summary.overall().total()).isEqualTo(314);
+        assertThat(summary.overall().done() + summary.overall().pending()).isEqualTo(314);
+        double expected = Math.round(summary.overall().done() * 1000.0 / 314) / 10.0;
         assertThat(summary.overall().percentDone()).isEqualTo(expected);
         assertThat(summary.summaries()).hasSize(summary.kinds().size());
     }
@@ -63,7 +63,7 @@ class MindProgressInventoryTest {
         } while (next != null);
 
         assertThat(paged).containsExactlyElementsOf(manifestOrder);
-        assertThat(Set.copyOf(paged)).hasSize(313);
+        assertThat(Set.copyOf(paged)).hasSize(314);
     }
 
     @Test
@@ -83,8 +83,8 @@ class MindProgressInventoryTest {
         var summary = service.summary(null, Map.of(), NOW);
         InventoryPage onePage = service.inventoryPage(null, Map.of(), NOW, null, null, 0, 1);
         assertThat(onePage.items()).hasSize(1);
-        assertThat(onePage.total()).isEqualTo(313);
-        assertThat(summary.overall().total()).isEqualTo(313);
+        assertThat(onePage.total()).isEqualTo(314);
+        assertThat(summary.overall().total()).isEqualTo(314);
     }
 
     @Test
