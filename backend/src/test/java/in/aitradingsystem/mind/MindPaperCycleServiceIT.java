@@ -392,7 +392,7 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     @Test
     void rsiReversalCandidateUsesTheGuardedPaperEngine() {
         long instrumentId = instrument("SBIN-EQ", "3045");
-        seedRsiRecoveryCandles(instrumentId, "SBIN-EQ", "3045");
+        seedRsiRecoveryCandles(instrumentId, "SBIN-EQ", "3045", HistoricalCandleInterval.THREE_MINUTE.name());
         recordTick(instrumentId, "105.00", NOW.minusSeconds(2));
         UUID owner = customer();
         UUID room = fundedRoom(owner);
@@ -526,7 +526,7 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
             new in.aitradingsystem.scanner.RsiReversalStrategy());
     }
 
-    private void seedRsiRecoveryCandles(long instrumentId, String symbol, String token) {
+    private void seedRsiRecoveryCandles(long instrumentId, String symbol, String token, String interval) {
         var active = instruments.requireActiveInstrument(instrumentId);
         Instant fetchedAt = NOW.minusSeconds(30);
         for (int index = 0; index < 16; index++) {
@@ -537,11 +537,12 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
                     INSERT INTO market_candle
                       (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
                        open_price,high_price,low_price,close_price,volume,source,fetched_at)
-                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,:interval,:at,
                        :open,:high,:low,:close,1000,:source,:fetched)
                     """)
                 .param("id", instrumentId).param("symbol", symbol).param("token", token)
-                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("catalogue", active.catalogueVersion()).param("interval", interval)
+                .param("at", java.sql.Timestamp.from(candleTime))
                 .param("open", close).param("high", close.add(new BigDecimal("0.50")))
                 .param("low", close.subtract(new BigDecimal("0.50"))).param("close", close)
                 .param("source", SOURCE).param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
