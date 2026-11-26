@@ -60,6 +60,43 @@ def http_get(path: str, key: str | None = None) -> tuple[int, object | None]:
 def safe_status(state: object) -> str:
     return state if isinstance(state, str) and state in ALLOWED_STATE else "UNAVAILABLE"
 
+def research_receipt(code: int, rows: object) -> str:
+    """Return bounded research diagnostics without leaking response bodies."""
+    if code in (401, 403):
+        return "AUTH_DENIED"
+    if code == 404:
+        return "ROUTE_NOT_DEPLOYED"
+    if code == 0:
+        return "TRANSPORT_UNAVAILABLE"
+    if 500 <= code <= 599:
+        return "HTTP_5XX"
+    if code != 200:
+        return "HTTP_4XX"
+    if not isinstance(rows, list) or len(rows) != 3:
+        return "INVALID_ROWS"
+    expected = {"strategy.STR-170", "strategy.STR-171", "strategy.STR-172"}
+    found = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            return "INVALID_ROWS"
+        strategy_id = row.get("strategyId")
+        status = row.get("status")
+        reason = row.get("reasonCode")
+        if (strategy_id not in expected or strategy_id in found
+                or not isinstance(status, str)
+                or not re.fullmatch(r"[A-Z_]{4,40}", status)
+                or not isinstance(reason, str)
+                or not re.fullmatch(r"[A-Z0-9_]{4,60}", reason)
+                or any(type(row.get(k)) is not int or not 0 <= row[k] <= 1000
+                       for k in ("contractsResolved", "freshQuotes", "historySessions"))):
+            return "INVALID_ROWS"
+        found[strategy_id] = "%s=%s:%s:c%d:q%d:h%d" % (
+            strategy_id.split(".")[1], status, reason,
+            row["contractsResolved"], row["freshQuotes"], row["historySessions"])
+    if set(found) != expected:
+        return "INVALID_ROWS"
+    return ";".join(found[key] for key in sorted(found))
+
 def host() -> None:
     if os.geteuid() != 0 or os.uname().machine != "aarch64":
         raise SystemExit("FNO_HOST_IDENTITY_INVALID")
@@ -132,19 +169,7 @@ def host() -> None:
     print("FNO_API_FRESH_TICKS: " + str(ticks), flush=True)
     print("FNO_API_DECODED_FRAMES: " + str(frames), flush=True)
     research_code, research = http_get("/api/admin/research/fno-futures/status", key)
-    rows = research if research_code == 200 and isinstance(research, list) else []
-    summary = []
-    for row in rows:
-        if isinstance(row, dict) and re.fullmatch(r"strategy\.STR-17[0-9]", str(row.get("strategyId", ""))) \
-                and re.fullmatch(r"[A-Z_]{4,40}", str(row.get("status", ""))) \
-                and re.fullmatch(r"[A-Z0-9_]{4,60}", str(row.get("reasonCode", ""))) \
-                and all(type(row.get(k)) is int and 0 <= row.get(k) <= 1000
-                        for k in ("contractsResolved", "freshQuotes", "historySessions")):
-            summary.append("%s=%s:%s:c%d:q%d:h%d" % (
-                row["strategyId"].split(".")[1], row["status"], row["reasonCode"],
-                row["contractsResolved"], row["freshQuotes"], row["historySessions"]))
-    print("FNO_API_RESEARCH: " + (";".join(summary) if len(rows) == 3 and len(summary) == 3
-                                   else "UNAVAILABLE"), flush=True)
+    print("FNO_API_RESEARCH: " + research_receipt(research_code, research), flush=True)
     # Deliberately do not print any exchange instrument, option price or raw response.
 
 def runner() -> None:
@@ -189,7 +214,7 @@ def runner() -> None:
         "FNO_API_DECODED_FRAMES": r"[0-9]{1,10}",
         "FNO_API_FLAG_LIVE_ORDER": r"(?:ENABLED|NOT_ENABLED)",
         "FNO_API_FLAG_DISCOVERY": r"(?:ENABLED|NOT_ENABLED)",
-        "FNO_API_RESEARCH": r"(?:UNAVAILABLE|[A-Za-z0-9_=:;.-]{1,900})",
+        "FNO_API_RESEARCH": r"(?:AUTH_DENIED|ROUTE_NOT_DEPLOYED|TRANSPORT_UNAVAILABLE|HTTP_5XX|HTTP_4XX|INVALID_ROWS|[A-Za-z0-9_=:;.-]{1,900})",
     }
     for _ in range(35):
         time.sleep(4)
