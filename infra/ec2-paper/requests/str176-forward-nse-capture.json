@@ -1,12 +1,16 @@
 {
-    "kind": "minttick-str176-owner-forward-nse-original-v1",
-    "account": "098859530205",
-    "region": "ap-south-1",
-    "instance_id": "i-09c01b470fb39b85a",
-    "max_archive_gets": 1,
-    "owner_confirmed_private_research_retention": true,
-    "no_market_export": true,
-    "no_orders": true,
-    "no_rights_change": true,
-    "research_decision_date": "2026-11-27"
+  "kind": "minttick-str176-owner-forward-nse-original-v1",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "max_archive_gets": 1,
+  "owner_confirmed_private_research_retention": true,
+  "no_market_export": true,
+  "no_orders": true,
+  "no_rights_change": true,
+  "session_dates": [
+    "2026-11-12",
+    "2026-11-13",
+    "2026-11-16"
+  ]
 }
