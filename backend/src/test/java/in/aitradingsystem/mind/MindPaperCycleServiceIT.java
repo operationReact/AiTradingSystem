@@ -397,7 +397,7 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         UUID owner = customer();
         UUID room = fundedRoom(owner);
         var entry = service(progress(), SOURCE).run(owner, room, "rsi_reversal_entry01", instrumentId,
-            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
+            HistoricalCandleInterval.THREE_MINUTE, MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
         assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
         assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
         assertThat(entry.cycle().reasons()).contains("RSI_RECOVERED_ABOVE_30", "PRICE_RECOVERY_CONFIRMED");
@@ -529,10 +529,10 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     private void seedRsiRecoveryCandles(long instrumentId, String symbol, String token) {
         var active = instruments.requireActiveInstrument(instrumentId);
         Instant fetchedAt = NOW.minusSeconds(30);
-        for (int index = 0; index < 21; index++) {
-            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 9).plusMinutes(index)
+        for (int index = 0; index < 16; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(9, 42).plusMinutes(index * 3L)
                 .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
-            BigDecimal close = BigDecimal.valueOf(index <= 5 ? 100 : index < 20 ? 105 - index : 105);
+            BigDecimal close = BigDecimal.valueOf(index < 2 ? 100 : index < 15 ? 102 - index : 98);
             jdbc.sql("""
                     INSERT INTO market_candle
                       (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
