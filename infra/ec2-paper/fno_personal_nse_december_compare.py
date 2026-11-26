@@ -81,6 +81,8 @@ def parse_udiff(blob,day,include_identity=False):
         if date.fromisoformat(row["XpryDt"])!=EXPIRY:
             continue
         kind="FUT" if row["FinInstrmTp"]=="IDF" else row["OptnTp"].strip()
+        if include_identity and kind!="FUT":
+            continue
         if kind not in ("FUT","CE","PE"):
             raise ValueError("NSE_UNSUPPORTED_KIND")
         strike=Decimal(0) if kind=="FUT" else dec(row["StrkPric"])
