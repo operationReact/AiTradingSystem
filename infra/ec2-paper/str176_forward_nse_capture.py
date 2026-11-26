@@ -125,17 +125,35 @@ def load_request(path,now):
 def transport(research=False):
     # Ship the exact reviewed parser along with this runner. The previously
     # deployed host need not contain the corresponding parser module.
-    parser=Path(__file__).with_name("fno_personal_nse_archive_probe.py").read_text()
-    source=Path(__file__).read_text()
-    modules=""
+    import ast
+    modules = {
+        "fno_personal_nse_archive_probe": None,
+    }
     if research:
-        for name in ("str176_expanded_upstox_research","fno_personal_nse_december_compare"):
-            body=Path(__file__).with_name(name+".py").read_text()
-            modules+=f"m=types.ModuleType({name!r});sys.modules[m.__name__]=m;exec({body!r},m.__dict__)\n"
-    return ("import sys,types\n"
-            "m=types.ModuleType('fno_personal_nse_archive_probe');"
-            "sys.modules[m.__name__]=m;exec("+repr(parser)+",m.__dict__)\n"
-            +modules+"exec("+repr(source)+",globals())\n").encode()
+        modules = {
+            "str176_expanded_upstox_research": {"bps", "signal", "REASON_OUTCOME"},
+            "fno_personal_nse_december_compare": {
+                "dec", "parse_udiff", "MAX_ARCHIVE", "MAX_CSV", "EXPIRY",
+            },
+        }
+    parts = ["import sys,types"]
+    for name, selected in modules.items():
+        body = Path(__file__).with_name(name + ".py").read_text()
+        if selected is not None:
+            nodes = []
+            for node in ast.parse(body).body:
+                if (isinstance(node, (ast.Import, ast.ImportFrom))
+                    or isinstance(node, ast.FunctionDef) and node.name in selected
+                    or isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id in selected
+                        for target in node.targets
+                    )):
+                    nodes.append(ast.get_source_segment(body, node))
+            body = "\n".join(nodes)
+        parts.append(f"m=types.ModuleType({name!r});sys.modules[m.__name__]=m;exec({body!r},m.__dict__)")
+    parts.append("exec(" + repr(Path(__file__).read_text()) + ",globals())")
+    return "\n".join(parts).encode()
+
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
