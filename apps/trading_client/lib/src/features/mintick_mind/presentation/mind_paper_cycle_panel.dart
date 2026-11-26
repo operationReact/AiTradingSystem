@@ -113,6 +113,12 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                     key: ValueKey('mind-orb-paper-only'),
                     style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
               ],
+              if (_strategyCode == 'RSI_REVERSAL_V1') ...[
+                const SizedBox(height: 4),
+                const Text('Research candidate only; no strategy performance certification or LIVE order authority.',
+                    key: ValueKey('mind-rsi-paper-only'),
+                    style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
+              ],
               const SizedBox(height: 10),
             ]);
             if (snap.connectionState != ConnectionState.done) {
@@ -148,6 +154,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                   ('VWAP_MOMENTUM_V1', 'VWAP Momentum'),
                   ('MA_RECLAIM_V1', 'Moving Average Reclaim'),
                   ('VOLUME_BREAKOUT_V1', 'Volume Breakout'),
+                  ('RSI_REVERSAL_V1', 'RSI Reversal'),
                 ])
                   ChoiceChip(label: Text(label), selected: _strategyCode == code,
                       onSelected: (_) => setState(() {

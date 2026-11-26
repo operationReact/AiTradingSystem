@@ -1230,7 +1230,7 @@
    "parentId": "family.Trend Following",
    "group": "Trend Following",
    "owner": "Claude",
-   "blockerCode": "NOT_WIRED_TO_PAPER",
+   "blockerCode": "LIVE_NOT_AUTHORIZED",
    "requiredInputs": [
     "OHLCV candles"
    ],
@@ -1257,14 +1257,27 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/strategy/StrategyQualityGateTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "apps/trading_client/test/mind_paper_cycle_test.dart"
     }
    ],
    "missing": [
-    "Connect to Mind strategy-to-PAPER orchestration",
-    "Backtest + walk-forward evidence per strategy",
-    "Runtime evaluation evidence on deployed revision"
+    "Independent positive after-cost out-of-sample and walk-forward evidence with verified point-in-time inputs",
+    "Prospective PAPER cohort across relevant regimes with enough closed trades for meaningful uncertainty estimates",
+    "Runtime evaluation evidence on deployed revision",
+    "Separate LIVE activation approval and broker, account, order, reconciliation, and kill-switch safety gates"
    ],
-   "note": "5/20 SMA trend with volume confirmation; also the MA walk-forward research subject.",
+   "note": "SMA Trend/Volume variant wired to owner-initiated guarded virtual PAPER; no LIVE order authority or performance certification.",
    "id": "strategy.STR-001",
    "kind": "STRATEGY",
    "name": "SMA Cross",
@@ -2095,7 +2108,7 @@
    "parentId": "family.Mean Reversion",
    "group": "Mean Reversion",
    "owner": "Claude",
-   "blockerCode": "NOT_WIRED_TO_PAPER",
+   "blockerCode": "LIVE_NOT_AUTHORIZED",
    "requiredInputs": [
     "OHLCV candles"
    ],
@@ -2114,14 +2127,27 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/scanner/ExtendedScannerStrategiesTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "apps/trading_client/test/mind_paper_cycle_test.dart"
     }
    ],
    "missing": [
-    "Connect to Mind strategy-to-PAPER orchestration",
-    "Backtest + walk-forward evidence per strategy",
-    "Runtime evaluation evidence on deployed revision"
+    "Independent positive after-cost out-of-sample and walk-forward evidence with verified point-in-time inputs",
+    "Prospective PAPER cohort across relevant regimes with enough closed trades for meaningful uncertainty estimates",
+    "Runtime evaluation evidence on deployed revision",
+    "Separate LIVE activation approval and broker, account, order, reconciliation, and kill-switch safety gates"
    ],
-   "note": "Prior RSI < 30 recovering above 30 with price confirmation (scanner registry).",
+   "note": "RSI recovery above 30 with price confirmation, wired to owner-initiated guarded virtual PAPER; research candidate only, no LIVE authority or performance certification.",
    "id": "strategy.STR-036",
    "kind": "STRATEGY",
    "name": "RSI Oversold Rebound",
