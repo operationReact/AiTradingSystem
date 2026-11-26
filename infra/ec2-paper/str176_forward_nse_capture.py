@@ -190,13 +190,13 @@ class ArchiveMeanReversion {
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp)/"ArchiveMeanReversion.java"
             source.write_text(java)
-            subprocess.run(["javac","--release","17","-d",temp,str(source)],
+            subprocess.run(["javac","--release","17","-g:none","-d",temp,str(source)],
                            check=True,capture_output=True,timeout=30)
             jar = Path(temp)/"archive-research.jar"
             with zipfile.ZipFile(jar,"w") as archive:
                 for item in sorted(Path(temp).rglob("*.class")):
                     archive.write(item,item.relative_to(temp).as_posix())
-            parts.append("STR177_CLASSES="+repr(jar.read_bytes()))
+            parts.append("import base64\nSTR177_CLASSES=base64.b64decode("+repr(base64.b64encode(jar.read_bytes()))+")")
     for name, selected in modules.items():
         body = Path(__file__).with_name(name + ".py").read_text()
         if selected is not None:
@@ -211,7 +211,16 @@ class ArchiveMeanReversion {
                     nodes.append(ast.get_source_segment(body, node))
             body = "\n".join(nodes)
         parts.append(f"m=types.ModuleType({name!r});sys.modules[m.__name__]=m;exec({body!r},m.__dict__)")
-    parts.append("exec(" + repr(Path(__file__).read_text()) + ",globals())")
+    script = Path(__file__).read_text()
+    if str177:
+        needed = {"safe_reason", "private_dir", "read_retained_window",
+                  "str177_backend_image", "retained_str177_research"}
+        script = "\n".join(
+            ast.get_source_segment(script,node) for node in ast.parse(script).body
+            if not isinstance(node, (ast.FunctionDef, ast.If))
+            or isinstance(node, ast.FunctionDef) and node.name in needed
+        ) + '\ntry:\n    retained_str177_research()\nexcept (Blocked,OSError,ValueError,KeyError,TypeError,sqlite3.Error,ImportError,RuntimeError) as exc:\n    print(FAILURE_MARKER+safe_reason(exc),flush=True)\n    raise SystemExit(2)'
+    parts.append("exec(" + repr(script) + ",globals())")
     return "\n".join(parts).encode()
 
 
