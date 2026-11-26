@@ -42,6 +42,10 @@ FIXED_REQUEST={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTA
 BACKFILL_DAYS=tuple(date(2026,11,day) for day in (17,18,19,20))
 BACKFILL_START=datetime(2026,11,26,18,30,tzinfo=IST)
 BACKFILL_END=BACKFILL_START+timedelta(hours=36)
+RESEARCH_DAY=date(2026,11,27)
+RESEARCH_EXPIRY=date(2026,12,29)
+RESEARCH_DAYS=BACKFILL_DAYS+tuple(date(2026,11,day) for day in (23,25,26))
+RESEARCH_MARKER="MINTTICK_STR176_RETAINED_ARCHIVE_RESEARCH:"
 SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
  session_date TEXT NOT NULL,
  source_url TEXT NOT NULL,
@@ -106,6 +110,11 @@ def load_request(path,now):
         raise Blocked("OWNER_REQUEST_REQUIRED")
     try:data=json.loads(path.read_text(),object_pairs_hook=_unique_object)
     except (ValueError,TypeError,UnicodeError):raise Blocked("OWNER_REQUEST_REQUIRED") from None
+    if (type(data) is dict and set(data)==set(FIXED_REQUEST)|{"research_decision_date"}
+            and all(type(data[k]) is type(value) and data[k]==value for k,value in FIXED_REQUEST.items())
+            and data["research_decision_date"]==RESEARCH_DAY.isoformat()
+            and BACKFILL_START<=now<=BACKFILL_END):
+        return "research"
     if type(data) is dict and "session_dates" in data:
         requested=data.pop("session_dates")
         if requested!=[day.isoformat() for day in BACKFILL_DAYS] or not BACKFILL_START<=now<=BACKFILL_END:
@@ -113,15 +122,20 @@ def load_request(path,now):
         return tuple(request_date({**data,"session_date":day.isoformat()},now) for day in BACKFILL_DAYS)
     return request_date(data,now)
 
-def transport():
+def transport(research=False):
     # Ship the exact reviewed parser along with this runner. The previously
     # deployed host need not contain the corresponding parser module.
     parser=Path(__file__).with_name("fno_personal_nse_archive_probe.py").read_text()
     source=Path(__file__).read_text()
+    modules=""
+    if research:
+        for name in ("str176_expanded_upstox_research","fno_personal_nse_december_compare"):
+            body=Path(__file__).with_name(name+".py").read_text()
+            modules+=f"m=types.ModuleType({name!r});sys.modules[m.__name__]=m;exec({body!r},m.__dict__)\n"
     return ("import sys,types\n"
             "m=types.ModuleType('fno_personal_nse_archive_probe');"
             "sys.modules[m.__name__]=m;exec("+repr(parser)+",m.__dict__)\n"
-            "exec("+repr(source)+",globals())\n").encode()
+            +modules+"exec("+repr(source)+",globals())\n").encode()
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
@@ -223,6 +237,47 @@ def host(session_date):
     report=persist(DB,day,url,raw,observed,modified,counts)
     print(MARKER+json.dumps(report,separators=(",",":"),sort_keys=True),flush=True)
 
+def retained_research():
+    if os.geteuid()!=0 or os.uname().machine!="aarch64":
+        raise Blocked("EXACT_PRIVATE_HOST_REQUIRED")
+    private_dir(PRIVATE)
+    if DB.is_symlink() or not DB.is_file() or DB.stat().st_mode&0o077 or DB.stat().st_size>MAX_DB:
+        raise Blocked("PRIVATE_DB_INVALID_OR_FULL")
+    from contextlib import closing
+    import fno_personal_nse_december_compare as nse
+    from str176_expanded_upstox_research import signal
+    nse.EXPIRY=RESEARCH_EXPIRY
+    now=datetime.now(timezone.utc)
+    decision_cutoff=datetime.combine(RESEARCH_DAY,dt_time(9,15),tzinfo=IST)
+    window=[]
+    observations=[]
+    with closing(sqlite3.connect(DB.as_uri()+"?mode=ro",uri=True)) as db:
+        for day in RESEARCH_DAYS:
+            rows=db.execute(
+                "SELECT original_zip,sha256,observed_at_utc FROM original_exchange_eod "
+                "WHERE session_date=? LIMIT 2",(day.isoformat(),)).fetchall()
+            if len(rows)!=1:
+                raise Blocked("ORIGINAL_SOURCE_READBACK_FAILED")
+            raw,digest,stamp=rows[0]
+            observed=datetime.fromisoformat(stamp)
+            if observed.tzinfo is None or not observed<=min(now,decision_cutoff):
+                raise Blocked("OBSERVATION_TIME_INVALID")
+            if hashlib.sha256(raw).hexdigest()!=digest:
+                raise Blocked("ORIGINAL_SOURCE_READBACK_FAILED")
+            values=nse.parse_udiff(raw,day)[("FUT",0,day)]
+            op,hi,lo,close,volume,oi,lot=values
+            if not 0<lo<=min(op,close)<=max(op,close)<=hi or not 0<=volume*lot<=10**12 or not 0<oi<=10**12:
+                raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
+            window.append((day,op,hi,lo,close,volume*lot,oi))
+            observations.append(observed)
+    outcome,reason=signal(window,RESEARCH_EXPIRY,RESEARCH_DAY,details=True)
+    print(RESEARCH_MARKER+json.dumps({
+        "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
+        "decisionDate":RESEARCH_DAY.isoformat(),"expiry":RESEARCH_EXPIRY.isoformat(),
+        "latestObservedAt":max(observations).isoformat(),"outcome":outcome,
+        "reason":reason,"certifiedStrategies":0,"orders":False
+    },sort_keys=True),flush=True)
+
 def validate_report(data,expected_day):
     keys={"state","newArchive","sessionDate","firstObservedAt","niftyFutures",
           "niftyOptions","originalBytes","originalPublicationVerified",
@@ -243,6 +298,9 @@ def validate_report(data,expected_day):
 
 def runner():
     selection=load_request(REQUEST,datetime.now(timezone.utc))
+    if selection=="research":
+        capture_on_host(None)
+        return
     days=selection if isinstance(selection,tuple) else (selection,)
     failed=False
     for day in days:
@@ -261,11 +319,12 @@ def capture_on_host(day):
     from fno_private_bulk_ops import _aws
     try:verify_aws()
     except (ValueError,RuntimeError):raise Blocked("AWS_PREFLIGHT_REJECTED") from None
-    payload=base64.b64encode(gzip.compress(transport(),mtime=0)).decode()
-    if len(payload)>20000 or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
+    payload=base64.b64encode(gzip.compress(transport(day is None),mtime=0)).decode()
+    if len(payload)>(24000 if day is None else 20000) or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
         raise Blocked("TRANSPORT_BOUND")
+    mode="research" if day is None else "host "+day.isoformat()
     shell=("set -eu\numask 077\nprintf '%s' '"+payload+
-           "' | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - host "+day.isoformat()+"\n")
+           "' | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - "+mode+"\n")
     sent=_aws("ssm","send-command","--document-name","AWS-RunShellScript",
               "--instance-ids",INSTANCE,"--timeout-seconds","90",
               "--comment","Owner private NSE forward original observation no orders",
@@ -279,6 +338,24 @@ def capture_on_host(day):
         status=result.get("Status")
         if status=="Success":
             out=result.get("StandardOutputContent","")
+            if day is None:
+                from str176_expanded_upstox_research import REASON_OUTCOME
+                rows=[x[len(RESEARCH_MARKER):] for x in out.splitlines() if x.startswith(RESEARCH_MARKER)]
+                if len(out)>2048 or len(rows)!=1:
+                    raise Blocked("SOURCE_RECEIPT_INVALID")
+                data=json.loads(rows[0])
+                if (set(data)!={"state","sessions","decisionDate","expiry","latestObservedAt",
+                               "outcome","reason","certifiedStrategies","orders"}
+                        or data["state"]!="RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY"
+                        or data["sessions"]!=7 or data["decisionDate"]!=RESEARCH_DAY.isoformat()
+                        or data["expiry"]!=RESEARCH_EXPIRY.isoformat()
+                        or data["certifiedStrategies"]!=0 or data["orders"] is not False
+                        or data["reason"] not in REASON_OUTCOME
+                        or data["outcome"]!=REASON_OUTCOME[data["reason"]]
+                        or datetime.fromisoformat(data["latestObservedAt"])>datetime.now(timezone.utc)):
+                    raise Blocked("SOURCE_RECEIPT_INVALID")
+                print(RESEARCH_MARKER+json.dumps(data,sort_keys=True),flush=True)
+                return
             rows=[x[len(MARKER):] for x in out.splitlines() if x.startswith(MARKER)]
             if len(out)>2048 or len(rows)!=1:raise Blocked("SOURCE_RECEIPT_INVALID")
             print(MARKER+json.dumps(validate_report(json.loads(rows[0]),day),sort_keys=True),flush=True)
@@ -294,6 +371,7 @@ def capture_on_host(day):
 if __name__=="__main__":
     try:
         if len(sys.argv)==3 and sys.argv[1]=="host":host(sys.argv[2])
+        elif sys.argv[1:]==["research"]:retained_research()
         elif sys.argv[1:]==["runner"]:runner()
         else:raise Blocked("MODE_INVALID")
     except (Blocked,OSError,ValueError,KeyError,TypeError,sqlite3.Error,ImportError,RuntimeError) as exc:
