@@ -51,7 +51,7 @@ def source_url(day):
         raise ValueError("INVALID_PROBE_DAY")
     return "https://"+HOST+"/content/fo/BhavCopy_NSE_FO_0_0_0_"+day.strftime("%Y%m%d")+"_F_0000.csv.zip"
 
-def parse_udiff(blob,day):
+def parse_udiff(blob,day,include_identity=False):
     if not blob.startswith(b"PK\x03\x04") or len(blob)>MAX_ARCHIVE:
         raise ValueError("INVALID_NSE_ZIP")
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
@@ -66,6 +66,8 @@ def parse_udiff(blob,day):
     data=csv.DictReader(io.StringIO(raw.decode("utf-8-sig"),newline=""))
     required={"BizDt","TckrSymb","FinInstrmTp","XpryDt","StrkPric","OptnTp",
               "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst","NewBrdLotQty"}
+    if include_identity:
+        required.update(("FinInstrmId","ChngInOpnIntrst"))
     if data.fieldnames is None or not required.issubset(data.fieldnames):
         raise ValueError("NSE_SCHEMA_MISMATCH")
     rows={}
@@ -89,6 +91,12 @@ def parse_udiff(blob,day):
         if lot<=0 or lot>10000:
             raise ValueError("NSE_BAD_LOT_SIZE")
         values=values+(lot,)
+        if include_identity:
+            instrument=row["FinInstrmId"].strip()
+            change=Decimal(row["ChngInOpnIntrst"].strip())
+            if not instrument.isdecimal() or not change.is_finite() or change!=change.to_integral_value():
+                raise ValueError("NSE_INVALID_CONTRACT_OR_OI_CHANGE")
+            values=values+(instrument,change)
         if identity in rows:
             raise ValueError("NSE_DUPLICATE_CONTRACT_ROW")
         rows[identity]=values
