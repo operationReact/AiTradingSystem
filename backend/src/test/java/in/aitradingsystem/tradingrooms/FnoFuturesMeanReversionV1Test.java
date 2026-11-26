@@ -82,6 +82,24 @@ class FnoFuturesMeanReversionV1Test {
     }
 
     @Test
+    void retainedNseResearchUsesSameSignalAndHonorsObservationCutoff() {
+        var broker = lowRebound();
+        var archive = broker.stream().map(bar -> new CompletedSession(
+            bar.sessionDate(), true, bar.instrumentKey(), "NSE_RETAINED_EOD",
+            bar.open(), bar.high(), bar.low(), bar.close(), true, AS_OF,
+            bar.volumeUnits(), bar.openInterestUnits(), AS_OF)).toList();
+        var research = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, archive, THRESHOLDS, AS_OF);
+        assertEquals(Status.RESEARCH_CANDIDATE, research.status());
+        assertEquals(evaluate(broker).pattern(), research.pattern());
+        assertEquals(evaluate(broker).reasonCode(), research.reasonCode());
+        assertFalse(research.executable());
+        assertEquals(Status.BLOCKED_DATA, evaluate(archive).status());
+        assertEquals(Status.BLOCKED_DATA, FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(
+            CONTRACT, archive, THRESHOLDS, AS_OF.minusSeconds(1)).status());
+    }
+
+    @Test
     void prematurelyClaimedFinalOHLCVAt1535MustNotPassNseDerivativesClose() {
         var rows = lowRebound();
         var last = rows.get(9);

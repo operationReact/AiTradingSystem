@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/minttick-fno177-original-history-replay.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno177VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1Test.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno177VerifiedHistoricalReplayServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'docs/architecture/fno-str177-original-replay.md'
@@ -14,6 +16,8 @@ on:
     paths:
       - '.github/workflows/minttick-fno177-original-history-replay.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno177VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1Test.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno177VerifiedHistoricalReplayServiceTest.java'
 permissions:
   contents: read
