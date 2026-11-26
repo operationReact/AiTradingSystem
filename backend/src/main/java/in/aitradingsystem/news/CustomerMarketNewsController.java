@@ -5,10 +5,14 @@ import in.aitradingsystem.news.NewsService.ArticleView;
 import in.aitradingsystem.news.NewsService.AnalysisView;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.UUID;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,9 +33,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class CustomerMarketNewsController {
     private final NewsService news;
+    private final NewsSourceHealthRepository sourceHealth;
 
-    public CustomerMarketNewsController(NewsService news) {
+    public CustomerMarketNewsController(NewsService news, NewsSourceHealthRepository sourceHealth) {
         this.news = news;
+        this.sourceHealth = sourceHealth;
     }
 
     /** Returns a bounded publisher-attributed page with a small advisory impact projection. */
@@ -47,6 +53,28 @@ public class CustomerMarketNewsController {
             .map(ArticleSummary::from)
             .toList(), result.page(), result.size(), result.totalItems());
     }
+
+    /** Sanitized last-fetch health for every supported publisher; no raw upstream diagnostics. */
+    @GetMapping("/sources")
+    public List<SourceSummary> sources() {
+        Instant now = Instant.now();
+        Map<String, NewsSourceHealthRepository.SourceHealth> latest = sourceHealth.latest().stream()
+            .collect(Collectors.toMap(NewsSourceHealthRepository.SourceHealth::source, Function.identity(),
+                (a, b) -> a.finishedAt().isAfter(b.finishedAt()) ? a : b));
+        return NewsSource.SUPPORTED.stream().map(source -> {
+            var run = latest.get(source.id());
+            return new SourceSummary(source.id(), source.publisher(),
+                run == null ? "NEVER_RUN" : run.status(),
+                run == null ? null : run.startedAt(), run == null ? null : run.finishedAt(),
+                run == null ? null : Math.max(0L, Duration.between(run.finishedAt(), now).getSeconds()),
+                run == null ? 0 : run.fetchedItems(), run == null ? 0 : run.insertedItems(),
+                run == null ? null : run.errorCode());
+        }).toList();
+    }
+
+    public record SourceSummary(String sourceId, String publisher, String status,
+        Instant startedAt, Instant finishedAt, Long ageSeconds, int fetchedItems,
+        int insertedItems, String errorCode) {}
 
     /** Whitelisted advisory fields only; excludes provider request IDs and internal fingerprints. */
     public record StockImpact(

@@ -50,6 +50,19 @@ class CustomerMarketNewsControllerIT extends AbstractPostgresIT {
     }
 
     @Test
+    void customerSourceHealthListsEverySupportedPublisherWithoutRawDiagnostics() throws Exception {
+        String body = mvc.perform(get("/api/customer/market-intelligence/sources").with(customer()))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        JsonNode response = mapper.readTree(body);
+        assertThat(response.isArray()).isTrue();
+        assertThat(response.size()).isEqualTo(4);
+        assertThat(body).contains("nse-announcements", "moneycontrol", "economic-times", "sebi", "NEVER_RUN");
+        assertThat(body).doesNotContain("errorDetail", "termsRef", "reviewerRef");
+    }
+
+    @Test
     void onlyDisplayApprovedSourcesReachCustomerAndNoAnalysisMetadataLeaks() throws Exception {
         String allowed = unique("fixture-approved");
         String blocked = unique("fixture-blocked");
