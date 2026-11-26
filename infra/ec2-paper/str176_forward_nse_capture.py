@@ -339,14 +339,16 @@ def read_retained_window(days, include_identity=False):
     observations=[]
     lots=set()
     identities=[]
+    modified_headers=[]
     with closing(sqlite3.connect(DB.as_uri()+"?mode=ro",uri=True)) as db:
         for day in days:
             rows=db.execute(
-                "SELECT original_zip,sha256,observed_at_utc FROM original_exchange_eod "
+                "SELECT original_zip,sha256,observed_at_utc,http_last_modified FROM original_exchange_eod "
                 "WHERE session_date=? LIMIT 2",(day.isoformat(),)).fetchall()
             if len(rows)!=1:
                 raise Blocked("ORIGINAL_SOURCE_READBACK_FAILED")
-            raw,digest,stamp=rows[0]
+            raw,digest,stamp,modified=rows[0]
+            modified_headers.append(modified)
             observed=datetime.fromisoformat(stamp)
             if observed.tzinfo is None or not observed<=min(now,decision_cutoff):
                 raise Blocked("OBSERVATION_TIME_INVALID")
@@ -363,11 +365,11 @@ def read_retained_window(days, include_identity=False):
             lots.add(lot)
     if len(lots)!=1 or any(lot!=int(lot) for lot in lots):
         raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
-    return window, observations, int(lots.pop()), identities
+    return window, observations, int(lots.pop()), identities, modified_headers
 
 def retained_research():
     from str176_expanded_upstox_research import signal
-    window, observations, _, _ = read_retained_window(RESEARCH_DAYS)
+    window, observations, _, _, _ = read_retained_window(RESEARCH_DAYS)
     outcome,reason=signal(window,RESEARCH_EXPIRY,RESEARCH_DAY,details=True)
     print(RESEARCH_MARKER+json.dumps({
         "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
@@ -399,7 +401,7 @@ def retained_str177_research():
     import tempfile
     from shutil import which
 
-    window, observations, lot, identities = read_retained_window(STR177_DAYS, include_identity=True)
+    window, observations, lot, identities, modified_headers = read_retained_window(STR177_DAYS, include_identity=True)
     if len({identity for identity,_ in identities})!=1:
         raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
     as_of = max(observations)
@@ -430,6 +432,21 @@ def retained_str177_research():
     if result.returncode or len(result.stdout)>128:
         raise Blocked("STR177_EVALUATOR_FAILED")
     status,pattern,reason = result.stdout.split()
+    from email.utils import parsedate_to_datetime
+    header_count=0
+    headers_before_next_decision=0
+    for day,next_day,header in zip(STR177_DAYS,STR177_DAYS[1:]+(RESEARCH_DAY,),modified_headers):
+        if not header:
+            continue
+        try:
+            modified=parsedate_to_datetime(header)
+        except (TypeError,ValueError,OverflowError):
+            continue
+        if modified.tzinfo is None:
+            continue
+        header_count+=1
+        if datetime.combine(day,dt_time(15,40),tzinfo=IST)<=modified<=datetime.combine(next_day,dt_time(9,15),tzinfo=IST):
+            headers_before_next_decision+=1
     outlier=None
     if reason=="FUT_MR_DAILY_CHANGE_OUTLIER":
         for index,(previous,current) in enumerate(zip(window,window[1:]),1):
@@ -446,7 +463,8 @@ def retained_str177_research():
         "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
         "decisionDate":RESEARCH_DAY.isoformat(),"expiry":RESEARCH_EXPIRY.isoformat(),
         "latestObservedAt":as_of.isoformat(),"outcome":status,"pattern":pattern,
-        "reason":reason,"outlier":outlier,"certifiedStrategies":0,"orders":False
+        "reason":reason,"outlier":outlier,"modifiedHeaders":header_count,
+        "modifiedBeforeNextDecision":headers_before_next_decision,"certifiedStrategies":0,"orders":False
     },sort_keys=True),flush=True)
 
 def validate_report(data,expected_day):
@@ -517,7 +535,8 @@ def capture_on_host(day, str177=False):
                     raise Blocked("SOURCE_RECEIPT_INVALID")
                 data=json.loads(rows[0])
                 if (set(data)!={"state","sessions","decisionDate","expiry","latestObservedAt",
-                               "outcome","pattern","reason","outlier","certifiedStrategies","orders"}
+                               "outcome","pattern","reason","outlier","modifiedHeaders","modifiedBeforeNextDecision",
+                               "certifiedStrategies","orders"}
                         or data["state"]!="RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY"
                         or data["sessions"]!=10 or data["decisionDate"]!=RESEARCH_DAY.isoformat()
                         or data["expiry"]!=RESEARCH_EXPIRY.isoformat()
@@ -526,6 +545,9 @@ def capture_on_host(day, str177=False):
                         or data["pattern"] not in ("NONE","LOW_EXTREME_REBOUND","HIGH_EXTREME_PULLBACK")
                         or not re.fullmatch(r"FUT_MR_[A-Z0-9_]+",data["reason"])
                         or datetime.fromisoformat(data["latestObservedAt"])>datetime.now(timezone.utc)):
+                    raise Blocked("SOURCE_RECEIPT_INVALID")
+                if (any(type(data[key]) is not int for key in ("modifiedHeaders","modifiedBeforeNextDecision"))
+                    or not 0<=data["modifiedBeforeNextDecision"]<=data["modifiedHeaders"]<=10):
                     raise Blocked("SOURCE_RECEIPT_INVALID")
                 issue=data["outlier"]
                 if issue is not None and (type(issue) is not dict or set(issue)!={"previous","current","fields","exchangeDeltaMatches"}
