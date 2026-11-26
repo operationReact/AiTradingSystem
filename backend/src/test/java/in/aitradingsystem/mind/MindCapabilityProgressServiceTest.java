@@ -29,7 +29,7 @@ class MindCapabilityProgressServiceTest {
         Manifest manifest = MindCapabilityProgressService.loadManifest();
         Map<String, Long> kinds = manifest.items().stream()
             .collect(Collectors.groupingBy(ManifestItem::kind, Collectors.counting()));
-        assertThat(kinds.get("SCREEN")).isEqualTo(43L);
+        assertThat(kinds.get("SCREEN")).isEqualTo(44L);
         assertThat(kinds.get("STRATEGY")).isEqualTo(232L);
         assertThat(kinds.get("MODEL")).isEqualTo(18L);
         assertThat(manifest.items().stream().filter(i -> "STRATEGY".equals(i.kind()))
@@ -145,7 +145,7 @@ class MindCapabilityProgressServiceTest {
         assertThat(stage.capabilityId()).isEqualTo("engine.risk-gates");
         var summaries = MindCapabilityProgressService.summaries(List.copyOf(items.values()));
         var screens = summaries.stream().filter(s -> "SCREEN".equals(s.kind())).findFirst().orElseThrow();
-        assertThat(screens.denominator()).isEqualTo(43);
+        assertThat(screens.denominator()).isEqualTo(44);
         assertThat(screens.done()).isZero();
         var engine = summaries.stream().filter(s -> "ENGINE".equals(s.kind())).findFirst().orElseThrow();
         assertThat(engine.done()).isEqualTo(2);

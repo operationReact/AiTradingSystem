@@ -127,6 +127,7 @@ Resources:
               ("GET", "/api/customer/portfolio/records"),
               ("GET", "/api/customer/home/v1/summary"),
               ("GET", "/api/customer/home/v1/activity"),
+              ("GET", "/api/customer/market-intelligence/articles"),
               ("GET", "/api/customer/owner-history/v1/progress"),
               # Owner-sub checked in Spring; read-only, 365-day bounded private OHLCV cache.
               ("GET", "/api/customer/owner-history/v1/candles"),
@@ -598,7 +599,6 @@ Resources:
               except (ValueError, UnicodeError):
                   return reply(502, {"error": "INVALID_UPSTREAM_RESPONSE"})
               return reply(status, decoded)
-
   AccountHttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
