@@ -1,7 +1,9 @@
 // Prototype UI source may use existing explicit string concatenation for compact mock labels.
 // ignore_for_file: prefer_interpolation_to_compose_strings
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_fno_research_repository.dart';
@@ -30,6 +32,8 @@ import '../data/mind_paper_portfolio_repository.dart';
 import '../data/mind_paper_journal_repository.dart';
 import '../data/mind_assistant_repository.dart';
 import '../data/mind_research_engine_repository.dart';
+import '../../../data/authenticated_api_client.dart';
+import '../../market_intelligence/data/market_news_repository.dart';
 import '../../trading_rooms/data/customer_market_repository.dart';
 import '../../trading_rooms/data/customer_home_summary_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
@@ -51,6 +55,7 @@ part 'mind_system_screens.dart';
 part 'mind_research_screens.dart';
 part 'mind_agent_screens.dart';
 part 'mind_research_engine_screens.dart';
+part 'mind_news_screens.dart';
 
 /// All prototype surfaces run inside one signed-in Flutter route. This
 /// mock-only workspace does not import any broker, API or execution repository.
@@ -75,6 +80,7 @@ abstract final class MintickMindScreens {
     MindScreenDescriptor('shadow-arena', 'Shadow Trading Arena', Icons.science_outlined, 'AGENTS'),
     MindScreenDescriptor('institutional-flow', 'FII / DII Flow', Icons.account_balance_outlined, 'AGENTS'),
     MindScreenDescriptor('daily-verdict', 'Daily Market Verdict', Icons.event_note_outlined, 'AGENTS'),
+    MindScreenDescriptor('news-analyzer', 'News Analyzer', Icons.newspaper_outlined, 'AGENTS'),
     MindScreenDescriptor('culprit-catcher', 'Culprit Catcher', Icons.bug_report_outlined, 'AGENTS'),
     MindScreenDescriptor('trading-rooms', 'Trading Rooms', Icons.meeting_room_outlined, 'PRIMARY'),
     MindScreenDescriptor('strategies', 'Strategy Universe', Icons.layers_outlined, 'PRIMARY'),
@@ -137,6 +143,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.homeSummaryRepository,
     this.assistantRepository,
     this.researchEngineRepository,
+    this.marketNewsRepository,
     super.key,
   });
 
@@ -188,6 +195,10 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Server engine capability registry (#998 Phase 1).
   final MindResearchEngineRepository? researchEngineRepository;
+
+  /// Customer-scoped, read-only article feed. Admin pipeline diagnostics are
+  /// intentionally not injected into this customer workspace.
+  final MarketNewsRepository? marketNewsRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -216,6 +227,24 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   String _agentShadowCompare = 'Baseline';
   String _agentFlowDate = '2026-11-09';
   String _agentVerdictDate = '2026-11-09';
+  String _newsTab = 'Feed';
+  String _newsFilter = 'All news';
+  String _selectedNewsId = 'N-2841';
+  String _newsQuery = '';
+  bool _newsDetailOpen = false;
+  String? _newsSymbolFilter;
+  final List<MarketNewsArticle> _newsArticles = <MarketNewsArticle>[];
+  List<MarketNewsSource> _newsSources = const <MarketNewsSource>[];
+  String? _newsSourceHealthError;
+  int _newsTotalItems = 0;
+  int _newsPage = 0;
+  bool _newsHasNext = false;
+  bool _newsLoading = false;
+  bool _newsLoadingMore = false;
+  bool _newsLoaded = false;
+  String? _newsError;
+  int _newsRequestGeneration = 0;
+  Timer? _newsRefreshTimer;
   String _agentIncident = 'INC-102';
   String _selectedStrategy = 'STR-001';
   String _selectedModel = 'LightGBM';
@@ -385,11 +414,15 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   ];
   final TextEditingController _assistantController = TextEditingController();
   final TextEditingController _strategySearch = TextEditingController();
+  final TextEditingController _mindNewsSearchController = TextEditingController();
 
   @override
   void dispose() {
+    _newsRefreshTimer?.cancel();
+    _newsRequestGeneration++;
     _assistantController.dispose();
     _strategySearch.dispose();
+    _mindNewsSearchController.dispose();
     super.dispose();
   }
 
@@ -416,6 +449,115 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       _route = route;
       if (route != 'coverage') _showDataReadiness = false;
     });
+    if (route == 'news-analyzer') {
+      _ensureMindNewsLoaded();
+      _newsRefreshTimer ??= Timer.periodic(const Duration(seconds: 60), (_) {
+        if (mounted && _route == 'news-analyzer' && !_newsDetailOpen) {
+          unawaited(_loadMindNews(reset: true));
+        }
+      });
+    } else {
+      _newsRefreshTimer?.cancel();
+      _newsRefreshTimer = null;
+    }
+  }
+
+  void _ensureMindNewsLoaded() {
+    if (widget.marketNewsRepository == null || _newsLoaded || _newsLoading) return;
+    unawaited(_loadMindNews(reset: true));
+  }
+
+  Future<void> _loadMindNews({required bool reset}) async {
+    final repository = widget.marketNewsRepository;
+    if (repository == null ||
+        (!reset && (_newsLoading || _newsLoadingMore))) {
+      return;
+    }
+    final generation = ++_newsRequestGeneration;
+    final requestedPage = reset ? 0 : _newsPage + 1;
+    setState(() {
+      _newsError = null;
+      if (reset) {
+        _newsSources = const <MarketNewsSource>[];
+        _newsSourceHealthError = null;
+        _newsLoading = true;
+        _newsLoadingMore = false;
+        _newsLoaded = false;
+        _newsDetailOpen = false;
+        _newsArticles.clear();
+        _newsTotalItems = 0;
+        _newsHasNext = false;
+        _newsPage = 0;
+      } else {
+        _newsLoadingMore = true;
+      }
+    });
+    if (reset) unawaited(_loadMindNewsSources(repository, generation));
+    try {
+      final result = await repository.articles(
+        page: requestedPage,
+        size: 20,
+        symbol: _newsSymbolFilter,
+      );
+      if (!mounted || generation != _newsRequestGeneration) return;
+      setState(() {
+        if (reset) {
+          _newsArticles.addAll(result.items);
+        } else {
+          final known = _newsArticles.map((article) => article.id).toSet();
+          for (final article in result.items) {
+            if (known.add(article.id)) _newsArticles.add(article);
+          }
+        }
+        _newsTotalItems = result.totalItems;
+        _newsPage = requestedPage;
+        _newsHasNext = result.hasNext;
+        _newsLoaded = true;
+        _newsLoading = false;
+        _newsLoadingMore = false;
+      });
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _newsRequestGeneration) return;
+      setState(() {
+        _newsError = switch (error.statusCode) {
+          401 => 'Your session needs to be refreshed before news can load.',
+          403 => 'This account is not authorized to view customer news.',
+          final status? => _newsHttpFailureMessage(status, error.correlationId),
+          _ => 'Could not reach the news API. Check the connection and retry.',
+        };
+        _newsLoaded = true;
+        _newsLoading = false;
+        _newsLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _newsRequestGeneration) return;
+      setState(() {
+        _newsError = 'The news response could not be read. No sample data was substituted.';
+        _newsLoaded = true;
+        _newsLoading = false;
+        _newsLoadingMore = false;
+      });
+    }
+  }
+
+  Future<void> _loadMindNewsSources(MarketNewsRepository repository, int generation) async {
+    try {
+      final sources = await repository.sources();
+      if (mounted && generation == _newsRequestGeneration) {
+        setState(() { _newsSources = sources; _newsSourceHealthError = null; });
+      }
+    } catch (_) {
+      if (mounted && generation == _newsRequestGeneration) {
+        setState(() => _newsSourceHealthError = 'Source health endpoint unavailable');
+      }
+    }
+  }
+
+  String _newsHttpFailureMessage(int status, String? correlationId) {
+    final reference = correlationId == null || correlationId.trim().isEmpty
+        ? ''
+        : ' Reference: ${correlationId.trim()}.';
+    return 'News API returned HTTP $status.$reference Retry in a moment.';
   }
 
   void _openDataReadiness() {
@@ -581,11 +723,13 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
               ? 'NOT VERIFIED' : 'SOURCE REGISTRY · READ ONLY')
           : const MindTag('DEMO DATA', color: MindPalette.yellow),
       const SizedBox(width: 4),
-      IconButton(key: const ValueKey('mind-open-data-readiness'),
-        tooltip: 'Data readiness', onPressed: _openDataReadiness,
-        icon: const Icon(Icons.storage_outlined, color: MindPalette.muted, size: 20)),
-      IconButton(tooltip:'Screen coverage',onPressed:()=>_go('coverage'),
-        icon:const Icon(Icons.fact_check_outlined,color:MindPalette.muted,size:20)),
+      if (_route != 'news-analyzer') ...[
+        IconButton(key: const ValueKey('mind-open-data-readiness'),
+          tooltip: 'Data readiness', onPressed: _openDataReadiness,
+          icon: const Icon(Icons.storage_outlined, color: MindPalette.muted, size: 20)),
+        IconButton(tooltip:'Screen coverage',onPressed:()=>_go('coverage'),
+          icon:const Icon(Icons.fact_check_outlined,color:MindPalette.muted,size:20)),
+      ],
     ]),
   );
 
@@ -661,18 +805,20 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
               icon:const Icon(Icons.arrow_back,size:16),
               label:const Text('Back'),
               style:TextButton.styleFrom(foregroundColor:MindPalette.mint))),
-          const Text('MINTTICK MIND · PERSONAL TRADING INTELLIGENCE',
-            style:TextStyle(color:MindPalette.mint,fontSize:10,letterSpacing:1.0,fontWeight:FontWeight.w700)),
-          const SizedBox(height:7),
-          Text(heading,style:const TextStyle(color:MindPalette.text,fontSize:28,fontWeight:FontWeight.w800,letterSpacing:-.8)),
-          const SizedBox(height:3),
-          Text(subtitle,style:const TextStyle(color:MindPalette.muted,fontSize:12)),
-          const SizedBox(height:13),
-          if (_showDataReadiness)
+          Text(_route=='news-analyzer'?'MINTTICK MIND · NEWS INTELLIGENCE':'MINTTICK MIND · PERSONAL TRADING INTELLIGENCE',
+            style:const TextStyle(color:MindPalette.mint,fontSize:10,letterSpacing:1.0,fontWeight:FontWeight.w700)),
+          const SizedBox(height:5),
+          Text(heading,style:TextStyle(color:MindPalette.text,fontSize:_route=='news-analyzer'?24:28,fontWeight:FontWeight.w800,letterSpacing:-.8)),
+          if (_route!='news-analyzer') ...[
+            const SizedBox(height:3),
+            Text(subtitle,style:const TextStyle(color:MindPalette.muted,fontSize:12)),
+          ],
+          SizedBox(height:_route=='news-analyzer'?7:13),
+          if (_route!='news-analyzer' && _showDataReadiness)
             const MindTag('READ-ONLY · DATASET COVERAGE NOT PROVEN')
-          else
+          else if (_route!='news-analyzer')
             const MindTag('ILLUSTRATIVE / OFFLINE · NO LIVE BROKER'),
-          const SizedBox(height:17),
+          if (_route!='news-analyzer') const SizedBox(height:17),
           ...children,
         ],
       ),
@@ -689,6 +835,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     'shadow-arena' => shadowArenaScreen(),
     'institutional-flow' => institutionalFlowScreen(),
     'daily-verdict' => dailyVerdictScreen(),
+    'news-analyzer' => newsAnalyzerScreen(),
     'culprit-catcher' => culpritCatcherScreen(),
     'trading-rooms' => roomsScreen(),
     'room-detail' => roomDetailScreen(),
