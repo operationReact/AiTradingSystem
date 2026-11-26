@@ -46,6 +46,9 @@ STR177_BACKFILL_DAYS=tuple(date(2026,11,day) for day in (12,13,16))
 RESEARCH_DAY=date(2026,11,27)
 RESEARCH_EXPIRY=date(2026,12,29)
 RESEARCH_DAYS=BACKFILL_DAYS+tuple(date(2026,11,day) for day in (23,25,26))
+STR177_DAYS=STR177_BACKFILL_DAYS+RESEARCH_DAYS
+JAVA_EVALUATOR=Path("backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1.java")
+STR177_MARKER="MINTTICK_STR177_RETAINED_ARCHIVE_RESEARCH:"
 RESEARCH_MARKER="MINTTICK_STR176_RETAINED_ARCHIVE_RESEARCH:"
 SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
  session_date TEXT NOT NULL,
@@ -67,7 +70,7 @@ SOURCE_RECEIPT_INVALID OWNER_REQUEST_REQUIRED TRANSPORT_BOUND SSM_COMMAND_INVALI
 HOST_CAPTURE_FAILED HOST_CAPTURE_TIMEOUT SSM_STATUS_INVALID MODE_INVALID
 SOURCE_ARCHIVE_VALIDATION_FAILED PRIVATE_STORAGE_UNAVAILABLE
 HOST_CAPTURE_NO_SAFE_RECEIPT HOST_CAPTURE_TIMED_OUT HOST_CAPTURE_CANCELLED
-AWS_PREFLIGHT_REJECTED SOURCE_CAPTURE_UNEXPECTED_FAILURE""".split())
+AWS_PREFLIGHT_REJECTED STR177_JAVA_UNAVAILABLE STR177_EVALUATOR_FAILED SOURCE_CAPTURE_UNEXPECTED_FAILURE""".split())
 
 class Blocked(Exception):pass
 
@@ -116,6 +119,11 @@ def load_request(path,now):
             and data["research_decision_date"]==RESEARCH_DAY.isoformat()
             and BACKFILL_START<=now<=BACKFILL_END):
         return "research"
+    if (type(data) is dict and set(data)==set(FIXED_REQUEST)|{"str177_decision_date"}
+            and all(type(data[k]) is type(value) and data[k]==value for k,value in FIXED_REQUEST.items())
+            and data["str177_decision_date"]==RESEARCH_DAY.isoformat()
+            and BACKFILL_START<=now<=BACKFILL_END):
+        return "research177"
     if type(data) is dict and "session_dates" in data:
         requested=data.pop("session_dates")
         if not BACKFILL_START<=now<=BACKFILL_END:
@@ -126,7 +134,7 @@ def load_request(path,now):
         raise Blocked("OWNER_REQUEST_REQUIRED")
     return request_date(data,now)
 
-def transport(research=False):
+def transport(research=False, str177=False):
     # Ship the exact reviewed parser along with this runner. The previously
     # deployed host need not contain the corresponding parser module.
     import ast
@@ -141,6 +149,42 @@ def transport(research=False):
             },
         }
     parts = ["import sys,types"]
+    if str177:
+        modules.pop("str176_expanded_upstox_research")
+        java = JAVA_EVALUATOR.read_text()
+        split = java.index("/**")
+        launcher = '''
+class ArchiveMeanReversion {
+    public static void main(String[] args) {
+        var input = new java.util.Scanner(System.in);
+        var asOf = Instant.parse(input.next());
+        var expiry = LocalDate.parse(input.next());
+        var lot = input.nextInt();
+        var rows = new java.util.ArrayList<FnoFuturesMeanReversionV1.CompletedSession>();
+        String instrument = "NSE_FO|NIFTY-" + expiry;
+        while (input.hasNext() && rows.size() < 10) {
+            var day = LocalDate.parse(input.next());
+            var observed = Instant.parse(input.next());
+            rows.add(new FnoFuturesMeanReversionV1.CompletedSession(day, true, instrument,
+                "NSE_RETAINED_EOD", new BigDecimal(input.next()), new BigDecimal(input.next()),
+                new BigDecimal(input.next()), new BigDecimal(input.next()), true, observed,
+                new BigDecimal(input.next()).longValueExact(),
+                new BigDecimal(input.next()).longValueExact(), observed));
+        }
+        if (rows.size() != 10 || input.hasNext()) throw new IllegalArgumentException("Session count");
+        var contract = new FnoFuturesMeanReversionV1.Contract(instrument, "NSE_INDEX|Nifty 50",
+            rows.get(0).sessionDate(), expiry, lot, true);
+        var thresholds = new FnoFuturesMeanReversionV1.Thresholds(
+            25, 200, 60, 100, 25, 9000, 1500, 1000, 900, 5000);
+        var decision = FnoFuturesMeanReversionV1.evaluateRetainedNseResearch(contract, rows, thresholds, asOf);
+        System.out.println(decision.status() + " " + decision.pattern() + " " + decision.reasonCode());
+    }
+}
+'''
+        java = java[:split] + launcher + java[split:].replace(
+            "public final class FnoFuturesMeanReversionV1", "final class FnoFuturesMeanReversionV1", 1
+        )
+        parts.append("STR177_JAVA="+repr(java))
     for name, selected in modules.items():
         body = Path(__file__).with_name(name + ".py").read_text()
         if selected is not None:
@@ -259,7 +303,7 @@ def host(session_date):
     report=persist(DB,day,url,raw,observed,modified,counts)
     print(MARKER+json.dumps(report,separators=(",",":"),sort_keys=True),flush=True)
 
-def retained_research():
+def read_retained_window(days):
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         raise Blocked("EXACT_PRIVATE_HOST_REQUIRED")
     private_dir(PRIVATE)
@@ -267,14 +311,14 @@ def retained_research():
         raise Blocked("PRIVATE_DB_INVALID_OR_FULL")
     from contextlib import closing
     import fno_personal_nse_december_compare as nse
-    from str176_expanded_upstox_research import signal
     nse.EXPIRY=RESEARCH_EXPIRY
     now=datetime.now(timezone.utc)
     decision_cutoff=datetime.combine(RESEARCH_DAY,dt_time(9,15),tzinfo=IST)
     window=[]
     observations=[]
+    lots=set()
     with closing(sqlite3.connect(DB.as_uri()+"?mode=ro",uri=True)) as db:
-        for day in RESEARCH_DAYS:
+        for day in days:
             rows=db.execute(
                 "SELECT original_zip,sha256,observed_at_utc FROM original_exchange_eod "
                 "WHERE session_date=? LIMIT 2",(day.isoformat(),)).fetchall()
@@ -292,11 +336,47 @@ def retained_research():
                 raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
             window.append((day,op,hi,lo,close,volume*lot,oi))
             observations.append(observed)
+            lots.add(lot)
+    if len(lots)!=1 or any(lot!=int(lot) for lot in lots):
+        raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
+    return window, observations, int(lots.pop())
+
+def retained_research():
+    from str176_expanded_upstox_research import signal
+    window, observations, _ = read_retained_window(RESEARCH_DAYS)
     outcome,reason=signal(window,RESEARCH_EXPIRY,RESEARCH_DAY,details=True)
     print(RESEARCH_MARKER+json.dumps({
         "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
         "decisionDate":RESEARCH_DAY.isoformat(),"expiry":RESEARCH_EXPIRY.isoformat(),
         "latestObservedAt":max(observations).isoformat(),"outcome":outcome,
+        "reason":reason,"certifiedStrategies":0,"orders":False
+    },sort_keys=True),flush=True)
+
+def retained_str177_research():
+    import subprocess
+    import tempfile
+
+    window, observations, lot = read_retained_window(STR177_DAYS)
+    as_of = max(observations)
+    lines = [f"{as_of.isoformat().replace('+00:00','Z')} {RESEARCH_EXPIRY} {lot}"]
+    for row, observed in zip(window, observations):
+        stamp = observed.isoformat().replace("+00:00","Z")
+        lines.append(" ".join(map(str, (row[0], stamp, *row[1:]))))
+    with tempfile.TemporaryDirectory(prefix="minttick-str177-") as temp:
+        source = Path(temp)/"ArchiveMeanReversion.java"
+        source.write_text(STR177_JAVA)
+        try:
+            result = subprocess.run(["java",str(source)],input="\n".join(lines)+"\n",
+                                    text=True,capture_output=True,timeout=30)
+        except (OSError,subprocess.TimeoutExpired):
+            raise Blocked("STR177_JAVA_UNAVAILABLE") from None
+    if result.returncode or len(result.stdout)>128:
+        raise Blocked("STR177_EVALUATOR_FAILED")
+    status,pattern,reason = result.stdout.split()
+    print(STR177_MARKER+json.dumps({
+        "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
+        "decisionDate":RESEARCH_DAY.isoformat(),"expiry":RESEARCH_EXPIRY.isoformat(),
+        "latestObservedAt":as_of.isoformat(),"outcome":status,"pattern":pattern,
         "reason":reason,"certifiedStrategies":0,"orders":False
     },sort_keys=True),flush=True)
 
@@ -320,8 +400,8 @@ def validate_report(data,expected_day):
 
 def runner():
     selection=load_request(REQUEST,datetime.now(timezone.utc))
-    if selection=="research":
-        capture_on_host(None)
+    if selection in ("research","research177"):
+        capture_on_host(None, str177=selection=="research177")
         return
     days=selection if isinstance(selection,tuple) else (selection,)
     failed=False
@@ -336,15 +416,15 @@ def runner():
     if failed:
         raise Blocked("HOST_CAPTURE_FAILED")
 
-def capture_on_host(day):
+def capture_on_host(day, str177=False):
     from verify_ssm_release import verify_aws
     from fno_private_bulk_ops import _aws
     try:verify_aws()
     except (ValueError,RuntimeError):raise Blocked("AWS_PREFLIGHT_REJECTED") from None
-    payload=base64.b64encode(gzip.compress(transport(day is None),mtime=0)).decode()
+    payload=base64.b64encode(gzip.compress(transport(day is None, str177),mtime=0)).decode()
     if len(payload)>(24000 if day is None else 20000) or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
         raise Blocked("TRANSPORT_BOUND")
-    mode="research" if day is None else "host "+day.isoformat()
+    mode=("research177" if str177 else "research") if day is None else "host "+day.isoformat()
     shell=("set -eu\numask 077\nprintf '%s' '"+payload+
            "' | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - "+mode+"\n")
     sent=_aws("ssm","send-command","--document-name","AWS-RunShellScript",
@@ -360,6 +440,24 @@ def capture_on_host(day):
         status=result.get("Status")
         if status=="Success":
             out=result.get("StandardOutputContent","")
+            if str177:
+                rows=[x[len(STR177_MARKER):] for x in out.splitlines() if x.startswith(STR177_MARKER)]
+                if len(out)>2048 or len(rows)!=1:
+                    raise Blocked("SOURCE_RECEIPT_INVALID")
+                data=json.loads(rows[0])
+                if (set(data)!={"state","sessions","decisionDate","expiry","latestObservedAt",
+                               "outcome","pattern","reason","certifiedStrategies","orders"}
+                        or data["state"]!="RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY"
+                        or data["sessions"]!=10 or data["decisionDate"]!=RESEARCH_DAY.isoformat()
+                        or data["expiry"]!=RESEARCH_EXPIRY.isoformat()
+                        or data["certifiedStrategies"]!=0 or data["orders"] is not False
+                        or data["outcome"] not in ("BLOCKED_RIGHTS","BLOCKED_DATA","NO_SIGNAL","RESEARCH_CANDIDATE")
+                        or data["pattern"] not in ("NONE","LOW_EXTREME_REBOUND","HIGH_EXTREME_PULLBACK")
+                        or not re.fullmatch(r"FUT_MR_[A-Z0-9_]+",data["reason"])
+                        or datetime.fromisoformat(data["latestObservedAt"])>datetime.now(timezone.utc)):
+                    raise Blocked("SOURCE_RECEIPT_INVALID")
+                print(STR177_MARKER+json.dumps(data,sort_keys=True),flush=True)
+                return
             if day is None:
                 from str176_expanded_upstox_research import REASON_OUTCOME
                 rows=[x[len(RESEARCH_MARKER):] for x in out.splitlines() if x.startswith(RESEARCH_MARKER)]
@@ -394,6 +492,7 @@ if __name__=="__main__":
     try:
         if len(sys.argv)==3 and sys.argv[1]=="host":host(sys.argv[2])
         elif sys.argv[1:]==["research"]:retained_research()
+        elif sys.argv[1:]==["research177"]:retained_str177_research()
         elif sys.argv[1:]==["runner"]:runner()
         else:raise Blocked("MODE_INVALID")
     except (Blocked,OSError,ValueError,KeyError,TypeError,sqlite3.Error,ImportError,RuntimeError) as exc:
