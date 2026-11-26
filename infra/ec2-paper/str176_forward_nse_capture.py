@@ -474,11 +474,13 @@ def capture_on_host(day, str177=False):
     try:verify_aws()
     except (ValueError,RuntimeError):raise Blocked("AWS_PREFLIGHT_REJECTED") from None
     payload=base64.b64encode(gzip.compress(transport(day is None, str177),mtime=0)).decode()
-    if len(payload)>(24000 if day is None else 20000) or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
+    if len(payload)>(40000 if str177 else 24000 if day is None else 20000) or not re.fullmatch(r"[A-Za-z0-9+/=]+",payload):
         raise Blocked("TRANSPORT_BOUND")
     mode=("research177" if str177 else "research") if day is None else "host "+day.isoformat()
-    shell=("set -eu\numask 077\nprintf '%s' '"+payload+
-           "' | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - "+mode+"\n")
+    chunks=[payload[i:i+6000] for i in range(0,len(payload),6000)]
+    encoded="\n".join("printf '%s' '"+chunk+"'" for chunk in chunks)
+    shell=("set -eu\numask 077\n{\n"+encoded+"\n}"
+           " | base64 -d | gzip -d | PYTHONDONTWRITEBYTECODE=1 python3 - "+mode+"\n")
     sent=_aws("ssm","send-command","--document-name","AWS-RunShellScript",
               "--instance-ids",INSTANCE,"--timeout-seconds","90",
               "--comment","Owner private NSE forward original observation no orders",
