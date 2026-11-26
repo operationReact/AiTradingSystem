@@ -143,3 +143,37 @@ evaluator + launcher; (2) push a dev commit touching only that request file (the
 `str177_decision_date: 2026-11-27` request). The receipt will then show the
 window's true post-fix outcome instead of `FUT_MR_DAILY_CHANGE_OUTLIER`. This
 session cannot push to `dev` or invoke AWS directly, so that step is owner-gated.
+
+---
+
+## 2026-11-26 (phase 2) — post-fix host result traced; broad public OOS replay
+
+PR #2065 merged to `dev` (`f98ca9d`). The owner's post-fix protected host run
+[#35](https://github.com/operationReact/AiTradingSystem/actions/runs/45875678327)
+returned `NO_SIGNAL / FUT_MR_RECOVERY_NOT_CONFIRMED`, `outlier: null` — the OI
+guard no longer blocks; the window now reaches the signal logic.
+
+**Traced and reproduced** from the authoritative public NSE bhavcopies through
+the *real compiled evaluator* (identical verdict). The 9th session (25 Nov) was
+a confirmed **+2.18σ high extreme**, but the 10th (26 Nov, 26029.40) rose
+*further above* the extreme (25937.00) instead of reverting → recovery not
+confirmed. **Correct per-spec behavior, not a defect.** All nine computable OI
+deltas reconcile exactly with NSE `ChngInOpnIntrst` (three steps > 50% guard,
+all admitted by the fix). Full trace, reconciliation table, reproduction and
+broad-replay evidence: [`infra/ec2-paper/research/`](../../infra/ec2-paper/research/README.md)
+and `str176_str177_public_oos_results.json`.
+
+**Broad OOS research replay** (14 expiry cohorts, 221 public trading days,
+unchanged rules): STR-177 produced 15 non-executable LOW_EXTREME_REBOUND
+research candidates (plus NO_SIGNAL/BLOCKED buckets); the strategy defines no
+trade, so no after-cost P&L is derivable. STR-176 produced 8 candidate trades
+(3 distinct decision events duplicated across parallel contracts); after costs
+the aggregate is +Rs 7,190 @ 20 bps but **−Rs 5,316 @ 30 bps and −Rs 30,328 @
+50 bps** — no demonstrated edge, dominated by one 2026-11-06 up-move.
+
+**This is research-only** (retrospectively downloaded public data) and does not
+satisfy the `first-observed ≤ decision` provenance gate, so the independent
+certification count is unchanged at **0/43**. Remaining acceptance artifacts
+(unchanged): an independently attested original first-known (≤ decision)
+provenance source and an independent, non-self after-cost OOS replay with
+auditable fill receipts.

@@ -1,0 +1,275 @@
+{
+ "dataset": {
+  "source": "NSE public UDiFF F&O bhavcopy (nsearchives.nseindia.in)",
+  "cohorts": 14,
+  "tradingDays": 221,
+  "expiries": [
+   "2026-01-27",
+   "2026-02-24",
+   "2026-03-30",
+   "2026-04-28",
+   "2026-05-26",
+   "2026-06-30",
+   "2026-07-28",
+   "2026-08-25",
+   "2026-09-29",
+   "2026-10-27",
+   "2026-11-23",
+   "2026-12-29",
+   "2027-01-25",
+   "2027-02-23"
+  ],
+  "note": "retrospectively downloaded public data; RESEARCH-ONLY, does NOT satisfy first-observed<=decision provenance gate"
+ },
+ "str177": {
+  "windowsEvaluated": 544,
+  "outcomeHistogram": {
+   "BLOCKED_DATA:FUT_MR_CONTRACT_INVALID": 63,
+   "BLOCKED_DATA:FUT_MR_OI_CHANGE_CONTRADICTS_EXCHANGE": 77,
+   "NO_SIGNAL:FUT_MR_EXTREME_NOT_CONFIRMED": 203,
+   "NO_SIGNAL:FUT_MR_RECOVERY_NOT_CONFIRMED": 44,
+   "NO_SIGNAL:FUT_MR_REVERSAL_OR_COST_HURDLE_NOT_MET": 31,
+   "NO_SIGNAL:FUT_MR_VOLUME_OR_OI_LOW": 111,
+   "RESEARCH_CANDIDATE:FUT_MR_LOW_EXTREME_REBOUND_OBSERVED": 15
+  },
+  "researchCandidates": [
+   {
+    "window": "2026-03-30:2026-01-12_2026-01-27",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.0499",
+    "reversalBps": "71.5307",
+    "remainingBps": "125.9469",
+    "costAdjBps": "100.9469"
+   },
+   {
+    "window": "2026-03-30:2026-02-19_2026-03-05",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-3.7851",
+    "reversalBps": "109.6617",
+    "remainingBps": "279.3078",
+    "costAdjBps": "254.3078"
+   },
+   {
+    "window": "2026-03-30:2026-02-24_2026-03-10",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.3614",
+    "reversalBps": "112.3847",
+    "remainingBps": "308.5645",
+    "costAdjBps": "283.5645"
+   },
+   {
+    "window": "2026-03-30:2026-03-02_2026-03-16",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.9178",
+    "reversalBps": "99.0978",
+    "remainingBps": "411.7191",
+    "costAdjBps": "386.7191"
+   },
+   {
+    "window": "2026-04-28:2026-02-19_2026-03-05",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-3.8036",
+    "reversalBps": "108.7264",
+    "remainingBps": "279.2933",
+    "costAdjBps": "254.2933"
+   },
+   {
+    "window": "2026-04-28:2026-02-24_2026-03-10",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.3394",
+    "reversalBps": "106.9761",
+    "remainingBps": "309.7806",
+    "costAdjBps": "284.7806"
+   },
+   {
+    "window": "2026-04-28:2026-03-02_2026-03-16",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.9330",
+    "reversalBps": "90.6962",
+    "remainingBps": "418.8026",
+    "costAdjBps": "393.8026"
+   },
+   {
+    "window": "2026-04-28:2026-03-11_2026-03-24",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-3.1439",
+    "reversalBps": "180.0143",
+    "remainingBps": "250.3318",
+    "costAdjBps": "225.3318"
+   },
+   {
+    "window": "2026-04-28:2026-03-17_2026-04-01",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.1345",
+    "reversalBps": "166.7246",
+    "remainingBps": "208.4421",
+    "costAdjBps": "183.4421"
+   },
+   {
+    "window": "2026-05-26:2026-03-02_2026-03-16",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.9209",
+    "reversalBps": "89.7313",
+    "remainingBps": "402.6984",
+    "costAdjBps": "377.6984"
+   },
+   {
+    "window": "2026-05-26:2026-03-11_2026-03-24",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-3.2034",
+    "reversalBps": "173.7734",
+    "remainingBps": "252.7303",
+    "costAdjBps": "227.7303"
+   },
+   {
+    "window": "2026-05-26:2026-03-17_2026-04-01",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.1374",
+    "reversalBps": "163.7020",
+    "remainingBps": "206.4385",
+    "costAdjBps": "181.4385"
+   },
+   {
+    "window": "2026-05-26:2026-04-30_2026-05-14",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.0841",
+    "reversalBps": "101.3110",
+    "remainingBps": "167.0721",
+    "costAdjBps": "142.0721"
+   },
+   {
+    "window": "2026-06-30:2026-04-30_2026-05-14",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.0747",
+    "reversalBps": "94.1375",
+    "remainingBps": "171.6256",
+    "costAdjBps": "146.6256"
+   },
+   {
+    "window": "2026-07-28:2026-04-30_2026-05-14",
+    "pattern": "LOW_EXTREME_REBOUND",
+    "z": "-2.1573",
+    "reversalBps": "98.5424",
+    "remainingBps": "178.4310",
+    "costAdjBps": "153.4310"
+   }
+  ],
+  "note": "RESEARCH_CANDIDATE = non-executable price-shape observation (executable=false); strategy defines no entry/exit/stop, so no after-cost trade P&L is derivable without inventing un-spec'd rules"
+ },
+ "str176": {
+  "outcomeHistogram": {
+   "BLOCKED:EXPIRY_GUARD": 41,
+   "LONG:LONG_BREAKOUT": 6,
+   "NO_SIGNAL:BOTH_VOLUME_LOW": 69,
+   "NO_SIGNAL:BREAKOUT_NOT_CONFIRMED": 239,
+   "NO_SIGNAL:VOLUME_LIFT_LOW": 148,
+   "NO_SIGNAL:VOLUME_OI_LOW": 49,
+   "SHORT:SHORT_BREAKOUT": 5,
+   "_overlap_skipped": 3
+  },
+  "candidateTrades": [
+   {
+    "expiry": "2026-03-30",
+    "decision": "2026-03-16",
+    "exitDate": "2026-03-17",
+    "dir": "SHORT",
+    "entry": "23235.10",
+    "exit": "23520.00",
+    "grossPaise": -1851850,
+    "net20bps": -2155758,
+    "net30bps": -2307712,
+    "net50bps": -2611620
+   },
+   {
+    "expiry": "2026-04-28",
+    "decision": "2026-03-16",
+    "exitDate": "2026-03-17",
+    "dir": "SHORT",
+    "entry": "23350.00",
+    "exit": "23620.00",
+    "grossPaise": -1755000,
+    "net20bps": -2060305,
+    "net30bps": -2212958,
+    "net50bps": -2518263
+   },
+   {
+    "expiry": "2026-05-26",
+    "decision": "2026-03-16",
+    "exitDate": "2026-03-17",
+    "dir": "SHORT",
+    "entry": "23475.00",
+    "exit": "23757.20",
+    "grossPaise": -1834300,
+    "net20bps": -2141309,
+    "net30bps": -2294814,
+    "net50bps": -2601823
+   },
+   {
+    "expiry": "2026-06-30",
+    "decision": "2026-05-13",
+    "exitDate": "2026-05-14",
+    "dir": "SHORT",
+    "entry": "23528.00",
+    "exit": "23625.00",
+    "grossPaise": -630500,
+    "net20bps": -936995,
+    "net30bps": -1090242,
+    "net50bps": -1396736
+   },
+   {
+    "expiry": "2026-07-28",
+    "decision": "2026-05-13",
+    "exitDate": "2026-05-14",
+    "dir": "SHORT",
+    "entry": "23600.20",
+    "exit": "23750.00",
+    "grossPaise": -973700,
+    "net20bps": -1281476,
+    "net30bps": -1435364,
+    "net50bps": -1743141
+   },
+   {
+    "expiry": "2026-11-23",
+    "decision": "2026-11-06",
+    "exitDate": "2026-11-09",
+    "dir": "LONG",
+    "entry": "24450.00",
+    "exit": "25059.00",
+    "grossPaise": 3958500,
+    "net20bps": 3636691,
+    "net30bps": 3475787,
+    "net50bps": 3153979
+   },
+   {
+    "expiry": "2026-12-29",
+    "decision": "2026-11-06",
+    "exitDate": "2026-11-09",
+    "dir": "LONG",
+    "entry": "24715.20",
+    "exit": "25123.00",
+    "grossPaise": 2650700,
+    "net20bps": 2326752,
+    "net30bps": 2164778,
+    "net50bps": 1840829
+   },
+   {
+    "expiry": "2027-01-25",
+    "decision": "2026-11-06",
+    "exitDate": "2026-11-09",
+    "dir": "LONG",
+    "entry": "24710.70",
+    "exit": "25273.20",
+    "grossPaise": 3656250,
+    "net20bps": 3331355,
+    "net30bps": 3168907,
+    "net50bps": 2844012
+   }
+  ],
+  "aggregateNetPaiseByBps": {
+   "20": 718955,
+   "30": -531618,
+   "50": -3032763
+  },
+  "note": "documented fill: enter next-session open, exit next-next-session open; cost=notional*bps; the 8 trades reduce to 3 distinct decision events (2026-03-16 short x3, 2026-05-13 short x2, 2026-11-06 long x3) duplicated across parallel contracts; no demonstrated edge; negative after costs >=30bps"
+ }
+}
