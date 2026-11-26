@@ -39,6 +39,16 @@ public class NewsEventReadRepository {
                  ORDER BY proof.observed_at ASC, r.receipt_id ASC
                  LIMIT 1
             ) src ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT a.headline_english
+                  FROM news_articles a
+                  JOIN news_analyses an ON an.article_id = a.id
+                 WHERE a.source = src.source_id AND a.url = src.source_url
+                   AND an.status = 'ANALYZED'
+                   AND an.headline_english IS NOT NULL AND btrim(an.headline_english) <> ''
+                 ORDER BY an.created_at DESC, an.id DESC
+                 LIMIT 1
+            ) translation ON TRUE
            WHERE e.first_seen_at <= CURRENT_TIMESTAMP
              AND v.effective_known_at <= CURRENT_TIMESTAMP
             """;
@@ -81,7 +91,7 @@ public class NewsEventReadRepository {
             // literal headline text, not unbounded wildcards or SQL fragments.
             String query = headlineQuery.strip().toLowerCase(Locale.ROOT)
                 .replace("#", "##").replace("%", "#%").replace("_", "#_");
-            filters.append(" AND LOWER(src.title) LIKE ? ESCAPE '#' ");
+            filters.append(" AND LOWER(COALESCE(translation.headline_english, src.title)) LIKE ? ESCAPE '#' ");
             args.add("%" + query + "%");
         }
         if (windowDays > 0) {
@@ -97,7 +107,8 @@ public class NewsEventReadRepository {
         List<EventCard> items = jdbc.query("""
                 SELECT e.event_id, e.current_version, e.event_class, e.status,
                        v.category, v.effective_known_at, v.retraction,
-                       src.title, src.source_id, src.publisher, src.source_url,
+                       COALESCE(translation.headline_english, src.title) AS title,
+                       src.source_id, src.publisher, src.source_url,
                        src.published_at, src.first_observed_at
                 """ + FROM + filterSql + """
                 ORDER BY e.first_seen_at DESC, e.event_id DESC
@@ -105,7 +116,7 @@ public class NewsEventReadRepository {
                 """, (rs, index) -> new EventCard(
                     rs.getObject("event_id", UUID.class),
                     rs.getInt("current_version"),
-                    rs.getString("title"), rs.getString("event_class"),
+                    englishProjection(rs.getString("title")), rs.getString("event_class"),
                     rs.getString("category"),
                     rs.getBoolean("retraction") ? "RETRACTED" : rs.getString("status"),
                     rs.getString("source_id"), rs.getString("publisher"),
@@ -117,6 +128,13 @@ public class NewsEventReadRepository {
                     "UNVERIFIED"),
                 pageArgs.toArray());
         return PageResponse.of(List.copyOf(items), page, size, count == null ? 0 : count);
+    }
+
+    private static String englishProjection(String value) {
+        if (value == null || value.isBlank()) return "";
+        boolean nonLatinLetters = value.codePoints().anyMatch(cp -> Character.isLetter(cp)
+            && Character.UnicodeScript.of(cp) != Character.UnicodeScript.LATIN);
+        return nonLatinLetters ? "English translation pending" : value;
     }
 
     /**

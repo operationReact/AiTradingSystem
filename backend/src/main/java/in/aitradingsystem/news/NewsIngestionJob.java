@@ -82,8 +82,10 @@ public class NewsIngestionJob {
         }
         int inserted = 0;
         int summaries = 0;
-        for (String id : sourceIds.stream().limit(NewsSource.SUPPORTED.size()).toList()) {
-            if (inserted >= maxArticlesPerRun) break;
+        List<String> activeSources = sourceIds.stream().distinct()
+            .limit(NewsSource.SUPPORTED.size()).toList();
+        int fairSourceBudget = Math.max(1, maxArticlesPerRun / Math.max(1, activeSources.size()));
+        for (String id : activeSources) {
             Instant startedAt = Instant.now();
             int fetchedForSource = 0;
             int insertedForSource = 0;
@@ -107,9 +109,10 @@ public class NewsIngestionJob {
                 byte[] body = feedClient.fetch(source, maxPayloadBytes);
                 List<String> symbols = symbolWatchlist == null ? watchlist : symbolWatchlist.current(watchlist);
                 List<NewsArticle> articles = parser.parse(body, source, symbols,
-                    Math.min(maxItemsPerSource, maxArticlesPerRun - inserted));
+                    Math.min(maxItemsPerSource, fairSourceBudget));
                 fetchedForSource = articles.size();
                 for (NewsArticle article : articles) {
+                    if (inserted >= maxArticlesPerRun) break;
                     // Recheck after network I/O: an operator may revoke permission mid-run.
                     if (!policy.permitted(id, NewsSourcePolicy.Use.INGEST, Instant.now())
                         || !policy.permitted(id, NewsSourcePolicy.Use.RETAIN, Instant.now())) {

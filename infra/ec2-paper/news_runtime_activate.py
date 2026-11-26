@@ -25,10 +25,12 @@ EXPECTED = {
     "instance_id": INSTANCE,
     "environment": "PAPER",
     "operation": "activate",
-    "source_ids": ["nse-announcements", "moneycontrol", "economic-times", "sebi"],
+    "source_ids": ["nse-announcements", "moneycontrol", "economic-times", "sebi",
+        "business-standard-markets", "business-standard-stock-market", "livemint-markets",
+        "livemint-companies", "rbi-press-releases", "rbi-notifications", "rbi-speeches"],
     "permitted_uses": ["INGEST", "RETAIN", "DISPLAY", "NLP_TRANSFER"],
-    "reviewer_ref": "owner-attestation:2026-11-25",
-    "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
+    "reviewer_ref": "owner-attestation:2026-11-26",
+    "terms_ref": "owner-attestation:personal-noncommercial-source-expansion:2026-11-26",
     "content_ttl_days": 30,
 }
 
@@ -59,14 +61,16 @@ for line in lines:
     values[k]=v
 key=values.get("APP_API_KEY","")
 if not re.fullmatch(r"[0-9a-f]{64}", key): raise SystemExit("APP_KEY_INVALID")
-sources=("nse-announcements","moneycontrol","economic-times","sebi")
+sources=("nse-announcements","moneycontrol","economic-times","sebi",
+         "business-standard-markets","business-standard-stock-market","livemint-markets",
+         "livemint-companies","rbi-press-releases","rbi-notifications","rbi-speeches")
 uses=["INGEST","RETAIN","DISPLAY","NLP_TRANSFER"]
 now=datetime.now(timezone.utc).isoformat()
 for source in sources:
     body=json.dumps({
       "licenseState":"APPROVED","permittedUses":uses,
-      "reviewerRef":"owner-attestation:2026-11-25",
-      "termsRef":"owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
+      "reviewerRef":"owner-attestation:2026-11-26",
+      "termsRef":"owner-attestation:personal-noncommercial-source-expansion:2026-11-26",
       "effectiveFrom":now,"effectiveTo":(datetime.now(timezone.utc)+timedelta(days=30)).isoformat(),"contentTtlDays":30
     }).encode()
     req=urllib.request.Request(
@@ -114,6 +118,9 @@ stage=HEALTH
 python3 - "$root/runtime.env" <<'PY'
 import datetime,json,re,sys,time,urllib.error,urllib.request
 from pathlib import Path
+sources=("nse-announcements","moneycontrol","economic-times","sebi",
+         "business-standard-markets","business-standard-stock-market","livemint-markets",
+         "livemint-companies","rbi-press-releases","rbi-notifications","rbi-speeches")
 values={}
 for line in Path(sys.argv[1]).read_text().splitlines():
     if line and not line.lstrip().startswith("#") and "=" in line:
@@ -146,8 +153,7 @@ def safe_health_snapshot(payload):
                   "rights":x.get("rightsState"),
                   "uses":[x.get(k) is True for k in
                     ("canIngest","canRetain","canDisplay","canTransferToModel")]}
-                 for x in payload.get("sources",[]) if x.get("sourceId") in
-                    ("nse-announcements","moneycontrol","economic-times","sebi")],
+                 for x in payload.get("sources",[]) if x.get("sourceId") in sources],
       "geminiAttempted":bool(model.get("lastGeminiAttemptAt")),
       "geminiOutcome":model.get("lastGeminiAttemptOutcome"),
       "lastSuccessfulAnalysisAtBySource":model.get("lastSuccessfulAnalysisAtBySource",{}),
@@ -189,7 +195,7 @@ while time.monotonic()<deadline:
     if model.get("selectedProvider")!="GEMINI":
         emit_health_snapshot(health)
         raise SystemExit("NEWS_GEMINI_NOT_SELECTED")
-    for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"):
+    for source_id in sources:
         source=next((x for x in health.get("sources",[]) if x.get("sourceId")==source_id),None)
         if not source or source.get("rightsState")!="APPROVED" or not all(
             source.get(field) is True for field in
@@ -201,9 +207,7 @@ while time.monotonic()<deadline:
         source_by_id.get(source_id,{}).get("latestStatus")=="SUCCESS"
         and source_by_id.get(source_id,{}).get("lastFinishedAt")
         and utc_instant(source_by_id[source_id]["lastFinishedAt"],"SOURCE")>=activated
-        and (source_id=="sebi" or
-             (source_by_id.get(source_id,{}).get("lastFetchedItems") or 0)>0)
-        for source_id in ("nse-announcements","moneycontrol","economic-times","sebi"))
+        for source_id in sources)
     # Feed-only batches may be fully deduplicated. In that case, the scheduler has
     # no unanalyzed row to select, so submit exactly one real, recent article through
     # the existing rights-gated analyzer and verify its persisted Gemini receipt.
@@ -217,7 +221,7 @@ while time.monotonic()<deadline:
         except (urllib.error.URLError,TimeoutError,ValueError):
             page={}
         candidates=[item for item in page.get("items",[])
-            if item.get("source") in ("nse-announcements","moneycontrol","economic-times","sebi")
+            if item.get("source") in sources
             and item.get("publishedAt") and isinstance(item.get("excerpt"),str)
             and item["excerpt"].strip()
             and utc_instant(item["publishedAt"],"ARTICLE")>=activated-datetime.timedelta(days=30)]

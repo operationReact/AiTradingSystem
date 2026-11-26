@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.config.NewsProperties;
+import in.aitradingsystem.news.analysis.NewsAnalysisParser.FinancialMetric;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -50,6 +51,8 @@ public class NewsService {
     public record AnalysisView(
         UUID id,
         String status,
+        String headlineEnglish,
+        String summaryEnglish,
         String provider,
         String model,
         String sentiment,
@@ -61,6 +64,8 @@ public class NewsService {
         BigDecimal novelty,
         Boolean contradiction,
         Boolean ambiguity,
+        String eventType,
+        List<FinancialMetric> financialMetrics,
         List<String> impactedSymbols,
         String evidence,
         List<String> risks,
@@ -161,9 +166,11 @@ public class NewsService {
 
     private static final String ARTICLE_SELECT = """
         SELECT a.id, a.source, a.title, a.url, a.excerpt, a.published_at, a.ingested_at,
-               an.id AS an_id, an.status, an.provider, an.model, an.sentiment, an.direction_score,
+               an.id AS an_id, an.status, an.headline_english, an.summary_english,
+               an.provider, an.model, an.sentiment, an.direction_score,
                an.category, an.confidence, an.materiality, an.horizon, an.novelty,
                an.contradiction, an.ambiguity, an.impacted_symbols, an.evidence, an.risks,
+               an.event_type, an.financial_metrics,
                an.provider_request_id, an.source_available_at, an.prompt_hash,
                an.request_fingerprint, an.response_fingerprint,
                an.error_code, an.latency_ms, an.created_at AS analyzed_at
@@ -179,6 +186,8 @@ public class NewsService {
             analysis = new AnalysisView(
                 rs.getObject("an_id", UUID.class),
                 rs.getString("status"),
+                rs.getString("headline_english"),
+                rs.getString("summary_english"),
                 rs.getString("provider"),
                 rs.getString("model"),
                 rs.getString("sentiment"),
@@ -190,6 +199,8 @@ public class NewsService {
                 rs.getBigDecimal("novelty"),
                 (Boolean) rs.getObject("contradiction"),
                 (Boolean) rs.getObject("ambiguity"),
+                rs.getString("event_type"),
+                readFinancialMetrics(rs.getString("financial_metrics")),
                 readList(rs.getString("impacted_symbols")),
                 rs.getString("evidence"),
                 readList(rs.getString("risks")),
@@ -283,6 +294,15 @@ public class NewsService {
         if (json == null || json.isBlank()) return List.of();
         try {
             return mapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private List<FinancialMetric> readFinancialMetrics(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return mapper.readValue(json, new TypeReference<List<FinancialMetric>>() {});
         } catch (Exception e) {
             return List.of();
         }

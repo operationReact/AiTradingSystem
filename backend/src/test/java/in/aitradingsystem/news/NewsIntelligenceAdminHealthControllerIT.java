@@ -63,6 +63,9 @@ class NewsIntelligenceAdminHealthControllerIT extends AbstractPostgresIT {
         assertThat(raw).doesNotContain("apiKey", "geminiApiKey",
             "clientSecret", "totpSecret", "errorDetail", "ssmParameterValue");
         assertThat(body.path("sources").toString()).contains(
-            "nse-announcements", "moneycontrol", "economic-times", "sebi");
+            "nse-announcements", "moneycontrol", "economic-times", "sebi",
+            "business-standard-markets", "business-standard-stock-market",
+            "livemint-markets", "livemint-companies", "rbi-press-releases",
+            "rbi-notifications", "rbi-speeches");
     }
 }

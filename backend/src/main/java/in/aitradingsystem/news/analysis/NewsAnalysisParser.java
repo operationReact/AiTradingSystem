@@ -21,6 +21,16 @@ public class NewsAnalysisParser {
     public static final Set<String> CATEGORIES =
         Set.of("EARNINGS", "REGULATORY", "MACRO", "CORPORATE_ACTION", "MANAGEMENT", "SECTOR", "OTHER");
     public static final Set<String> HORIZONS = Set.of("INTRADAY", "MULTI_DAY", "LONGER_TERM", "UNKNOWN");
+    public static final Set<String> EVENT_TYPES = Set.of("QUARTERLY_RESULTS", "ANNUAL_RESULTS",
+        "RESULT_GUIDANCE", "DIVIDEND", "SPLIT_BONUS_RIGHTS", "BUYBACK", "ORDER_WIN",
+        "MERGER_ACQUISITION", "OWNERSHIP_CHANGE", "MANAGEMENT_CHANGE", "REGULATORY",
+        "MACRO", "SECTOR", "OTHER", "UNKNOWN");
+    public static final Set<String> METRIC_NAMES = Set.of("REVENUE", "REVENUE_GROWTH_YOY_PCT",
+        "REVENUE_GROWTH_QOQ_PCT", "EBITDA", "EBITDA_MARGIN_PCT", "OPERATING_PROFIT",
+        "PAT", "PAT_GROWTH_YOY_PCT", "PAT_GROWTH_QOQ_PCT", "EPS", "DIVIDEND_PER_SHARE",
+        "ORDER_VALUE", "DEBT", "GUIDANCE_VALUE");
+    public static final Set<String> METRIC_UNITS = Set.of("INR_CRORE", "INR_LAKH",
+        "INR_PER_SHARE", "PERCENT", "COUNT", "UNKNOWN");
     private static final Pattern SYMBOL = Pattern.compile("^[A-Z0-9&-]{1,20}$");
     private static final int MAX_SYMBOLS = 10;
     private static final int MAX_RISKS = 5;
@@ -33,6 +43,8 @@ public class NewsAnalysisParser {
     }
 
     public record Result(
+        String headlineEnglish,
+        String summaryEnglish,
         String sentiment,
         BigDecimal directionScore,
         String category,
@@ -42,6 +54,8 @@ public class NewsAnalysisParser {
         BigDecimal novelty,
         boolean contradiction,
         boolean ambiguity,
+        String eventType,
+        List<FinancialMetric> financialMetrics,
         List<String> impactedSymbols,
         String evidence,
         List<String> risks) {}
@@ -80,15 +94,26 @@ public class NewsAnalysisParser {
 
         JsonNode ev = root.get("evidence");
         if (ev == null || !ev.isTextual() || ev.asText().isBlank()) throw invalid("evidence is required");
-        String evidence = truncate(ev.asText().trim(), MAX_EVIDENCE);
+        String evidenceText = ev.asText().trim();
+        if (!isEnglishText(evidenceText)) throw invalid("evidence must be English text");
+        String evidence = truncate(evidenceText, MAX_EVIDENCE);
 
         List<String> risks = new ArrayList<>();
         for (JsonNode r : arrayField(root, "risks", MAX_RISKS)) {
             if (!r.isTextual()) throw invalid("risks must contain strings");
-            risks.add(truncate(r.asText().trim(), 200));
+            String risk = r.asText().trim();
+            if (!isEnglishText(risk)) throw invalid("risks must be English text");
+            risks.add(truncate(risk, 200));
         }
 
+        String eventType = root.has("eventType") ? enumField(root, "eventType", EVENT_TYPES) : "UNKNOWN";
+        List<FinancialMetric> financialMetrics = parseFinancialMetrics(root.get("financialMetrics"));
+        String headlineEnglish = optionalEnglishText(root, "headlineEnglish", 500);
+        String summaryEnglish = optionalEnglishText(root, "summaryEnglish", 2000);
+
         return new Result(
+            headlineEnglish,
+            summaryEnglish,
             sentiment,
             directionScore,
             category,
@@ -98,10 +123,60 @@ public class NewsAnalysisParser {
             novelty,
             contradiction,
             ambiguity,
+            eventType,
+            financialMetrics,
             List.copyOf(symbols),
             evidence,
             List.copyOf(risks));
     }
+
+    private String optionalEnglishText(JsonNode root, String name, int maxLength) {
+        JsonNode node = root.get(name);
+        if (node == null || node.isNull()) return "";
+        if (!node.isTextual()) throw invalid(name + " must be text");
+        String value = node.asText().trim();
+        if (value.length() > maxLength) throw invalid(name + " is too long");
+        if (!isEnglishText(value)) throw invalid(name + " must be English text");
+        return value;
+    }
+
+    private static boolean isEnglishText(String value) {
+        return value.codePoints().noneMatch(cp -> Character.isLetter(cp)
+            && Character.UnicodeScript.of(cp) != Character.UnicodeScript.LATIN);
+    }
+
+    private List<FinancialMetric> parseFinancialMetrics(JsonNode node) {
+        if (node == null || node.isNull()) return List.of();
+        if (!node.isArray() || node.size() > 12) throw invalid("financialMetrics must be an array of at most 12 items");
+        List<FinancialMetric> metrics = new ArrayList<>();
+        for (JsonNode metric : node) {
+            if (!metric.isObject()) throw invalid("financialMetrics entries must be objects");
+            String name = enumField(metric, "name", METRIC_NAMES);
+            JsonNode number = metric.get("value");
+            if (number == null || !number.isNumber() || !Double.isFinite(number.asDouble())
+                || Math.abs(number.asDouble()) > 1_000_000_000_000_000d) {
+                throw invalid("financial metric value must be a finite, bounded number");
+            }
+            String unit = enumField(metric, "unit", METRIC_UNITS);
+            String period = textField(metric, "period", 40);
+            String evidence = textField(metric, "evidence", 240);
+            if (evidence.isBlank() || !isEnglishText(period) || !isEnglishText(evidence)) {
+                throw invalid("financial metric period and evidence must be English text");
+            }
+            metrics.add(new FinancialMetric(name, new BigDecimal(number.asText()), unit, period, evidence));
+        }
+        return List.copyOf(metrics);
+    }
+
+    private String textField(JsonNode root, String name, int maxLength) {
+        JsonNode node = root.get(name);
+        if (node == null || !node.isTextual()) throw invalid(name + " must be text");
+        String value = node.asText().trim();
+        if (value.length() > maxLength) throw invalid(name + " is too long");
+        return value;
+    }
+
+    public record FinancialMetric(String name, BigDecimal value, String unit, String period, String evidence) {}
 
     private BigDecimal boundedNumber(JsonNode root, String name, double min, double max) {
         JsonNode node = root.get(name);

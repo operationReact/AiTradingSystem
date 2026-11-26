@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import in.aitradingsystem.news.analysis.NewsAnalysisParser.FinancialMetric;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -31,6 +32,7 @@ public class NewsFeatureService {
     static final int MAX_EVIDENCE = 20;
     private static final Pattern SAFE_BASE_SYMBOL = Pattern.compile("[A-Z0-9&]{1,20}");
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
+    private static final TypeReference<List<FinancialMetric>> FINANCIAL_METRICS = new TypeReference<>() {};
 
     private final JdbcClient jdbc;
     private final ObjectMapper mapper;
@@ -83,10 +85,12 @@ public class NewsFeatureService {
                 SELECT x.article_id, x.source, x.title, x.url, x.published_at,
                        x.analysis_status, x.provider, x.model, x.sentiment, x.direction_score,
                        x.confidence, x.materiality, x.horizon, x.contradiction, x.ambiguity,
-                       x.impacted_symbols, x.evidence, x.analysis_created_at, x.category
+                       x.impacted_symbols, x.evidence, x.analysis_created_at, x.category,
+                       x.event_type, x.financial_metrics
                   FROM (
                       SELECT DISTINCT ON (a.id)
-                             a.id AS article_id, a.source, a.title, a.url, a.published_at,
+                             a.id AS article_id, a.source,
+                             COALESCE(an.headline_english, a.title) AS title, a.url, a.published_at,
                              an.status AS analysis_status, an.provider, an.model, an.sentiment,
                              an.direction_score, an.confidence, an.materiality, an.horizon,
                              an.contradiction, an.ambiguity, an.impacted_symbols, an.evidence,
@@ -142,7 +146,7 @@ public class NewsFeatureService {
                 rs.getString("impacted_symbols"),
                 rs.getString("evidence"),
                 rs.getObject("analysis_created_at", OffsetDateTime.class).toInstant(),
-                rs.getString("category")))
+                rs.getString("category"), rs.getString("event_type"), metrics(rs.getString("financial_metrics"))))
             .list();
 
         List<NewsFeaturePolicy.Evaluated> evaluated = new ArrayList<>();
@@ -166,11 +170,11 @@ public class NewsFeatureService {
             if (included && NewsEventClassifier.inBlackout(blackoutUntil, asOf)) blackoutActive = true;
             if (evidence.size() < MAX_EVIDENCE) {
                 evidence.add(new NewsContext.Evidence(
-                    row.articleId(), row.source(), row.title(), row.url(), row.publishedAt(),
+                    row.articleId(), row.source(), englishProjection(row.title()), row.url(), row.publishedAt(),
                     row.analysisCreatedAt(), validUntil,
                     row.horizon(), row.sentiment(), row.directionScore(), row.confidence(), row.materiality(),
                     row.provider(), row.model(), truncate(row.evidence(), 300), status.name(),
-                    included, eventClass.name(),
+                    included, eventClass.name(), row.eventType(), row.financialMetrics(),
                     NewsFreshness.of(row.publishedAt(), validUntil, asOf).name(), blackoutUntil));
             }
         }
@@ -201,6 +205,23 @@ public class NewsFeatureService {
         }
     }
 
+    private List<FinancialMetric> metrics(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            List<FinancialMetric> parsed = mapper.readValue(json, FINANCIAL_METRICS);
+            return parsed == null ? List.of() : List.copyOf(parsed);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private static String englishProjection(String value) {
+        if (value == null || value.isBlank()) return "";
+        boolean nonLatinLetters = value.codePoints().anyMatch(cp -> Character.isLetter(cp)
+            && Character.UnicodeScript.of(cp) != Character.UnicodeScript.LATIN);
+        return nonLatinLetters ? "English translation pending" : value;
+    }
+
     private static String truncate(String value, int max) {
         if (value == null) return null;
         return value.length() <= max ? value : value.substring(0, max);
@@ -214,5 +235,6 @@ public class NewsFeatureService {
                        String analysisStatus, String provider, String model, String sentiment,
                        BigDecimal directionScore, BigDecimal confidence, BigDecimal materiality,
                        String horizon, Boolean contradiction, Boolean ambiguity, String impactedSymbols,
-                       String evidence, Instant analysisCreatedAt, String category) {}
+                       String evidence, Instant analysisCreatedAt, String category, String eventType,
+                       List<FinancialMetric> financialMetrics) {}
 }
