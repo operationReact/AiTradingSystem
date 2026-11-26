@@ -22,6 +22,32 @@ class FnoHttpSmokeTest(unittest.TestCase):
         for bad in (None, 10, "", "CONNECTED; secret", "WRONG_STATE"):
             self.assertEqual(smoke.safe_status(bad), "UNAVAILABLE")
 
+    def test_research_probe_distinguishes_fixed_failure_categories(self):
+        self.assertEqual(smoke.research_receipt(403, None), "AUTH_DENIED")
+        self.assertEqual(smoke.research_receipt(404, None), "ROUTE_NOT_DEPLOYED")
+        self.assertEqual(smoke.research_receipt(0, None), "TRANSPORT_UNAVAILABLE")
+        self.assertEqual(smoke.research_receipt(503, None), "HTTP_5XX")
+        self.assertEqual(smoke.research_receipt(400, None), "HTTP_4XX")
+        self.assertEqual(smoke.research_receipt(200, {}), "INVALID_ROWS")
+
+    def test_research_probe_accepts_only_exact_three_safe_strategy_rows(self):
+        rows = [
+            {"strategyId": "strategy.STR-172", "status": "BLOCKED",
+             "reasonCode": "NO_DATA", "contractsResolved": 0,
+             "freshQuotes": 0, "historySessions": 0},
+            {"strategyId": "strategy.STR-170", "status": "NO_TRADE",
+             "reasonCode": "MARKET_CLOSED", "contractsResolved": 1,
+             "freshQuotes": 0, "historySessions": 0},
+            {"strategyId": "strategy.STR-171", "status": "BLOCKED",
+             "reasonCode": "NO_DATA", "contractsResolved": 0,
+             "freshQuotes": 0, "historySessions": 0},
+        ]
+        receipt = smoke.research_receipt(200, rows)
+        self.assertTrue(receipt.startswith("STR-170=NO_TRADE:MARKET_CLOSED"))
+        self.assertIn("STR-172=BLOCKED:NO_DATA", receipt)
+        self.assertEqual(smoke.research_receipt(200, rows[:2]), "INVALID_ROWS")
+        rows[2]["reasonCode"] = "Bearer secret"
+        self.assertEqual(smoke.research_receipt(200, rows), "INVALID_ROWS")
     def test_external_urls_and_queries_are_never_accepted(self):
         for path in ("https://evil.test", "//evil", "/route?x=1", "route"):
             with self.assertRaises(ValueError):
