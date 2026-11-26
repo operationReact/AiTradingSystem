@@ -42,8 +42,10 @@ Automate the repeatable intraday workflow: session context, instrument screening
 
 ## Current implementation checkpoint
 
-- ORB is integrated into the Mind PAPER cycle on `dev`; PR #2033 passed its listed CI workflows before merge.
-- Existing scanner registry contains ORB, volume breakout, moving-average reclaim, VWAP momentum, and RSI reversal evaluators. Registry presence does not mean Mind PAPER integration or performance certification.
-- Mind PAPER supports SMA, ORB, and VWAP Momentum; moving-average reclaim is under review in PR #2037; Volume Breakout is under review in PR #2038.
-- The existing MovingAverageReclaimStrategy is a 20-bar SMA reclaim, not a 20 EMA pullback. Keep its catalog mapping pending until the rule is an exact match.
-- Cash-equity intraday and F&O readiness are tracked separately.
+- `dev` currently supports five owner-initiated Mind PAPER strategy codes: SMA Trend/Volume, ORB, VWAP Momentum, 20-bar SMA Reclaim, and Volume Breakout. These are PAPER integrations, not live trading strategies.
+- This change adds RSI Reversal (`RSI_REVERSAL_V1`) as a sixth guarded PAPER strategy using the existing deterministic evaluator. It remains a research candidate without performance certification.
+- The 232-entry strategy catalog is not an intraday-only count. Catalog entries must be classified by horizon and instrument before being included in the intraday program; the F&O workstream is separate.
+- The most recent broker probe confirmed one real, timestamp-valid NSE tick. It does not prove continuous customer-facing feed coverage. The home quote panel still uses bounded HTTP polling, and the Mind cycle remains owner-initiated with no live order route.
+- Exact catalog mappings exist for SMA Cross (variant), ORB, and RSI Oversold Rebound. VWAP Momentum, MA Reclaim, and Volume Breakout must not inherit approximate catalog certification.
+- The 20-bar moving-average reclaim rule is SMA-based, not a 20 EMA pullback.
+- Still required before any LIVE consideration: point-in-time after-cost out-of-sample and walk-forward evidence; meaningful prospective PAPER observations per setup/regime; deployed runtime verification; continuous feed/client parity and outage tests; and separate broker, account, order, reconciliation, kill-switch, compliance, and release reviews.

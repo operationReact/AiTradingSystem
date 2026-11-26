@@ -390,6 +390,22 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void rsiReversalCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("SBIN-EQ", "3045");
+        seedRsiRecoveryCandles(instrumentId, "SBIN-EQ", "3045");
+        recordTick(instrumentId, "105.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+        var entry = service(progress(), SOURCE).run(owner, room, "rsi_reversal_entry01", instrumentId,
+            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
+        assertThat(entry.cycle().reasons()).contains("RSI_RECOVERED_ABOVE_30", "PRICE_RECOVERY_CONFIRMED");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
     void orbCandidateUsesTheGuardedPaperEngineAndProtectiveExitWorksWithoutNewSignal() {
         long instrumentId = instrument("RELIANCE-EQ", "2885");
         seedOrbCandles(instrumentId, "RELIANCE-EQ", "2885");
@@ -506,7 +522,30 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
             new in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy(),
             new in.aitradingsystem.scanner.VwapMomentumStrategy(),
             new in.aitradingsystem.scanner.MovingAverageReclaimStrategy(),
-            new in.aitradingsystem.scanner.VolumeBreakoutStrategy());
+            new in.aitradingsystem.scanner.VolumeBreakoutStrategy(),
+            new in.aitradingsystem.scanner.RsiReversalStrategy());
+    }
+
+    private void seedRsiRecoveryCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 21; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 9).plusMinutes(index)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            BigDecimal close = BigDecimal.valueOf(index <= 5 ? 100 : index < 20 ? 105 - index : 105);
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                       :open,:high,:low,:close,1000,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", close).param("high", close.add(new BigDecimal("0.50")))
+                .param("low", close.subtract(new BigDecimal("0.50"))).param("close", close)
+                .param("source", SOURCE).param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
     }
 
     private void seedOrbCandles(long instrumentId, String symbol, String token) {
