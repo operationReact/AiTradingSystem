@@ -1,15 +1,14 @@
 {
-  "kind": "minttick-fno43-deployed-operator-readonly-v1",
-  "account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
-  "operations": [
-    "GET /api/admin/research/fno-43/readiness",
-    "GET /api/admin/research/fno-43/source-evidence"
-  ],
-  "no_order_calls": true,
-  "no_customer_auth": true,
-  "no_market_data_export": true,
-  "no_rights_or_deployment_change": true
+    "kind": "minttick-fno43-deployed-operator-readonly-v1",
+    "account": "098859530205",
+    "region": "ap-south-1",
+    "instance_id": "i-09c01b470fb39b85a",
+    "operations": [
+        "GET /api/admin/research/fno-43/readiness",
+        "GET /api/admin/research/fno-43/source-evidence"
+    ],
+    "no_order_calls": true,
+    "no_customer_auth": true,
+    "no_market_data_export": true,
+    "no_rights_or_deployment_change": true
 }
-
