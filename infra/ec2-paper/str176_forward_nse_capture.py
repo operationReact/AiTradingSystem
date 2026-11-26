@@ -324,7 +324,7 @@ def host(session_date):
     report=persist(DB,day,url,raw,observed,modified,counts)
     print(MARKER+json.dumps(report,separators=(",",":"),sort_keys=True),flush=True)
 
-def read_retained_window(days):
+def read_retained_window(days, include_identity=False):
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         raise Blocked("EXACT_PRIVATE_HOST_REQUIRED")
     private_dir(PRIVATE)
@@ -338,6 +338,7 @@ def read_retained_window(days):
     window=[]
     observations=[]
     lots=set()
+    identities=[]
     with closing(sqlite3.connect(DB.as_uri()+"?mode=ro",uri=True)) as db:
         for day in days:
             rows=db.execute(
@@ -351,8 +352,10 @@ def read_retained_window(days):
                 raise Blocked("OBSERVATION_TIME_INVALID")
             if hashlib.sha256(raw).hexdigest()!=digest:
                 raise Blocked("ORIGINAL_SOURCE_READBACK_FAILED")
-            values=nse.parse_udiff(raw,day)[("FUT",0,day)]
-            op,hi,lo,close,volume,oi,lot=values
+            values=nse.parse_udiff(raw,day,include_identity)[("FUT",0,day)]
+            op,hi,lo,close,volume,oi,lot=values[:7]
+            if include_identity:
+                identities.append(values[7:])
             if not 0<lo<=min(op,close)<=max(op,close)<=hi or not 0<=volume*lot<=10**12 or not 0<oi<=10**12:
                 raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
             window.append((day,op,hi,lo,close,volume*lot,oi))
@@ -360,11 +363,11 @@ def read_retained_window(days):
             lots.add(lot)
     if len(lots)!=1 or any(lot!=int(lot) for lot in lots):
         raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
-    return window, observations, int(lots.pop())
+    return window, observations, int(lots.pop()), identities
 
 def retained_research():
     from str176_expanded_upstox_research import signal
-    window, observations, _ = read_retained_window(RESEARCH_DAYS)
+    window, observations, _, _ = read_retained_window(RESEARCH_DAYS)
     outcome,reason=signal(window,RESEARCH_EXPIRY,RESEARCH_DAY,details=True)
     print(RESEARCH_MARKER+json.dumps({
         "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
@@ -396,7 +399,9 @@ def retained_str177_research():
     import tempfile
     from shutil import which
 
-    window, observations, lot = read_retained_window(STR177_DAYS)
+    window, observations, lot, identities = read_retained_window(STR177_DAYS, include_identity=True)
+    if len({identity for identity,_ in identities})!=1:
+        raise Blocked("SOURCE_ARCHIVE_VALIDATION_FAILED")
     as_of = max(observations)
     lines = [f"{as_of.isoformat().replace('+00:00','Z')} {RESEARCH_EXPIRY} {lot}"]
     for row, observed in zip(window, observations):
@@ -427,14 +432,15 @@ def retained_str177_research():
     status,pattern,reason = result.stdout.split()
     outlier=None
     if reason=="FUT_MR_DAILY_CHANGE_OUTLIER":
-        for previous,current in zip(window,window[1:]):
+        for index,(previous,current) in enumerate(zip(window,window[1:]),1):
             fields=[]
             if abs(current[4]-previous[4])*10000>previous[4]*1000:
                 fields.append("CLOSE")
             if abs(current[6]-previous[6])*10000>previous[6]*5000:
                 fields.append("OPEN_INTEREST")
             if fields:
-                outlier={"previous":previous[0].isoformat(),"current":current[0].isoformat(),"fields":fields}
+                outlier={"previous":previous[0].isoformat(),"current":current[0].isoformat(),"fields":fields,
+                         "exchangeDeltaMatches":current[6]-previous[6]==identities[index][1]}
                 break
     print(STR177_MARKER+json.dumps({
         "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
@@ -522,7 +528,8 @@ def capture_on_host(day, str177=False):
                         or datetime.fromisoformat(data["latestObservedAt"])>datetime.now(timezone.utc)):
                     raise Blocked("SOURCE_RECEIPT_INVALID")
                 issue=data["outlier"]
-                if issue is not None and (type(issue) is not dict or set(issue)!={"previous","current","fields"}
+                if issue is not None and (type(issue) is not dict or set(issue)!={"previous","current","fields","exchangeDeltaMatches"}
+                    or type(issue["exchangeDeltaMatches"]) is not bool
                     or [issue["previous"],issue["current"]] not in [[a.isoformat(),b.isoformat()] for a,b in zip(STR177_DAYS,STR177_DAYS[1:])]
                     or issue["fields"] not in (["CLOSE"],["OPEN_INTEREST"],["CLOSE","OPEN_INTEREST"])):
                     raise Blocked("SOURCE_RECEIPT_INVALID")
