@@ -90,6 +90,17 @@ public final class FnoFuturesMeanReversionV1 {
                 || !rights.oiResearchVerified() || !rights.contractDiscoveryVerified()) {
             return blocked(Status.BLOCKED_RIGHTS, "FUT_MR_SOURCE_RIGHTS_NOT_VERIFIED", asOf);
         }
+        return evaluateSessions(contract, bars, thresholds, asOf, false);
+    }
+
+    /** Evaluates a forward research window from privately retained official NSE files. */
+    public static Decision evaluateRetainedNseResearch(Contract contract, List<CompletedSession> bars,
+                                                      Thresholds thresholds, Instant asOf) {
+        return evaluateSessions(contract, bars, thresholds, Objects.requireNonNull(asOf, "asOf"), true);
+    }
+
+    private static Decision evaluateSessions(Contract contract, List<CompletedSession> bars,
+                                             Thresholds thresholds, Instant asOf, boolean archiveResearch) {
         if (!validContract(contract, asOf)) {
             return blocked(Status.BLOCKED_DATA, "FUT_MR_CONTRACT_INVALID", asOf);
         }
@@ -103,7 +114,7 @@ public final class FnoFuturesMeanReversionV1 {
         BigDecimal baselineSum = BigDecimal.ZERO;
         for (int i = 0; i < bars.size(); i++) {
             CompletedSession b = bars.get(i);
-            if (!validSession(b, contract, asOf)) {
+            if (!validSession(b, contract, asOf, archiveResearch)) {
                 return blocked(Status.BLOCKED_DATA, "FUT_MR_SESSION_INVALID", asOf);
             }
             if (provider != null && !provider.equals(b.provider())) {
@@ -234,13 +245,12 @@ public final class FnoFuturesMeanReversionV1 {
         return remainingDays >= 7 && remainingDays <= 120;
     }
 
-    private static boolean validSession(CompletedSession b, Contract c, Instant asOf) {
+    private static boolean validSession(CompletedSession b, Contract c, Instant asOf, boolean archiveResearch) {
         if (b == null || !b.sessionVerified() || !b.ohlcvVerified()
                 || b.sessionDate() == null || b.sessionDate().getDayOfWeek().getValue() > 5
                 || b.sessionDate().isBefore(c.listedFrom()) || b.sessionDate().isAfter(c.expiry())
                 || !c.instrumentKey().equals(b.instrumentKey())
-                || !("UPSTOX_ANALYTICS".equals(b.provider())
-                    || "ANGEL_ONE_SMARTAPI".equals(b.provider()))
+                || !validProvider(b.provider(), archiveResearch)
                 || !positive(b.open()) || !positive(b.high())
                 || !positive(b.low()) || !positive(b.close())
                 || b.high().compareTo(b.low()) < 0
@@ -258,8 +268,13 @@ public final class FnoFuturesMeanReversionV1 {
             && !b.oiFirstObservedAt().isBefore(close)
             && !b.ohlcvFirstObservedAt().isAfter(asOf)
             && !b.oiFirstObservedAt().isAfter(asOf)
-            && !b.ohlcvFirstObservedAt().isAfter(close.plus(MAX_FIRST_OBSERVED_LAG))
-            && !b.oiFirstObservedAt().isAfter(close.plus(MAX_FIRST_OBSERVED_LAG));
+            && (archiveResearch || (!b.ohlcvFirstObservedAt().isAfter(close.plus(MAX_FIRST_OBSERVED_LAG))
+                && !b.oiFirstObservedAt().isAfter(close.plus(MAX_FIRST_OBSERVED_LAG))));
+    }
+
+    private static boolean validProvider(String provider, boolean archiveResearch) {
+        return archiveResearch ? "NSE_RETAINED_EOD".equals(provider)
+            : "UPSTOX_ANALYTICS".equals(provider) || "ANGEL_ONE_SMARTAPI".equals(provider);
     }
 
     private static LocalTime normalNonExpiringClose(LocalDate date) {
