@@ -8,6 +8,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ public class NewsIngestionJob {
     private final GeminiNewsSummarizer summarizer;
     private final NewsSourceHealthRepository sourceHealth;
     private final NewsSourcePolicyService policy;
+    private final NewsSymbolWatchlist symbolWatchlist;
     private final List<String> sourceIds;
     private final List<String> watchlist;
     private final int maxPayloadBytes;
@@ -40,12 +42,28 @@ public class NewsIngestionJob {
         @Value("${app.news.ingestion.max-articles-per-run:100}") int maxArticlesPerRun,
         @Value("${app.news.ingestion.max-summaries-per-run:20}") int maxSummariesPerRun,
         @Value("${app.news.retention-days:90}") int retentionDays) {
+        this(feedClient, parser, repository, summarizer, sourceHealth, policy, null, sourceIds, watchlist,
+            maxPayloadBytes, maxItemsPerSource, maxArticlesPerRun, maxSummariesPerRun, retentionDays);
+    }
+
+    @Autowired
+    public NewsIngestionJob(RssFeedClient feedClient, RssFeedParser parser, NewsRepository repository,
+        GeminiNewsSummarizer summarizer, NewsSourceHealthRepository sourceHealth,
+        NewsSourcePolicyService policy, NewsSymbolWatchlist symbolWatchlist,
+        @Value("${app.news.ingestion.sources:}") List<String> sourceIds,
+        @Value("${app.news.ingestion.watchlist:}") List<String> watchlist,
+        @Value("${app.news.ingestion.max-payload-bytes:1048576}") int maxPayloadBytes,
+        @Value("${app.news.ingestion.max-items-per-source:50}") int maxItemsPerSource,
+        @Value("${app.news.ingestion.max-articles-per-run:100}") int maxArticlesPerRun,
+        @Value("${app.news.ingestion.max-summaries-per-run:20}") int maxSummariesPerRun,
+        @Value("${app.news.retention-days:90}") int retentionDays) {
         this.feedClient = feedClient;
         this.parser = parser;
         this.repository = repository;
         this.summarizer = summarizer;
         this.sourceHealth = sourceHealth;
         this.policy = policy;
+        this.symbolWatchlist = symbolWatchlist;
         this.sourceIds = sourceIds;
         this.watchlist = watchlist;
         this.maxPayloadBytes = Math.max(1024, Math.min(maxPayloadBytes, 2_097_152));
@@ -87,7 +105,8 @@ public class NewsIngestionJob {
                 }
                 NewsSource source = NewsSource.byId(id);
                 byte[] body = feedClient.fetch(source, maxPayloadBytes);
-                List<NewsArticle> articles = parser.parse(body, source, watchlist,
+                List<String> symbols = symbolWatchlist == null ? watchlist : symbolWatchlist.current(watchlist);
+                List<NewsArticle> articles = parser.parse(body, source, symbols,
                     Math.min(maxItemsPerSource, maxArticlesPerRun - inserted));
                 fetchedForSource = articles.size();
                 for (NewsArticle article : articles) {

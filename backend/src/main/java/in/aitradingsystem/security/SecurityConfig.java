@@ -53,8 +53,13 @@ public class SecurityConfig {
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // V4 governance intentionally excludes the legacy OPERATOR compatibility authority.
                 .requestMatchers("/api/admin/model-governance/**").hasRole("ADMIN")
-                // News intelligence source rights, provider readiness and pipeline health
-                // are ADMIN-only even though legacy /api/admin routes allow OPERATOR.
+                // News source-policy writes use the host-local operator key through the
+                // exact-host SSM activation workflow. Health is sanitized and read-only.
+                // Provider probes and every other market-intelligence admin route remain ADMIN-only.
+                .requestMatchers("/api/admin/market-intelligence/sources/**")
+                    .hasAnyRole("ADMIN", "OPERATOR")
+                .requestMatchers(HttpMethod.GET, "/api/admin/market-intelligence/health")
+                    .hasAnyRole("ADMIN", "OPERATOR")
                 .requestMatchers("/api/admin/market-intelligence/**").hasRole("ADMIN")
                 // Admin routes must be evaluated before the generic authenticated GET rule below.
                 .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")

@@ -237,6 +237,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   bool _newsDetailOpen = false;
   String? _newsSymbolFilter;
   final List<MarketNewsArticle> _newsArticles = <MarketNewsArticle>[];
+  List<MarketNewsSource> _newsSources = const <MarketNewsSource>[];
+  String? _newsSourceHealthError;
   int _newsTotalItems = 0;
   int _newsPage = 0;
   bool _newsHasNext = false;
@@ -479,6 +481,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     setState(() {
       _newsError = null;
       if (reset) {
+        _newsSources = const <MarketNewsSource>[];
+        _newsSourceHealthError = null;
         _newsLoading = true;
         _newsLoadingMore = false;
         _newsLoaded = false;
@@ -491,6 +495,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         _newsLoadingMore = true;
       }
     });
+    if (reset) unawaited(_loadMindNewsSources(repository, generation));
     try {
       final result = await repository.articles(
         page: requestedPage,
@@ -535,6 +540,19 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         _newsLoading = false;
         _newsLoadingMore = false;
       });
+    }
+  }
+
+  Future<void> _loadMindNewsSources(MarketNewsRepository repository, int generation) async {
+    try {
+      final sources = await repository.sources();
+      if (mounted && generation == _newsRequestGeneration) {
+        setState(() { _newsSources = sources; _newsSourceHealthError = null; });
+      }
+    } catch (_) {
+      if (mounted && generation == _newsRequestGeneration) {
+        setState(() => _newsSourceHealthError = 'Source health endpoint unavailable');
+      }
     }
   }
 

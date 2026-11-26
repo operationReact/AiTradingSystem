@@ -30,6 +30,11 @@ public class RssFeedParser {
             throw new IllegalArgumentException("Invalid RSS parsing limits");
         }
         XMLInputFactory factory = XMLInputFactory.newFactory();
+        List<SymbolPattern> symbolPatterns = watchlist.stream()
+            .filter(symbol -> symbol != null && symbol.matches("[A-Z0-9&-]{1,20}"))
+            .map(symbol -> new SymbolPattern(symbol, Pattern.compile(
+                "(?<![A-Z0-9&-])" + Pattern.quote(symbol) + "(?![A-Z0-9&-])")))
+            .toList();
         setXmlProperty(factory, XMLInputFactory.SUPPORT_DTD, false);
         setXmlProperty(factory, "javax.xml.stream.isSupportingExternalEntities", false);
         XMLStreamReader reader = null;
@@ -41,7 +46,7 @@ public class RssFeedParser {
                     throw new IllegalArgumentException("DTD is not allowed in news feeds");
                 }
                 if (reader.isStartElement() && "item".equals(reader.getLocalName())) {
-                    NewsArticle article = readItem(reader, source, watchlist);
+                    NewsArticle article = readItem(reader, source, symbolPatterns);
                     if (article != null) articles.add(article);
                 }
             }
@@ -55,7 +60,7 @@ public class RssFeedParser {
         }
     }
 
-    private NewsArticle readItem(XMLStreamReader reader, NewsSource source, List<String> watchlist)
+    private NewsArticle readItem(XMLStreamReader reader, NewsSource source, List<SymbolPattern> symbolPatterns)
         throws XMLStreamException {
         String title = "";
         String link = "";
@@ -80,11 +85,9 @@ public class RssFeedParser {
         if (title.isBlank() || !NewsUrlValidator.isAllowedArticleUrl(link, source)) return null;
         Set<String> symbols = new LinkedHashSet<>();
         String searchable = (title + " " + content).toUpperCase(Locale.ROOT);
-        for (String symbol : watchlist) {
-            if (symbol != null && symbol.matches("[A-Z0-9&-]{1,20}")
-                && Pattern.compile("(?<![A-Z0-9&-])" + Pattern.quote(symbol)
-                    + "(?![A-Z0-9&-])").matcher(searchable).find()) {
-                symbols.add(symbol);
+        for (SymbolPattern entry : symbolPatterns) {
+            if (entry.pattern().matcher(searchable).find()) {
+                symbols.add(entry.symbol());
             }
         }
         return new NewsArticle(source.id(), source.publisher(), link, parseDate(pubDate), title,
@@ -102,6 +105,8 @@ public class RssFeedParser {
             try { return Instant.parse(value); } catch (DateTimeParseException ignoredAgain) { return null; }
         }
     }
+
+    private record SymbolPattern(String symbol, Pattern pattern) {}
 
     private static void setXmlProperty(XMLInputFactory factory, String name, Object value) {
         try { factory.setProperty(name, value); }

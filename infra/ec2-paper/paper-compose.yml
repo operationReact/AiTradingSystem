@@ -140,6 +140,9 @@ services:
       # explicitly opts in. Source policy separately gates ingest, retention,
       # display and Gemini transfer. Provider credentials stay backend-only.
       NEWS_INGESTION_ENABLED: ${NEWS_INGESTION_ENABLED:-false}
+      NEWS_INGESTION_INTERVAL_MS: ${NEWS_INGESTION_INTERVAL_MS:-900000}
+      NEWS_INGESTION_SOURCES: ${NEWS_INGESTION_SOURCES:-nse-announcements,moneycontrol,economic-times,sebi}
+      NEWS_WATCHLIST: ${NEWS_WATCHLIST:-RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,ITC}
       NEWS_EVENT_LEDGER_ENABLED: ${NEWS_EVENT_LEDGER_ENABLED:-false}
       NEWS_SUMMARIZATION_ENABLED: ${NEWS_SUMMARIZATION_ENABLED:-false}
       NEWS_ANALYZER_BRIDGE_ENABLED: ${NEWS_ANALYZER_BRIDGE_ENABLED:-false}

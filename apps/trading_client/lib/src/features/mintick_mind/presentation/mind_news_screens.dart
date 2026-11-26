@@ -159,30 +159,51 @@ extension _MindNewsScreens on _MindWorkspaceState {
   );
 
   Widget _newsSourceSummary() {
-    final counts=<String,int>{};
-    for(final article in _newsArticles){
-      final normalized=article.source.toLowerCase();
-      final label=normalized.contains('nse')?'NSE':normalized.contains('moneycontrol')?'Moneycontrol':normalized.contains('economic times')||normalized=='et'?'ET':normalized.contains('sebi')?'SEBI':article.source;
-      counts.update(label,(n)=>n+1,ifAbsent:()=>1);
+    const names=['NSE','Moneycontrol','Economic Times','SEBI'];
+    String key(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    MarketNewsSource? sourceFor(String name) {
+      final wanted = key(name);
+      for (final source in _newsSources) {
+        final candidate = key('${source.sourceId} ${source.publisher}');
+        if (candidate.contains(wanted) || wanted.contains(key(source.sourceId))) return source;
+      }
+      return null;
     }
-    const names=['NSE','Moneycontrol','ET','SEBI'];
+    Widget sourceCard(String name) {
+      final source = sourceFor(name);
+      final ok = source?.status.toUpperCase() == 'SUCCESS';
+      return Expanded(child: Container(
+        margin: EdgeInsets.only(right: name == names.last ? 0 : 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        decoration: BoxDecoration(color: MindPalette.panel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: MindPalette.border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: MindPalette.muted, fontSize: 9,
+              fontWeight: FontWeight.w600)),
+          Text(source == null ? '—' : '${source.fetchedItems}',
+            style: const TextStyle(color: MindPalette.text, fontSize: 16,
+              fontWeight: FontWeight.w800)),
+          Text(source == null ? 'health n/a' : ok ? 'fetched' : source.status.toLowerCase(),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: source == null ? MindPalette.muted :
+              ok ? MindPalette.mint : MindPalette.yellow, fontSize: 8)),
+        ]),
+      ));
+    }
     return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      Row(children:[const Expanded(child:Text('SOURCES IN LOADED FEED',style:TextStyle(color:MindPalette.muted,fontSize:10,fontWeight:FontWeight.w700))),
-        Text(_newsError==null?'Loaded page · up to 20':'Feed request failed',style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
+      Row(children:[const Expanded(child:Text('LATEST SOURCE CHECK',style:TextStyle(color:MindPalette.muted,fontSize:10,fontWeight:FontWeight.w700))),
+        Text(_newsSourceHealthError ?? (_newsSources.isEmpty?'Checking sources':'Backend health'),style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
       const SizedBox(height:5),
-      Row(children:[for(var i=0;i<names.length;i++) Expanded(child:Container(
-        margin:EdgeInsets.only(right:i==names.length-1?0:6),padding:const EdgeInsets.symmetric(horizontal:8,vertical:7),
-        decoration:BoxDecoration(color:MindPalette.panel,borderRadius:BorderRadius.circular(10),border:Border.all(color:MindPalette.border)),
-        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(names[i],maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:MindPalette.muted,fontSize:9,fontWeight:FontWeight.w600)),
-          Text('${counts[names[i]]??0}',style:const TextStyle(color:MindPalette.text,fontSize:16,fontWeight:FontWeight.w800)),
-          const Text('loaded',style:TextStyle(color:MindPalette.muted,fontSize:8))])))]),
+      Row(children: [for (final name in names) sourceCard(name)]),
     ]);
   }
 
   Widget _newsCompactMetrics(){
-    final analyzed=_newsArticles.where((a)=>a.analysisStatus=='ANALYZED').length;
+    final analyzed=_newsArticles.where((a)=>a.analysisStatus=='ANALYZED' && a.stockImpact?.provider?.toUpperCase()=='GEMINI').length;
     final symbols=_newsArticles.expand((a)=>a.stockImpact?.impactedSymbols??const <String>[]).toSet().length;
-    final cells=[('$_newsTotalItems','articles'),('$symbols','stocks linked'),('$analyzed','Gemini analyzed')];
+    final cells=[('$_newsTotalItems','articles'),('$symbols','stocks linked · page'),('$analyzed','Gemini · page')];
     return Container(padding:const EdgeInsets.symmetric(vertical:8),decoration:BoxDecoration(color:MindPalette.panel,borderRadius:BorderRadius.circular(11),border:Border.all(color:MindPalette.border)),
       child:Row(children:[for(var i=0;i<cells.length;i++)Expanded(child:Container(padding:const EdgeInsets.symmetric(horizontal:10),decoration:BoxDecoration(border:i==0?null:const Border(left:BorderSide(color:MindPalette.border))),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(_newsLoading&&!_newsLoaded?'—':cells[i].$1,style:const TextStyle(color:MindPalette.text,fontSize:15,fontWeight:FontWeight.w800)),Text(cells[i].$2,style:const TextStyle(color:MindPalette.muted,fontSize:9))])))]));
   }
@@ -396,6 +417,9 @@ extension _MindNewsScreens on _MindWorkspaceState {
           const MindSectionTitle(title: 'MintTick Mind analysis',
               icon: Icons.psychology_outlined),
           _newsDetailRow('Category', item.category),
+          _newsDetailRow('Analysis provider', item.article?.stockImpact?.provider ?? 'Unavailable'),
+          if (item.article?.stockImpact?.model != null)
+            _newsDetailRow('Model', item.article!.stockImpact!.model!),
           _newsDetailRow('Tone', item.impact),
           _newsDetailRow('Confidence', item.article?.stockImpact?.confidence == null
               ? 'Unavailable' : '${item.confidence}%'),
@@ -505,20 +529,14 @@ extension _MindNewsScreens on _MindWorkspaceState {
 
   Widget _newsCoverage() {
     if (!_newsDemoMode) {
-      final counts = <String, int>{};
-      for (final article in _newsArticles) {
-        counts.update(article.source, (value) => value + 1,
-            ifAbsent: () => 1);
-      }
-      final publishers = counts.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children:[Expanded(child:Text('$_newsTotalItems articles match · ${_newsArticles.length} loaded',style:const TextStyle(color:MindPalette.text,fontSize:12,fontWeight:FontWeight.w700))),const MindTag('FEED DATA')]),
+          Row(children:[Expanded(child:Text('Source fetch health · ${_newsSources.length} publishers',style:const TextStyle(color:MindPalette.text,fontSize:12,fontWeight:FontWeight.w700))),const MindTag('BACKEND DATA')]),
           const SizedBox(height:6),
-          for(final publisher in publishers) Container(padding:const EdgeInsets.symmetric(vertical:8),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:MindPalette.border))),child:Row(children:[const Icon(Icons.circle,size:7,color:MindPalette.mint),const SizedBox(width:8),Expanded(child:Text(publisher.key,style:const TextStyle(color:MindPalette.text,fontSize:11,fontWeight:FontWeight.w700))),Text('${publisher.value} loaded',style:const TextStyle(color:MindPalette.muted,fontSize:10))])),
-          if(publishers.isEmpty) const Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('No publisher records have loaded yet.',style:TextStyle(color:MindPalette.muted,fontSize:11))),
+          if (_newsSourceHealthError != null) Text(_newsSourceHealthError!,style:const TextStyle(color:MindPalette.yellow,fontSize:10)),
+          for(final source in _newsSources) Container(padding:const EdgeInsets.symmetric(vertical:8),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:MindPalette.border))),child:Row(children:[Icon(Icons.circle,size:7,color:source.status=='SUCCESS'?MindPalette.mint:MindPalette.yellow),const SizedBox(width:8),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(source.publisher,style:const TextStyle(color:MindPalette.text,fontSize:11,fontWeight:FontWeight.w700)),Text(source.finishedAt==null?'Last run: never': 'Last run: ${_mindNewsTimestamp(source.finishedAt!)}',style:const TextStyle(color:MindPalette.muted,fontSize:9))])),Text('${source.status} · ${source.fetchedItems} fetched · ${source.insertedItems} new',style:const TextStyle(color:MindPalette.muted,fontSize:9))])),
+          if(_newsSources.isEmpty && _newsSourceHealthError==null) const Padding(padding:EdgeInsets.symmetric(vertical:12),child:Text('Waiting for source health data.',style:TextStyle(color:MindPalette.muted,fontSize:11))),
           const SizedBox(height:8),
-          const Text('This customer API provides article and stored Gemini analysis records. Publisher fetch health, retries and full universe coverage require the admin diagnostics endpoint.',style:TextStyle(color:MindPalette.yellow,fontSize:10,height:1.4)),
+          const Text('A successful fetch confirms retrieval, not full market coverage or analysis. Analysis remains research context only and does not create or authorize orders.',style:TextStyle(color:MindPalette.yellow,fontSize:10,height:1.4)),
           if (_newsError != null) _newsUnavailable(_newsError!),
         ]);
     }

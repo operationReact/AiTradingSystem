@@ -82,6 +82,8 @@ class MarketNewsImpact {
     this.contradiction,
     this.ambiguity,
     this.analyzedAt,
+    this.provider,
+    this.model,
   });
 
   final String sentiment;
@@ -96,6 +98,8 @@ class MarketNewsImpact {
   final bool? contradiction;
   final bool? ambiguity;
   final DateTime? analyzedAt;
+  final String? provider;
+  final String? model;
 
   factory MarketNewsImpact.fromJson(Object? raw) {
     if (raw is! Map<String, dynamic>) {
@@ -139,6 +143,8 @@ class MarketNewsImpact {
       contradiction: contradiction as bool?,
       ambiguity: ambiguity as bool?,
       analyzedAt: analyzedAt?.toUtc(),
+      provider: raw['provider'] as String?,
+      model: raw['model'] as String?,
     );
   }
 
@@ -191,6 +197,37 @@ class MarketNewsPage {
 
 abstract interface class MarketNewsRepository {
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol});
+  Future<List<MarketNewsSource>> sources();
+}
+
+class MarketNewsSource {
+  const MarketNewsSource({required this.sourceId, required this.publisher,
+    required this.status, required this.fetchedItems, required this.insertedItems,
+    this.finishedAt, this.ageSeconds, this.errorCode});
+  final String sourceId, publisher, status;
+  final int fetchedItems, insertedItems;
+  final DateTime? finishedAt;
+  final int? ageSeconds;
+  final String? errorCode;
+
+  factory MarketNewsSource.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['sourceId'] is! String ||
+        raw['publisher'] is! String || raw['status'] is! String ||
+        raw['fetchedItems'] is! int || raw['insertedItems'] is! int) {
+      throw const FormatException('Invalid news source health');
+    }
+    final finished = raw['finishedAt'] == null ? null : DateTime.tryParse('${raw['finishedAt']}');
+    final age = raw['ageSeconds'];
+    if (age != null && age is! int || (raw['finishedAt'] != null && finished == null) ||
+        (age is int && age < 0)) {
+      throw const FormatException('Invalid news source health fields');
+    }
+    return MarketNewsSource(sourceId: raw['sourceId'] as String,
+      publisher: raw['publisher'] as String, status: raw['status'] as String,
+      fetchedItems: raw['fetchedItems'] as int, insertedItems: raw['insertedItems'] as int,
+      finishedAt: finished?.toUtc(), ageSeconds: age as int?,
+      errorCode: raw['errorCode'] as String?);
+  }
 }
 
 /// Customer-scoped endpoint. Flutter never contacts publisher feeds or Gemini directly.
@@ -213,5 +250,12 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
     final response = await api.getJson('/api/customer/market-intelligence/articles',
         query: {'page': '$page', 'size': '$size', if (normalized != null && normalized.isNotEmpty) 'symbol': normalized});
     return MarketNewsPage.fromJson(response);
+  }
+
+  @override
+  Future<List<MarketNewsSource>> sources() async {
+    final response = await api.getJson('/api/customer/market-intelligence/sources');
+    if (response is! List) throw const FormatException('Invalid news source health response');
+    return List.unmodifiable(response.map(MarketNewsSource.fromJson));
   }
 }

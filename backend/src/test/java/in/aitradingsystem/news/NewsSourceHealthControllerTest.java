@@ -29,7 +29,7 @@ class NewsSourceHealthControllerTest {
             new NewsSourceHealthController(repository).health();
 
         assertThat(health).extracting(NewsSourceHealthController.SourceHealthView::source)
-            .containsExactly("moneycontrol", "economic-times", "sebi");
+            .containsExactly("nse-announcements", "moneycontrol", "economic-times", "sebi");
         var sebi = health.stream().filter(row -> row.source().equals("sebi")).findFirst().orElseThrow();
         assertThat(sebi.status()).isEqualTo("SUCCESS");
         assertThat(sebi.fetchedItems()).isEqualTo(8);
