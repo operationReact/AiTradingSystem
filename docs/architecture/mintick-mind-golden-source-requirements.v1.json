@@ -644,6 +644,20 @@
       "fallback_policy": "No simulated P&L/model probabilities in connected mode; unavailable/stale unless independently verified"
     },
     {
+      "id": "news-analyzer",
+      "title": "News Analyzer",
+      "group": "AGENTS",
+      "required_sources": [
+        "news_events"
+      ],
+      "optional_sources": [
+        "security_identity"
+      ],
+      "outputs": "Customer-authorized publisher articles, returned analysis, stock mapping and visible evidence",
+      "ui_data_state": "authenticated_customer_api_with_demo_fallback_only_when_unconfigured",
+      "fallback_policy": "Do not substitute demo data after API errors; clearly mark customer API limitations and keep news research-only"
+    },
+    {
       "id": "culprit-catcher",
       "title": "Culprit Catcher",
       "group": "AGENTS",
@@ -2060,7 +2074,7 @@
     "Freqtrade"
   ],
   "counts": {
-    "routes": 43,
+    "routes": 44,
     "models": 18,
     "strategy_families": 20,
     "strategy_templates": 232

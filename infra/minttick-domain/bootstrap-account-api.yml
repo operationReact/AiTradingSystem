@@ -600,7 +600,6 @@ Resources:
               except (ValueError, UnicodeError):
                   return reply(502, {"error": "INVALID_UPSTREAM_RESPONSE"})
               return reply(status, decoded)
-
   AccountHttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:

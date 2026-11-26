@@ -29,8 +29,9 @@ REQUEST=Path("infra/ec2-paper/requests/fno-owner-private-bulk-start.json")
 MARKER="MINTTICK_FNO_PRIVATE_BULK_START_V1:"
 PINNED_MODULES=("fno_history_backfill.py", "upstox_fno_backfill_adapters.py")
 MAX_MODULE_PACKAGE=12000
-STATES={"STARTED","ALREADY_RUNNING","OWNER_SCOPE_REJECTED",
-        "HOST_REJECTED","CODE_REJECTED","SMOKE_FAILED","UNIT_REJECTED"}
+STATES={"STARTED","ALREADY_RUNNING","CACHE_ALREADY_COMPLETE",
+        "OWNER_SCOPE_REJECTED","HOST_REJECTED","CODE_REJECTED",
+        "SMOKE_FAILED","UNIT_REJECTED"}
 SAFE_SMOKE_FAILURES=frozenset({
     "FNO_DATA_RETENTION_NOT_AUTHORIZED", "FNO_DISCOVERY_AUTH_REJECTED",
     "FNO_DISCOVERY_INVALID_JSON", "FNO_DISCOVERY_INVALID_RESPONSE",
@@ -63,9 +64,13 @@ SAFE_SMOKE_FAILURES=frozenset({
     "INVALID_FNO_STATE", "INVALID_FNO_RECEIPT", "INVALID_RATE_LIMIT",
     "ORIGINAL_HTTP_RECEIPT_SINK_REQUIRED",
     "SMOKE_NO_VALID_ROWS", "SMOKE_UNEXPECTED_OUTCOME", "SMOKE_OUTPUT_INVALID",
+    "SMOKE_OUTPUT_MISSING", "SMOKE_COUNTERS_INVALID",
     "WORKER_DEPENDENCY_UNAVAILABLE", "WORKER_IMPORT_FAILED",
     "WORKER_SOURCE_INCOMPATIBLE", "WORKER_RUNTIME_EXCEPTION",
-    "WORKER_TRACEBACK_UNCLASSIFIED",
+    "WORKER_TRACEBACK_UNCLASSIFIED", "WORKER_EXCEPTION_GATE_CLOSED",
+    "WORKER_EXCEPTION_RUNTIME_ERROR", "WORKER_EXCEPTION_VALIDATION_ERROR",
+    "WORKER_EXCEPTION_KEY_ERROR", "WORKER_EXCEPTION_TYPE_ERROR",
+    "WORKER_EXCEPTION_ATTRIBUTE_ERROR",
 })
 
 def smoke_failure(stdout,stderr=""):
@@ -74,8 +79,15 @@ def smoke_failure(stdout,stderr=""):
     # A noisy child must never be copied into the workflow log. Only inspect
     # bounded tails for exact fixed markers and exception class names.
     stdout=stdout[-4096:]
+    if not stdout.strip() and not (isinstance(stderr,str) and stderr):
+        return "SMOKE_OUTPUT_MISSING"
     found=re.findall(r"^FNO_BULK_ERROR:([A-Z0-9_]{1,64})$",stdout,re.M)
-    if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
+    generic={
+        "UNCLASSIFIED_GATE_BLOCK", "UNCLASSIFIED_RUNTIME_FAILURE",
+        "UNCLASSIFIED_VALIDATION_FAILURE", "UNCLASSIFIED_PROVIDER_SCHEMA_FAILURE",
+        "UNCLASSIFIED_SAFE_FAILURE",
+    }
+    if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES and found[0] not in generic:
         return found[0]
     outcomes=re.findall(r"^FNO_BULK_SMOKE:([A-Z_]+);complete=(\d+);"
                         r"total=(\d+);rows=(\d+);calls=(\d+)$",stdout,re.M)
@@ -97,6 +109,8 @@ def smoke_failure(stdout,stderr=""):
         if "Traceback (most recent call last)" in stderr:
             return "WORKER_RUNTIME_EXCEPTION"
         return "WORKER_TRACEBACK_UNCLASSIFIED"
+    if len(found)==1 and found[0] in generic:
+        return found[0]
     return "UNCLASSIFIED_SAFE_FAILURE"
 
 def expected_request():
@@ -172,13 +186,47 @@ def parse_receipt(raw):
         return None
     return values[0],*nums
 
+def parse_complete_cache(raw):
+    """Accept only the worker's exact, complete existing-cache marker."""
+    if not isinstance(raw,str) or len(raw)>8000:
+        return None
+    found=re.findall(
+        r"^FNO_BULK_SMOKE:CACHE_ALREADY_COMPLETE;complete=(\d{1,5});"
+        r"total=(\d{1,5});rows=(\d{1,5});calls=(\d{1,2})$",
+        raw.replace("\r\n","\n"),re.M)
+    if len(found)!=1:
+        return None
+    complete,total,rows,calls=map(int,found[0])
+    if not (0<complete==total<=20000 and rows>0 and calls==0):
+        return None
+    return complete,total,rows,calls
+
 def parse_smoke_failure(raw):
     if not isinstance(raw,str) or len(raw)>8000:
         return "UNCLASSIFIED_SAFE_FAILURE"
+    raw=raw.replace("\r\n","\n")
     found=re.findall(r"^FNO_BULK_SMOKE_FAILURE:([A-Z0-9_]{1,64})$",raw,re.M)
     if len(found)==1 and found[0] in SAFE_SMOKE_FAILURES:
         return found[0]
     return "UNCLASSIFIED_SAFE_FAILURE"
+
+def parse_smoke_counters(raw):
+    """Read only bounded counters from the fixed smoke diagnostic marker."""
+    if not isinstance(raw,str) or len(raw)>8000:
+        return None
+    found=re.findall(
+        r"^FNO_BULK_SMOKE_COUNTERS:complete=(\d{1,5});total=(\d{1,5});"
+        r"rows=(\d{1,5});calls=(\d{1,3})$",raw,re.M)
+    if len(found)!=1:
+        return None
+    try:
+        values=tuple(int(x) for x in found[0])
+    except ValueError:
+        return None
+    complete,total,rows,calls=values
+    if any(x>20000 for x in values[:3]) or calls>12:
+        return None
+    return values
 
 def _call(*args,timeout=45,capture_stderr=False):
     try:
@@ -275,14 +323,26 @@ def host():
         print(receipt("SMOKE_FAILED"),flush=True)
         print("FNO_BULK_SMOKE_FAILURE:"+safe_cause,flush=True)
         return 2
+    cache=parse_complete_cache(smoke.stdout)
+    if cache:
+        complete,total,rows,calls=cache
+        print(receipt("CACHE_ALREADY_COMPLETE",complete,total,rows),flush=True)
+        print("FNO_BULK_CACHE_REUSE:smokeCalls=0",flush=True)
+        return 0
     m=re.search(r"FNO_BULK_SMOKE:FIRST_BATCH_COMPLETE;complete=(\d+);"
                 r"total=(\d+);rows=(\d+);calls=(\d+)",smoke.stdout)
     if not m:
+        safe_cause=smoke_failure(smoke.stdout,smoke.stderr)
         print(receipt("SMOKE_FAILED"),flush=True)
+        print("FNO_BULK_SMOKE_FAILURE:"+safe_cause,flush=True)
         return 2
     done,total,rows,calls=map(int,m.groups())
     if not (0<done<=total<=20000 and rows>0 and 0<calls<=12):
         print(receipt("SMOKE_FAILED"),flush=True)
+        print("FNO_BULK_SMOKE_FAILURE:SMOKE_COUNTERS_INVALID",flush=True)
+        if all(0<=value<=20000 for value in (done,total,rows)) and 0<=calls<=12:
+            print(f"FNO_BULK_SMOKE_COUNTERS:complete={done};total={total};"
+                  f"rows={rows};calls={calls}",flush=True)
         return 2
     unit=Path(UNIT)
     if unit.is_symlink() or (unit.exists() and not unit.is_file()):
@@ -380,14 +440,20 @@ def runner():
             if result is None:
                 raise SystemExit("FNO_BULK_NO_SAFE_RECEIPT")
             code,done,total,rows=result
-            failure=("; cause="+parse_smoke_failure(stdout)
-                     if code=="SMOKE_FAILED" else "")
+            cause=parse_smoke_failure(stdout) if code=="SMOKE_FAILED" else None
+            failure=("; cause="+cause if cause else "")
+            counters=parse_smoke_counters(stdout) if cause=="SMOKE_COUNTERS_INVALID" else None
+            counter_text=(
+                f"; smokeComplete={counters[0]}; smokePlanned={counters[1]}; "
+                f"smokeRows={counters[2]}; smokeCalls={counters[3]}"
+                if counters else "")
             print(f"FNO PRIVATE BULK: state={code}; finished={done}; "
                   f"planned={total}; persistedRows={rows}; "
-                  "singleService=true; redistribution=false"+failure+"; "
+                  "singleService=true; redistribution=false"+failure+counter_text+"; "
                   "ownerScopeExpiry=2026-11-28; providerLicenceUnverified=true",
                   flush=True)
-            if state!="Success" or code not in {"STARTED","ALREADY_RUNNING"}:
+            if state!="Success" or code not in {
+                    "STARTED","ALREADY_RUNNING","CACHE_ALREADY_COMPLETE"}:
                 raise SystemExit("FNO_BULK_HOST_START_FAILED")
             return
         if state not in {"Pending","InProgress","Delayed"}:

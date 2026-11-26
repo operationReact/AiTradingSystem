@@ -219,7 +219,9 @@ class MarketNewsSource {
     final finished = raw['finishedAt'] == null ? null : DateTime.tryParse('${raw['finishedAt']}');
     final age = raw['ageSeconds'];
     if (age != null && age is! int || (raw['finishedAt'] != null && finished == null) ||
-        (age is int && age < 0)) throw const FormatException('Invalid news source health fields');
+        (age is int && age < 0)) {
+      throw const FormatException('Invalid news source health fields');
+    }
     return MarketNewsSource(sourceId: raw['sourceId'] as String,
       publisher: raw['publisher'] as String, status: raw['status'] as String,
       fetchedItems: raw['fetchedItems'] as int, insertedItems: raw['insertedItems'] as int,

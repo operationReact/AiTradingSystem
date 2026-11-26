@@ -7,7 +7,7 @@
   "#924"
  ],
  "denominators": {
-  "SCREEN": 43,
+  "SCREEN": 44,
   "STRATEGY": 232,
   "MODEL": 18
  },
@@ -313,6 +313,35 @@
    "kind": "SCREEN",
    "name": "Daily Market Verdict",
    "status": "DATA_BLOCKED"
+  },
+  {
+   "parentId": null,
+   "group": "AGENTS",
+   "owner": "Claude",
+   "blockerCode": null,
+   "requiredInputs": [],
+   "dependsOn": [],
+   "implementation": null,
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/market-intelligence/articles"
+    }
+   ],
+   "missing": [
+    "Customer-visible source health and ingestion event stream",
+    "Full-universe source coverage evidence",
+    "Flutter web/Android/iOS runtime evidence"
+   ],
+   "note": "Customer-authorized publisher articles and stored analysis fields use the authenticated read-only news API. Internal ingestion diagnostics remain admin-only; the surface is research-only.",
+   "id": "screen.news-analyzer",
+   "kind": "SCREEN",
+   "name": "News Analyzer",
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,
@@ -1201,7 +1230,7 @@
    "parentId": "family.Trend Following",
    "group": "Trend Following",
    "owner": "Claude",
-   "blockerCode": "NOT_WIRED_TO_PAPER",
+   "blockerCode": "LIVE_NOT_AUTHORIZED",
    "requiredInputs": [
     "OHLCV candles"
    ],
@@ -1228,14 +1257,27 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/strategy/StrategyQualityGateTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "apps/trading_client/test/mind_paper_cycle_test.dart"
     }
    ],
    "missing": [
-    "Connect to Mind strategy-to-PAPER orchestration",
-    "Backtest + walk-forward evidence per strategy",
-    "Runtime evaluation evidence on deployed revision"
+    "Independent positive after-cost out-of-sample and walk-forward evidence with verified point-in-time inputs",
+    "Prospective PAPER cohort across relevant regimes with enough closed trades for meaningful uncertainty estimates",
+    "Runtime evaluation evidence on deployed revision",
+    "Separate LIVE activation approval and broker, account, order, reconciliation, and kill-switch safety gates"
    ],
-   "note": "5/20 SMA trend with volume confirmation; also the MA walk-forward research subject.",
+   "note": "SMA Trend/Volume variant wired to owner-initiated guarded virtual PAPER; no LIVE order authority or performance certification.",
    "id": "strategy.STR-001",
    "kind": "STRATEGY",
    "name": "SMA Cross",
@@ -1757,7 +1799,7 @@
    "parentId": "family.Breakout",
    "group": "Breakout",
    "owner": "Claude",
-   "blockerCode": "NOT_WIRED_TO_PAPER",
+   "blockerCode": "LIVE_NOT_AUTHORIZED",
    "requiredInputs": [
     "OHLCV candles"
    ],
@@ -1780,14 +1822,27 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/scanner/StrategyRegistryTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "apps/trading_client/test/mind_paper_cycle_test.dart"
     }
    ],
    "missing": [
-    "Connect to Mind strategy-to-PAPER orchestration",
-    "Backtest + walk-forward evidence per strategy",
-    "Runtime evaluation evidence on deployed revision"
+    "Independent positive after-cost out-of-sample evidence with verified inputs",
+    "Prospective PAPER cohort with at least 30 closed trades",
+    "Runtime evaluation evidence on deployed revision",
+    "Separate LIVE activation approval and all broker execution safety gates"
    ],
-   "note": "09:15-09:30 IST opening range breakout with volume confirmation (scanner registry).",
+   "note": "09:15-09:30 IST opening range breakout with volume confirmation; connected to guarded virtual PAPER only. No LIVE execution authorization.",
    "id": "strategy.STR-024",
    "kind": "STRATEGY",
    "name": "Opening Range Breakout",
@@ -2053,7 +2108,7 @@
    "parentId": "family.Mean Reversion",
    "group": "Mean Reversion",
    "owner": "Claude",
-   "blockerCode": "NOT_WIRED_TO_PAPER",
+   "blockerCode": "LIVE_NOT_AUTHORIZED",
    "requiredInputs": [
     "OHLCV candles"
    ],
@@ -2072,14 +2127,27 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/scanner/ExtendedScannerStrategiesTest.java"
+    },
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "apps/trading_client/test/mind_paper_cycle_test.dart"
     }
    ],
    "missing": [
-    "Connect to Mind strategy-to-PAPER orchestration",
-    "Backtest + walk-forward evidence per strategy",
-    "Runtime evaluation evidence on deployed revision"
+    "Independent positive after-cost out-of-sample and walk-forward evidence with verified point-in-time inputs",
+    "Prospective PAPER cohort across relevant regimes with enough closed trades for meaningful uncertainty estimates",
+    "Runtime evaluation evidence on deployed revision",
+    "Separate LIVE activation approval and broker, account, order, reconciliation, and kill-switch safety gates"
    ],
-   "note": "Prior RSI < 30 recovering above 30 with price confirmation (scanner registry).",
+   "note": "RSI recovery above 30 with price confirmation, wired to owner-initiated guarded virtual PAPER; research candidate only, no LIVE authority or performance certification.",
    "id": "strategy.STR-036",
    "kind": "STRATEGY",
    "name": "RSI Oversold Rebound",

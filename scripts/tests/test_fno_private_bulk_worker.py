@@ -40,10 +40,26 @@ class BulkTest(unittest.TestCase):
         self.assertEqual("PRIVATE_DB_ERROR",p.safe_failure_reason(sqlite3.Error("/private/path")))
         self.assertEqual("UPSTOX_EXPIRED_HISTORY_NETWORK_ERROR",
                          p.safe_failure_reason(OSError("UPSTOX_EXPIRED_HISTORY_NETWORK_ERROR")))
-        self.assertEqual("UNCLASSIFIED_RUNTIME_FAILURE",
+        self.assertEqual("WORKER_EXCEPTION_RUNTIME_ERROR",
                          p.safe_failure_reason(RuntimeError("secret token")))
-        self.assertEqual("UNCLASSIFIED_VALIDATION_FAILURE",
+        self.assertEqual("WORKER_EXCEPTION_VALIDATION_ERROR",
                          p.safe_failure_reason(ValueError("secret token")))
+        self.assertEqual("WORKER_EXCEPTION_GATE_CLOSED",
+                         p.safe_failure_reason(core.GateClosed("secret token")))
+        self.assertEqual("WORKER_EXCEPTION_KEY_ERROR",
+                         p.safe_failure_reason(KeyError("secret token")))
+        self.assertEqual("WORKER_EXCEPTION_TYPE_ERROR",
+                         p.safe_failure_reason(TypeError("secret token")))
+        self.assertEqual("WORKER_EXCEPTION_ATTRIBUTE_ERROR",
+                         p.safe_failure_reason(AttributeError("secret token")))
+        class ProviderRuntimeError(RuntimeError):
+            pass
+        class ProviderSchemaError(TypeError):
+            pass
+        self.assertEqual("WORKER_EXCEPTION_RUNTIME_ERROR",
+                         p.safe_failure_reason(ProviderRuntimeError("private payload")))
+        self.assertEqual("WORKER_EXCEPTION_TYPE_ERROR",
+                         p.safe_failure_reason(ProviderSchemaError("private payload")))
 
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()

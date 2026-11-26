@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -126,6 +127,17 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         assertThat(result.get("availableCashPaise").isIntegralNumber()).isTrue();
         assertThat(result.get("realizedPnlPaise").isIntegralNumber()).isTrue();
 
+        var orbRun = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .post("/api/customer/trading-rooms/" + room + "/mind/paper-cycles").with(customerJwt)
+                .header("Idempotency-Key", "http_orb_cycle_01").contentType("application/json")
+                .content("{\"instrumentId\":" + instrument
+                    + ",\"interval\":\"FIVE_MINUTE\",\"strategyCode\":\"OPENING_RANGE_BREAKOUT_V1\"}"))
+            .andReturn().getResponse();
+        assertThat(orbRun.getStatus()).as(orbRun.getContentAsString()).isEqualTo(200);
+        var orbCycle = json.readTree(orbRun.getContentAsString()).get("cycle");
+        assertThat(orbCycle.get("strategyCode").asText()).isEqualTo(MindPaperCycleService.ORB_STRATEGY_CODE);
+        assertThat(orbCycle.get("liveOrder").asBoolean()).isFalse();
+
         var portfolioBody = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                 .get("/api/customer/mind/v1/paper-portfolio").with(customerJwt)).andReturn().getResponse();
         assertThat(portfolioBody.getStatus()).isEqualTo(200);
@@ -205,6 +217,14 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         var service = service(progress(), SOURCE);
         assertThatThrownBy(() -> service.run(owner, room, "intraday_daily_01",
                 instrument, HistoricalCandleInterval.ONE_DAY))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not allowed by room focus");
+        assertThatThrownBy(() -> service.run(owner, room, "sma_one_minute_01",
+                instrument, HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.STRATEGY_CODE))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not allowed by room focus");
+        assertThatThrownBy(() -> service.run(owner, room, "orb_one_day_001",
+                instrument, HistoricalCandleInterval.ONE_DAY, MindPaperCycleService.ORB_STRATEGY_CODE))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("not allowed by room focus");
         jdbc.sql("UPDATE customer_trading_room SET focus='HELP_ME_CHOOSE' WHERE id=:room")
@@ -309,6 +329,135 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void volumeBreakoutCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("SBIN-EQ", "3045");
+        seedVolumeBreakoutCandles(instrumentId, "SBIN-EQ", "3045");
+        recordTick(instrumentId, "101.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+
+        var entry = service(progress(), SOURCE).run(owner, room, "volume_breakout_entry01", instrumentId,
+            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.VOLUME_BREAKOUT_STRATEGY_CODE);
+
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.VOLUME_BREAKOUT_STRATEGY_CODE);
+        assertThat(entry.cycle().signalAction()).isEqualTo("BUY");
+        assertThat(entry.cycle().reasons()).contains("CLOSE_ABOVE_PRIOR_20_BAR_HIGH",
+            "VOLUME_AT_LEAST_1_5X_AVERAGE");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(entry.order()).isNotNull();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
+    void movingAverageReclaimCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("SBIN-AF", "11128");
+        seedMovingAverageReclaimCandles(instrumentId, "SBIN-AF", "11128");
+        recordTick(instrumentId, "103.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+
+        var entry = service(progress(), SOURCE).run(owner, room, "ma_reclaim_entry01", instrumentId,
+            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.MA_RECLAIM_STRATEGY_CODE);
+
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.MA_RECLAIM_STRATEGY_CODE);
+        assertThat(entry.cycle().signalAction()).isEqualTo("BUY");
+        assertThat(entry.cycle().reasons()).contains("LATEST_CLOSE_RECLAIMED_SLOW_SMA", "FAST_SMA_ABOVE_SLOW_SMA");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(entry.order()).isNotNull();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
+    void vwapMomentumCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("RELIANCE-EQ", "2885");
+        seedVwapCandles(instrumentId, "RELIANCE-EQ", "2885");
+        recordTick(instrumentId, "101.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+
+        var entry = service(progress(), SOURCE).run(owner, room, "vwap_paper_entry01", instrumentId,
+            HistoricalCandleInterval.ONE_MINUTE, MindPaperCycleService.VWAP_STRATEGY_CODE);
+
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.VWAP_STRATEGY_CODE);
+        assertThat(entry.cycle().signalAction()).isEqualTo("BUY");
+        assertThat(entry.cycle().reasons()).contains("CLOSE_ABOVE_ROLLING_VWAP", "VOLUME_CONFIRMED");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(entry.order()).isNotNull();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
+    void rsiReversalCandidateUsesTheGuardedPaperEngine() {
+        long instrumentId = instrument("SBIN-EQ", "3045");
+        seedRsiRecoveryCandles(instrumentId, "SBIN-EQ", "3045", HistoricalCandleInterval.THREE_MINUTE.name());
+        recordTick(instrumentId, "98.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+        var entry = service(progress(), SOURCE).run(owner, room, "rsi_reversal_entry01", instrumentId,
+            HistoricalCandleInterval.THREE_MINUTE, MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.RSI_REVERSAL_STRATEGY_CODE);
+        assertThat(entry.cycle().reasons()).contains("RSI_RECOVERED_ABOVE_30", "PRICE_RECOVERY_CONFIRMED");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(countOrders(room)).isEqualTo(1);
+    }
+
+    @Test
+    void orbCandidateUsesTheGuardedPaperEngineAndProtectiveExitWorksWithoutNewSignal() {
+        long instrumentId = instrument("RELIANCE-EQ", "2885");
+        seedOrbCandles(instrumentId, "RELIANCE-EQ", "2885");
+        recordTick(instrumentId, "101.00", NOW.minusSeconds(2));
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+        var service = service(progress(), SOURCE);
+
+        var entry = service.run(owner, room, "orb_paper_entry1", instrumentId,
+            HistoricalCandleInterval.FIVE_MINUTE, MindPaperCycleService.ORB_STRATEGY_CODE);
+        assertThat(entry.cycle().outcome()).as(entry.cycle().stages().toString()).isEqualTo(Outcome.FILLED);
+        assertThat(entry.cycle().strategyCode()).isEqualTo(MindPaperCycleService.ORB_STRATEGY_CODE);
+        assertThat(entry.cycle().signalAction()).isEqualTo("BUY");
+        assertThat(entry.cycle().side()).isEqualTo("BUY");
+        assertThat(entry.cycle().stopPrice()).isEqualByComparingTo("100.50");
+        assertThat(entry.cycle().targetPrice()).isEqualByComparingTo("102.00");
+        assertThat(entry.cycle().liveOrder()).isFalse();
+        assertThat(entry.cycle().reasons()).contains("CLOSE_ABOVE_OPENING_RANGE", "OPENING_VOLUME_CONFIRMED");
+        assertThat(entry.order()).isNotNull();
+        assertThat(countOrders(room)).isEqualTo(1);
+        assertThat(progress().detail(owner, "strategy.STR-024").item().status())
+            .isEqualTo(Status.RUNTIME_VERIFIED);
+        assertThatThrownBy(() -> service.run(owner, room, "orb_paper_entry1", instrumentId,
+                HistoricalCandleInterval.FIVE_MINUTE, MindPaperCycleService.STRATEGY_CODE))
+            .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Idempotency");
+        var switchedStrategy = service.run(owner, room, "orb_paper_switch1", instrumentId,
+            HistoricalCandleInterval.FIVE_MINUTE);
+        assertThat(switchedStrategy.cycle().outcome()).isEqualTo(Outcome.NO_ENTRY);
+        assertThat(switchedStrategy.cycle().reasons()).contains("POSITION_STRATEGY_MISMATCH");
+        assertThat(countOrders(room)).isEqualTo(1);
+
+        // Invalidate the latest breakout bar. A held position still evaluates the independent
+        // stop gate instead of becoming stranded when the strategy no longer emits a candidate.
+        jdbc.sql("""
+                UPDATE market_candle SET high_price=100.40, close_price=100.30, volume=1000
+                WHERE instrument_id=:id AND interval='FIVE_MINUTE' AND candle_time=:at
+                """)
+            .param("id", instrumentId)
+            .param("at", java.sql.Timestamp.from(LocalDate.of(2026, 11, 12).atTime(10, 25)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant())).update();
+        recordTick(instrumentId, "100.40", NOW.minusSeconds(1));
+        var exit = service.run(owner, room, "orb_paper_exit001", instrumentId,
+            HistoricalCandleInterval.FIVE_MINUTE, MindPaperCycleService.ORB_STRATEGY_CODE);
+        assertThat(exit.cycle().outcome()).isEqualTo(Outcome.FILLED);
+        assertThat(exit.cycle().side()).isEqualTo("SELL");
+        assertThat(exit.cycle().reasons()).contains("EXIT_STOP_HIT");
+        assertThat(exit.cycle().liveOrder()).isFalse();
+        assertThat(exit.holdings()).isEmpty();
+        assertThat(countOrders(room)).isEqualTo(2);
+    }
+
+    @Test
     void staleQuoteNonPermittedSourceAndLiveRoomsFailClosedWithoutOrders() {
         long instrument = instrument("SBIN-EQ", "3045");
         seedRisingCandles(instrument, "SBIN-EQ", "3045", SOURCE);
@@ -369,7 +518,145 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
             5, 20, new BigDecimal("2"), new BigDecimal("0.5"), 1440);
         var orders = new CustomerPaperOrderService(jdbc, instruments, lastTicks, calendar, clock);
         return new MindPaperCycleService(jdbc, instruments, strategy, orders, wallets, lastTicks, calendar,
-            progress, clock, null, permitted);
+            progress, clock, null, permitted, candles, quality,
+            new in.aitradingsystem.scanner.OpeningRangeBreakoutStrategy(),
+            new in.aitradingsystem.scanner.VwapMomentumStrategy(),
+            new in.aitradingsystem.scanner.MovingAverageReclaimStrategy(),
+            new in.aitradingsystem.scanner.VolumeBreakoutStrategy(),
+            new in.aitradingsystem.scanner.RsiReversalStrategy());
+    }
+
+    private void seedRsiRecoveryCandles(long instrumentId, String symbol, String token, String interval) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 16; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(9, 42).plusMinutes(index * 3L)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            BigDecimal close = BigDecimal.valueOf(index < 2 ? 100 : index < 15 ? 102 - index : 98);
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,:interval,:at,
+                       :open,:high,:low,:close,1000,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("interval", interval)
+                .param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", close).param("high", close.add(new BigDecimal("0.50")))
+                .param("low", close.subtract(new BigDecimal("0.50"))).param("close", close)
+                .param("source", SOURCE).param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
+    }
+
+    private void seedOrbCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        var catalogue = active.catalogueVersion();
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 15; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(9, 15).plusMinutes(index * 5L)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            BigDecimal open = new BigDecimal("100.10");
+            BigDecimal close = index == 14 ? new BigDecimal("101.00")
+                : index < 3 ? new BigDecimal("100.20") : new BigDecimal("100.30");
+            BigDecimal high = index < 3 ? new BigDecimal("100.50")
+                : index == 14 ? new BigDecimal("101.10") : new BigDecimal("100.40");
+            BigDecimal low = new BigDecimal("100.00");
+            long volume = index == 14 ? 2_000L : 1_000L;
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'FIVE_MINUTE',:at,
+                       :open,:high,:low,:close,:volume,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", catalogue).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", open).param("high", high).param("low", low).param("close", close)
+                .param("volume", volume).param("source", SOURCE)
+                .param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
+    }
+
+    private void seedVolumeBreakoutCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 21; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 9).plusMinutes(index)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            boolean latest = index == 20;
+            BigDecimal open = latest ? new BigDecimal("100.80") : new BigDecimal("100.00");
+            BigDecimal high = latest ? new BigDecimal("101.20") : new BigDecimal("100.20");
+            BigDecimal low = latest ? new BigDecimal("100.70") : new BigDecimal("99.80");
+            BigDecimal close = latest ? new BigDecimal("101.00") : new BigDecimal("100.00");
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                       :open,:high,:low,:close,:volume,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", open).param("high", high).param("low", low).param("close", close)
+                .param("volume", latest ? 2_000L : 1_000L).param("source", SOURCE)
+                .param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
+    }
+
+    private void seedMovingAverageReclaimCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 21; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 9).plusMinutes(index)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            boolean previous = index == 19;
+            boolean latest = index == 20;
+            BigDecimal open = previous ? new BigDecimal("99.20")
+                : latest ? new BigDecimal("102.50") : new BigDecimal("100.00");
+            BigDecimal high = latest ? new BigDecimal("103.20") : new BigDecimal("100.20");
+            BigDecimal low = previous ? new BigDecimal("98.50") : latest ? new BigDecimal("102.00")
+                : new BigDecimal("99.80");
+            BigDecimal close = previous ? new BigDecimal("99.00")
+                : latest ? new BigDecimal("103.00") : new BigDecimal("100.00");
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                       :open,:high,:low,:close,1000,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", open).param("high", high).param("low", low).param("close", close)
+                .param("source", SOURCE).param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
+    }
+
+    private void seedVwapCandles(long instrumentId, String symbol, String token) {
+        var active = instruments.requireActiveInstrument(instrumentId);
+        Instant fetchedAt = NOW.minusSeconds(30);
+        for (int index = 0; index < 20; index++) {
+            Instant candleTime = LocalDate.of(2026, 11, 12).atTime(10, 10).plusMinutes(index)
+                .atZone(ZoneId.of("Asia/Kolkata")).toInstant();
+            boolean latest = index == 19;
+            BigDecimal open = latest ? new BigDecimal("100.80") : new BigDecimal("100.00");
+            BigDecimal high = latest ? new BigDecimal("101.20") : new BigDecimal("100.20");
+            BigDecimal low = latest ? new BigDecimal("100.70") : new BigDecimal("99.80");
+            BigDecimal close = latest ? new BigDecimal("101.00") : new BigDecimal("100.00");
+            jdbc.sql("""
+                    INSERT INTO market_candle
+                      (instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,interval,candle_time,
+                       open_price,high_price,low_price,close_price,volume,source,fetched_at)
+                    VALUES (:id,'NSE',:symbol,:token,:catalogue,'ONE_MINUTE',:at,
+                       :open,:high,:low,:close,:volume,:source,:fetched)
+                    """)
+                .param("id", instrumentId).param("symbol", symbol).param("token", token)
+                .param("catalogue", active.catalogueVersion()).param("at", java.sql.Timestamp.from(candleTime))
+                .param("open", open).param("high", high).param("low", low).param("close", close)
+                .param("volume", latest ? 2_000L : 1_000L).param("source", SOURCE)
+                .param("fetched", java.sql.Timestamp.from(fetchedAt)).update();
+        }
     }
 
     private void seedRisingCandles(long instrumentId, String symbol, String token, String source) {

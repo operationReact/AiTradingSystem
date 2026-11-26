@@ -81,7 +81,7 @@ SAFE_FAILURES = frozenset({
 })
 
 def safe_failure_reason(exc):
-    """Expose only fixed failure enums; never provider bodies or local paths."""
+    """Expose a fixed reason or exception class, never messages or paths."""
     reason = str(exc)
     if reason in SAFE_FAILURES:
         return reason
@@ -90,13 +90,17 @@ def safe_failure_reason(exc):
     if isinstance(exc, OSError):
         return "PRIVATE_STORAGE_ERROR"
     if isinstance(exc, GateClosed):
-        return "UNCLASSIFIED_GATE_BLOCK"
+        return "WORKER_EXCEPTION_GATE_CLOSED"
     if isinstance(exc, RuntimeError):
-        return "UNCLASSIFIED_RUNTIME_FAILURE"
+        return "WORKER_EXCEPTION_RUNTIME_ERROR"
     if isinstance(exc, ValueError):
-        return "UNCLASSIFIED_VALIDATION_FAILURE"
-    if isinstance(exc, (KeyError,TypeError,AttributeError)):
-        return "UNCLASSIFIED_PROVIDER_SCHEMA_FAILURE"
+        return "WORKER_EXCEPTION_VALIDATION_ERROR"
+    if isinstance(exc, KeyError):
+        return "WORKER_EXCEPTION_KEY_ERROR"
+    if isinstance(exc, TypeError):
+        return "WORKER_EXCEPTION_TYPE_ERROR"
+    if isinstance(exc, AttributeError):
+        return "WORKER_EXCEPTION_ATTRIBUTE_ERROR"
     return "UNCLASSIFIED_SAFE_FAILURE"
 
 def today():
@@ -365,7 +369,9 @@ def run(start_limit=0, max_requests=MAX_REQUESTS_PER_RUN, wait_for_more=False):
                 if consecutive_errors>=8: break
             else:
                 consecutive_errors=0
-            completed+=1
+            # Only non-empty, successfully persisted batches count as work.
+            if result=="DONE":
+                completed+=1
             if completed%5==0 or completed==1:
                 cleanup_expired_cache(sink)
                 persist_summary(queue,sink)
@@ -374,13 +380,22 @@ def run(start_limit=0, max_requests=MAX_REQUESTS_PER_RUN, wait_for_more=False):
         cleanup_expired_cache(sink)
         data=persist_summary(queue,sink,"PAUSED" if start_limit else "RUNNING")
         return {
+            # Keep cumulative cache counters separate from work performed here.
             "completed":data["completedJobs"],
             "total":data["totalJobs"],
+            "newlyCompleted":completed,
             "rows":data["candleRows"],
             "requests":requests,
-            "outcome":"FIRST_BATCH_COMPLETE" if start_limit and data["candleRows"]>0
-                       else "BULK_SESSION_STARTED" if not start_limit
-                       else "NO_VALID_ROWS",
+            "outcome":(
+                "CACHE_ALREADY_COMPLETE"
+                if start_limit and completed==0
+                    and data["completedJobs"]>0 and data["candleRows"]>0
+                else "FIRST_BATCH_COMPLETE"
+                if start_limit and completed>0
+                    and data["candleRows"]>0 and requests>0
+                else "BULK_SESSION_STARTED" if not start_limit
+                else "NO_VALID_ROWS"
+            ),
         }
     finally:
         sink.close()

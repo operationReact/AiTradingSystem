@@ -144,7 +144,7 @@ def contract_requirements(contract):
     models = contract["models"]
     screens = contract["screens"]
     families = contract["strategy_families"]
-    if (len(sources) != 24 or len(models) != 18 or len(screens) != 43
+    if (len(sources) != 24 or len(models) != 18 or len(screens) != 44
             or len(families) != 20 or sum(len(f["templates"]) for f in families) != 232):
         raise ValueError("unexpected model/UI/source contract drift")
     for kind, entries in (("model", models), ("screen", screens),

@@ -29,6 +29,18 @@ class BootstrapContractTest(unittest.TestCase):
         self.assertIsNone(ops.parse_receipt(ops.MARKER+"FAKE|0|0|0"))
         with self.assertRaises(ValueError):
             ops.receipt("STARTED",12,3,4)
+    def test_complete_cache_marker_is_strict_and_valid(self):
+        marker=("FNO_BULK_SMOKE:CACHE_ALREADY_COMPLETE;"
+                "complete=276;total=276;rows=4251;calls=0\n")
+        self.assertEqual((276,276,4251,0),ops.parse_complete_cache(marker))
+        self.assertEqual(("CACHE_ALREADY_COMPLETE",276,276,4251),
+            ops.parse_receipt(ops.receipt("CACHE_ALREADY_COMPLETE",276,276,4251)))
+        self.assertIsNone(ops.parse_complete_cache(
+            marker.replace("calls=0","calls=1")))
+        self.assertIsNone(ops.parse_complete_cache(
+            marker.replace("complete=276","complete=275")))
+        self.assertIsNone(ops.parse_complete_cache(marker+marker))
+
     def test_smoke_failure_receipt_is_allowlisted_and_redacted(self):
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",
             ops.smoke_failure("FNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"))
@@ -39,18 +51,38 @@ class BootstrapContractTest(unittest.TestCase):
                               "FNO_BULK_ERROR:PRIVATE_DB_ERROR\n"))
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.parse_smoke_failure(
             "FNO_BULK_SMOKE_FAILURE:UPSTOX_TOKEN_UNAVAILABLE\n"))
+        self.assertEqual("SMOKE_COUNTERS_INVALID",ops.parse_smoke_failure(
+            "FNO_BULK_SMOKE_FAILURE:SMOKE_COUNTERS_INVALID\n"))
         self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",ops.parse_smoke_failure(
             "FNO_BULK_SMOKE_FAILURE:/private/token\n"))
         self.assertEqual("SMOKE_NO_VALID_ROWS",ops.smoke_failure(
             "FNO_BULK_SMOKE:NO_VALID_ROWS;complete=0;total=0;rows=0;calls=7\n"))
+        self.assertEqual("SMOKE_OUTPUT_MISSING",ops.smoke_failure("", ""))
         self.assertEqual("WORKER_DEPENDENCY_UNAVAILABLE",ops.smoke_failure(
             "", "Traceback (most recent call last):\nModuleNotFoundError: /private/path/token"))
         self.assertEqual("WORKER_SOURCE_INCOMPATIBLE",ops.smoke_failure(
             "", "SyntaxError: /private/path/secret.py"))
         self.assertEqual("WORKER_RUNTIME_EXCEPTION",ops.smoke_failure(
             "", "Traceback (most recent call last):\nRuntimeError: private payload"))
+        self.assertEqual("WORKER_RUNTIME_EXCEPTION",ops.smoke_failure(
+            "FNO_BULK_ERROR:UNCLASSIFIED_SAFE_FAILURE\n",
+            "Traceback (most recent call last):\nRuntimeError: private payload"))
+        self.assertEqual("UNCLASSIFIED_SAFE_FAILURE",ops.smoke_failure(
+            "FNO_BULK_ERROR:UNCLASSIFIED_SAFE_FAILURE\n", ""))
+        self.assertEqual("WORKER_EXCEPTION_RUNTIME_ERROR",ops.smoke_failure(
+            "FNO_BULK_ERROR:WORKER_EXCEPTION_RUNTIME_ERROR\n"))
+        self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.parse_smoke_failure(
+            "FNO_BULK_SMOKE_FAILURE:UPSTOX_TOKEN_UNAVAILABLE\r\n"))
         self.assertEqual("UPSTOX_TOKEN_UNAVAILABLE",ops.smoke_failure(
             "x"*5000+"\nFNO_BULK_ERROR:UPSTOX_TOKEN_UNAVAILABLE\n"))
+    def test_smoke_counter_diagnostic_is_bounded_and_exact(self):
+        raw=("FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\n")
+        self.assertEqual((0,0,4,12),ops.parse_smoke_counters(raw))
+        self.assertIsNone(ops.parse_smoke_counters(
+            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=13\n"))
+        self.assertIsNone(ops.parse_smoke_counters(
+            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\n"
+            "FNO_BULK_SMOKE_COUNTERS:complete=0;total=0;rows=4;calls=12\n"))
     def test_runner_pins_exact_transitive_worker_modules(self):
         self.assertEqual(ops.PINNED_MODULES,
             ("fno_history_backfill.py", "upstox_fno_backfill_adapters.py"))

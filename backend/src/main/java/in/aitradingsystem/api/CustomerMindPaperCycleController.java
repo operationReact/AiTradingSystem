@@ -39,14 +39,15 @@ public class CustomerMindPaperCycleController {
 
     public record CycleRequest(
         @NotNull @Min(1) Long instrumentId,
-        @NotNull @Pattern(regexp = "FIVE_MINUTE|FIFTEEN_MINUTE|ONE_HOUR|ONE_DAY") String interval) {}
+        @NotNull @Pattern(regexp = "ONE_MINUTE|THREE_MINUTE|FIVE_MINUTE|FIFTEEN_MINUTE|ONE_HOUR|ONE_DAY") String interval,
+        @Pattern(regexp = "SMA_TREND_VOLUME_V1|OPENING_RANGE_BREAKOUT_V1|VWAP_MOMENTUM_V1|MA_RECLAIM_V1|VOLUME_BREAKOUT_V1|RSI_REVERSAL_V1") String strategyCode) {}
 
     @PostMapping
     public ResponseEntity<MindPaperCycleService.CycleResult> run(@PathVariable UUID roomId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody CycleRequest input,
             Authentication auth) {
         return noStore(cycles.run(customer(auth), roomId, key, input.instrumentId(),
-            HistoricalCandleInterval.valueOf(input.interval())));
+            HistoricalCandleInterval.valueOf(input.interval()), input.strategyCode()));
     }
 
     @GetMapping

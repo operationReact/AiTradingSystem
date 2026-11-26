@@ -76,6 +76,8 @@ class AccountProxyTest(unittest.TestCase):
         self.assertFalse(proxy.allowed("POST","/api/customer/owner-history/v1/progress"))
         self.assertFalse(proxy.allowed("GET","/api/customer/owner-history/v1/progress/raw"))
         self.assertFalse(proxy.allowed("POST","/api/customer/home/v1/summary"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/market-intelligence/articles"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/market-intelligence/articles/raw"))
         self.assertFalse(proxy.allowed("POST","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments"))
