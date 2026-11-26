@@ -39,6 +39,9 @@ FIXED_REQUEST={"kind":KIND,"account":ACCOUNT,"region":REGION,"instance_id":INSTA
        "max_archive_gets":1,
        "owner_confirmed_private_research_retention":True,
        "no_market_export":True,"no_orders":True,"no_rights_change":True}
+BACKFILL_DAYS=tuple(date(2026,11,day) for day in (17,18,19,20))
+BACKFILL_START=datetime(2026,11,26,18,30,tzinfo=IST)
+BACKFILL_END=BACKFILL_START+timedelta(hours=36)
 SCHEMA="""CREATE TABLE IF NOT EXISTS original_exchange_eod(
  session_date TEXT NOT NULL,
  source_url TEXT NOT NULL,
@@ -103,6 +106,11 @@ def load_request(path,now):
         raise Blocked("OWNER_REQUEST_REQUIRED")
     try:data=json.loads(path.read_text(),object_pairs_hook=_unique_object)
     except (ValueError,TypeError,UnicodeError):raise Blocked("OWNER_REQUEST_REQUIRED") from None
+    if type(data) is dict and "session_dates" in data:
+        requested=data.pop("session_dates")
+        if requested!=[day.isoformat() for day in BACKFILL_DAYS] or not BACKFILL_START<=now<=BACKFILL_END:
+            raise Blocked("OWNER_REQUEST_REQUIRED")
+        return tuple(request_date({**data,"session_date":day.isoformat()},now) for day in BACKFILL_DAYS)
     return request_date(data,now)
 
 def transport():
@@ -126,6 +134,8 @@ def require_scope(day,now):
     # The owner request selects a session date; this window prevents stale
     # archive retrieval. A missing file is a safe failure, never a holiday proof.
     cutoff=datetime.combine(day,dt_time(18,30),tzinfo=IST)
+    if day in BACKFILL_DAYS and BACKFILL_START<=now<=BACKFILL_END:
+        return
     if not cutoff<=now.astimezone(IST)<=cutoff+timedelta(hours=36):
         raise Blocked("SOURCE_OBSERVATION_WINDOW_EXPIRED")
 
@@ -232,7 +242,21 @@ def validate_report(data,expected_day):
     return data
 
 def runner():
-    day=load_request(REQUEST,datetime.now(timezone.utc))
+    selection=load_request(REQUEST,datetime.now(timezone.utc))
+    days=selection if isinstance(selection,tuple) else (selection,)
+    failed=False
+    for day in days:
+        try:
+            capture_on_host(day)
+        except Blocked as exc:
+            if len(days)==1:
+                raise
+            print(FAILURE_MARKER+day.isoformat()+":"+safe_reason(exc),flush=True)
+            failed=True
+    if failed:
+        raise Blocked("HOST_CAPTURE_FAILED")
+
+def capture_on_host(day):
     from verify_ssm_release import verify_aws
     from fno_private_bulk_ops import _aws
     try:verify_aws()
