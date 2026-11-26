@@ -8,10 +8,5 @@
   "no_market_export": true,
   "no_orders": true,
   "no_rights_change": true,
-  "session_dates": [
-    "2026-11-17",
-    "2026-11-18",
-    "2026-11-19",
-    "2026-11-20"
-  ]
+  "research_decision_date": "2026-11-27"
 }
