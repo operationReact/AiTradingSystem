@@ -78,9 +78,9 @@ jobs:
                     xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
             <mirrors>
               <mirror>
-                <id>central-repo1-fallback</id>
+                <id>central-google-mirror</id>
                 <mirrorOf>central</mirrorOf>
-                <url>https://repo1.maven.org/maven2</url>
+                <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
               </mirror>
             </mirrors>
           </settings>
