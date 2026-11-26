@@ -12,6 +12,9 @@ class _FixtureNews implements MarketNewsRepository {
   String? lastSymbol;
 
   @override
+  Future<List<MarketNewsSource>> sources() async => const [];
+
+  @override
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol}) async {
     calls++;
     lastSymbol = symbol;

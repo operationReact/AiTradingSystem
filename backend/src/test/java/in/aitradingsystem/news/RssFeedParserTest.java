@@ -28,6 +28,23 @@ class RssFeedParserTest {
     }
 
     @Test
+    void parsesEnglishMoneycontrolMarketRssAndLinksWatchlistSymbols() {
+        String feed = """
+            <rss><channel><item><title>Tata Motors announces quarterly results</title>
+              <link>https://www.moneycontrol.com/news/markets/tata-motors-results.html</link>
+              <description>Tata Motors update also mentions TCS.</description>
+              <pubDate>Wed, 25 Nov 2026 10:00:00 GMT</pubDate>
+            </item></channel></rss>
+            """;
+
+        var parsed = parser.parse(feed.getBytes(StandardCharsets.UTF_8),
+            NewsSource.byId("moneycontrol"), List.of("TCS", "INFY"), 10);
+
+        assertEquals(1, parsed.size());
+        assertEquals(List.of("TCS"), parsed.get(0).linkedSymbols());
+    }
+
+    @Test
     void rejectsDtdAndDoesNotResolveExternalEntities() {
         String feed = """
             <!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
@@ -45,6 +62,23 @@ class RssFeedParserTest {
             """;
         assertEquals(0, parser.parse(feed.getBytes(StandardCharsets.UTF_8),
             NewsSource.byId("moneycontrol"), List.of(), 10).size());
+    }
+
+    @Test
+    void acceptsOfficialNseAnnouncementLinksAndMapsSymbolsAgainstExpandedUniverse() {
+        String feed = """
+            <rss><channel><item><title>Company files a material update</title>
+              <link>https://nsearchives.nseindia.com/corporate/sample.pdf</link>
+              <description>RELIANCE and HDFCBANK are named in the filing.</description>
+              <pubDate>Tue, 27 Oct 2026 10:00:00 GMT</pubDate>
+            </item></channel></rss>
+            """;
+
+        var parsed = parser.parse(feed.getBytes(StandardCharsets.UTF_8),
+            NewsSource.byId("nse-announcements"), List.of("RELIANCE", "TCS", "HDFCBANK"), 10);
+
+        assertEquals(1, parsed.size());
+        assertEquals(List.of("RELIANCE", "HDFCBANK"), parsed.get(0).linkedSymbols());
     }
 
     @Test

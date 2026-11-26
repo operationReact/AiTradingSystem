@@ -95,6 +95,16 @@ public class NewsIntelligenceAdminHealthController {
             : geminiReceipts != null && geminiReceipts > 0
                 ? "RECORDED_ANALYSIS_RECEIPTS_PRESENT" : "CONFIGURED_NO_RECORDED_RECEIPT";
 
+        Map<String, Instant> latestSuccessfulAnalysisBySource = jdbc.query("""
+            SELECT n.source, max(a.created_at) AS analyzed_at
+              FROM news_analyses a
+              JOIN news_articles n ON n.id = a.article_id
+             WHERE a.provider = 'GEMINI' AND a.model = ? AND a.status = 'ANALYZED'
+             GROUP BY n.source
+            """, (rs, row) -> Map.entry(rs.getString("source"),
+                rs.getObject("analyzed_at", java.time.OffsetDateTime.class).toInstant()), model)
+            .stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+
         // Process-local transport observations are separate from persisted analysis
         // receipts and independent deployment certification. No probe is triggered here.
         var observation = gemini.filter(GeminiNewsAnalysisProvider.class::isInstance)
@@ -113,7 +123,8 @@ public class NewsIntelligenceAdminHealthController {
             new Model(provider, model, credentialBound, false, selectedReady,
                 geminiReceipts == null ? 0L : geminiReceipts, readiness,
                 observation == null ? null : observation.finishedAt(),
-                observation == null ? "NO_OBSERVATION" : observation.outcome()),
+                observation == null ? "NO_OBSERVATION" : observation.outcome(),
+                latestSuccessfulAnalysisBySource),
             count("news_ingest_receipt"),
             count("news_canonical_event"),
             count("news_event_version"),
@@ -134,7 +145,8 @@ public class NewsIntelligenceAdminHealthController {
                         boolean geminiKeyConfigured, boolean realProviderCallVerified,
                         boolean selectedProviderConfigured, long recordedGeminiAnalysisReceipts,
                         String geminiReadiness, Instant lastGeminiAttemptAt,
-                        String lastGeminiAttemptOutcome) {}
+                        String lastGeminiAttemptOutcome,
+                        Map<String, Instant> lastSuccessfulAnalysisAtBySource) {}
 
     public record Source(String sourceId, String publisher, String rightsState,
                          boolean canIngest, boolean canRetain, boolean canDisplay,

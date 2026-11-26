@@ -6,6 +6,9 @@ import java.util.Set;
 
 public record NewsSource(String id, String publisher, URI feedUri, Set<String> articleHosts) {
     public static final List<NewsSource> SUPPORTED = List.of(
+        new NewsSource("nse-announcements", "NSE India",
+            URI.create("https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml"),
+            Set.of("nsearchives.nseindia.com", "www.nseindia.com", "nseindia.com")),
         new NewsSource("moneycontrol", "Moneycontrol",
             URI.create("https://www.moneycontrol.com/rss/marketreports.xml"),
             Set.of("www.moneycontrol.com", "moneycontrol.com")),

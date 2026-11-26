@@ -27,10 +27,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** ADMIN-only write surface for the pre-seeded, default-deny news publisher policies. */
+/** Audited ADMIN and host-operator write surface for default-deny publisher policies. */
 @RestController
 @RequestMapping("/api/admin/market-intelligence/sources")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
 public class NewsSourcePolicyAdminController {
     private final NewsSourcePolicyService policies;
 
