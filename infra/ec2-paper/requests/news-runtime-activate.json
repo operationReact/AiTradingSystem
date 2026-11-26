@@ -1,28 +1,25 @@
 {
   "kind": "minttick-news-runtime-activate-v1",
-
   "account": "098859530205",
   "region": "ap-south-1",
-
   "instance_id": "i-09c01b470fb39b85a",
   "environment": "PAPER",
-
   "operation": "activate",
-
   "source_ids": [
     "nse-announcements",
     "moneycontrol",
     "economic-times",
-    "sebi"
+    "sebi",
+    "business-standard-markets",
+    "business-standard-stock-market",
+    "livemint-markets",
+    "livemint-companies",
+    "rbi-press-releases",
+    "rbi-notifications",
+    "rbi-speeches"
   ],
-  "permitted_uses": [
-    "INGEST",
-    "RETAIN",
-    "DISPLAY",
-    "NLP_TRANSFER"
-  ],
-  "reviewer_ref": "owner-attestation:2026-11-25",
-  "terms_ref": "owner-attested-publisher-permissions:personal-noncommercial:2026-11-25",
+  "permitted_uses": ["INGEST", "RETAIN", "DISPLAY", "NLP_TRANSFER"],
+  "reviewer_ref": "owner-attestation:2026-11-26",
+  "terms_ref": "owner-attestation:personal-noncommercial-source-expansion:2026-11-26",
   "content_ttl_days": 30
 }
-
