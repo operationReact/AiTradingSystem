@@ -184,7 +184,19 @@ class ArchiveMeanReversion {
         java = java[:split] + launcher + java[split:].replace(
             "public final class FnoFuturesMeanReversionV1", "final class FnoFuturesMeanReversionV1", 1
         )
-        parts.append("STR177_JAVA="+repr(java))
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp)/"ArchiveMeanReversion.java"
+            source.write_text(java)
+            subprocess.run(["javac","--release","17","-d",temp,str(source)],
+                           check=True,capture_output=True,timeout=30)
+            jar = Path(temp)/"archive-research.jar"
+            with zipfile.ZipFile(jar,"w") as archive:
+                for item in sorted(Path(temp).rglob("*.class")):
+                    archive.write(item,item.relative_to(temp).as_posix())
+            parts.append("STR177_CLASSES="+repr(jar.read_bytes()))
     for name, selected in modules.items():
         body = Path(__file__).with_name(name + ".py").read_text()
         if selected is not None:
@@ -352,9 +364,28 @@ def retained_research():
         "reason":reason,"certifiedStrategies":0,"orders":False
     },sort_keys=True),flush=True)
 
+def str177_backend_image(subprocess):
+    listed=subprocess.run(
+        ["docker","ps","--format","{{.ID}} {{.Image}} {{.Names}} {{.Label \"com.docker.compose.service\"}}"],
+        check=True,capture_output=True,text=True,timeout=8).stdout
+    candidates=[]
+    for line in listed.splitlines():
+        fields=line.split()
+        if len(fields)>=3 and (fields[-1]=="backend" or "backend" in fields[1].lower()):
+            if re.fullmatch(r"[0-9a-f]{12}",fields[0]):
+                candidates.append(fields[0])
+    if len(candidates)!=1:
+        raise Blocked("STR177_JAVA_UNAVAILABLE")
+    image=subprocess.run(["docker","inspect","--format","{{.Image}}",candidates[0]],
+                         check=True,capture_output=True,text=True,timeout=8).stdout.strip()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}",image):
+        raise Blocked("STR177_JAVA_UNAVAILABLE")
+    return image
+
 def retained_str177_research():
     import subprocess
     import tempfile
+    from shutil import which
 
     window, observations, lot = read_retained_window(STR177_DAYS)
     as_of = max(observations)
@@ -363,12 +394,24 @@ def retained_str177_research():
         stamp = observed.isoformat().replace("+00:00","Z")
         lines.append(" ".join(map(str, (row[0], stamp, *row[1:]))))
     with tempfile.TemporaryDirectory(prefix="minttick-str177-") as temp:
-        source = Path(temp)/"ArchiveMeanReversion.java"
-        source.write_text(STR177_JAVA)
+        jar = Path(temp)/"archive-research.jar"
+        jar.write_bytes(STR177_CLASSES)
+        java = ["java","-cp","/tmp/archive-research.jar",
+                "in.aitradingsystem.tradingrooms.ArchiveMeanReversion"]
         try:
-            result = subprocess.run(["java",str(source)],input="\n".join(lines)+"\n",
+            if which("java"):
+                java[2]=str(jar)
+                command=java
+            else:
+                image=str177_backend_image(subprocess)
+                jar.chmod(0o444)
+                command=["docker","run","--rm","--pull","never","-i","--network","none",
+                         "--read-only","--memory","256m","--pids-limit","64",
+                         "--mount",f"type=bind,src={jar},dst=/tmp/archive-research.jar,readonly",
+                         "--entrypoint","java",image,*java[1:]]
+            result = subprocess.run(command,input="\n".join(lines)+"\n",
                                     text=True,capture_output=True,timeout=30)
-        except (OSError,subprocess.TimeoutExpired):
+        except (OSError,subprocess.TimeoutExpired,subprocess.CalledProcessError):
             raise Blocked("STR177_JAVA_UNAVAILABLE") from None
     if result.returncode or len(result.stdout)>128:
         raise Blocked("STR177_EVALUATOR_FAILED")
