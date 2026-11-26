@@ -69,7 +69,23 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
       - name: Verify news integration contracts
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=NewsSourceRegistryTest,NewsSourceCoverageTest,NewsSourceHealthControllerTest,CustomerMarketNewsControllerIT,RssFeedParserTest,NewsIngestionJobTest,NewsIntelligenceAdminHealthControllerIT,NewsSourcePolicyIT test
+        env:
+          MAVEN_SETTINGS: ${{ runner.temp }}/maven-settings.xml
+        run: |
+          cat > "$MAVEN_SETTINGS" <<'XML'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+            <mirrors>
+              <mirror>
+                <id>central-repo1-fallback</id>
+                <mirrorOf>central</mirrorOf>
+                <url>https://repo1.maven.org/maven2</url>
+              </mirror>
+            </mirrors>
+          </settings>
+          XML
+          mvn --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=NewsSourceRegistryTest,NewsSourceCoverageTest,NewsSourceHealthControllerTest,CustomerMarketNewsControllerIT,RssFeedParserTest,NewsIngestionJobTest,NewsIntelligenceAdminHealthControllerIT,NewsSourcePolicyIT test
 
   activate:
     needs: validate
