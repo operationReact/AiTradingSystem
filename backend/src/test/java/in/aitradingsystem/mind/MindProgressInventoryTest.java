@@ -70,7 +70,7 @@ class MindProgressInventoryTest {
     void kindAndStatusFiltersAreServerSideAndDeterministic() {
         var service = realService();
         InventoryPage screens = service.inventoryPage(null, Map.of(), NOW, "SCREEN", null, 0, 50);
-        assertThat(screens.total()).isEqualTo(43);
+        assertThat(screens.total()).isEqualTo(44);
         assertThat(screens.items()).allMatch(i -> i.kind().equals("SCREEN"));
         InventoryPage again = service.inventoryPage(null, Map.of(), NOW, "SCREEN", null, 0, 50);
         assertThat(again.items().stream().map(Item::id)).containsExactlyElementsOf(
