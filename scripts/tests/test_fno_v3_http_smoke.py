@@ -30,23 +30,20 @@ class FnoHttpSmokeTest(unittest.TestCase):
         self.assertEqual(smoke.research_receipt(400, None), "HTTP_4XX")
         self.assertEqual(smoke.research_receipt(200, {}), "INVALID_ROWS")
 
-    def test_research_probe_accepts_only_exact_three_safe_strategy_rows(self):
+    def test_research_probe_accepts_exact_eleven_futures_strategy_rows(self):
         rows = [
-            {"strategyId": "strategy.STR-172", "status": "BLOCKED",
-             "reasonCode": "NO_DATA", "contractsResolved": 0,
-             "freshQuotes": 0, "historySessions": 0},
-            {"strategyId": "strategy.STR-170", "status": "NO_TRADE",
-             "reasonCode": "MARKET_CLOSED", "contractsResolved": 1,
-             "freshQuotes": 0, "historySessions": 0},
-            {"strategyId": "strategy.STR-171", "status": "BLOCKED",
-             "reasonCode": "NO_DATA", "contractsResolved": 0,
-             "freshQuotes": 0, "historySessions": 0},
+            {"strategyId": "strategy.STR-" + str(n),
+             "status": "NO_TRADE" if n == 170 else "BLOCKED",
+             "reasonCode": "MARKET_CLOSED" if n == 170 else "NO_DATA",
+             "contractsResolved": 1 if n == 170 else 0,
+             "freshQuotes": 0, "historySessions": 0}
+            for n in range(170, 181)
         ]
         receipt = smoke.research_receipt(200, rows)
         self.assertTrue(receipt.startswith("STR-170=NO_TRADE:MARKET_CLOSED"))
-        self.assertIn("STR-172=BLOCKED:NO_DATA", receipt)
+        self.assertIn("STR-180=BLOCKED:NO_DATA", receipt)
         self.assertEqual(smoke.research_receipt(200, rows[:2]), "INVALID_ROWS")
-        rows[2]["reasonCode"] = "Bearer secret"
+        rows[-1]["reasonCode"] = "Bearer secret"
         self.assertEqual(smoke.research_receipt(200, rows), "INVALID_ROWS")
     def test_external_urls_and_queries_are_never_accepted(self):
         for path in ("https://evil.test", "//evil", "/route?x=1", "route"):

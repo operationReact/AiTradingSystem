@@ -72,9 +72,9 @@ def research_receipt(code: int, rows: object) -> str:
         return "HTTP_5XX"
     if code != 200:
         return "HTTP_4XX"
-    if not isinstance(rows, list) or len(rows) != 3:
+    if not isinstance(rows, list) or len(rows) != 11:
         return "INVALID_ROWS"
-    expected = {"strategy.STR-170", "strategy.STR-171", "strategy.STR-172"}
+    expected = {"strategy.STR-" + str(n) for n in range(170, 181)}
     found = {}
     for row in rows:
         if not isinstance(row, dict):
