@@ -425,11 +425,22 @@ def retained_str177_research():
     if result.returncode or len(result.stdout)>128:
         raise Blocked("STR177_EVALUATOR_FAILED")
     status,pattern,reason = result.stdout.split()
+    outlier=None
+    if reason=="FUT_MR_DAILY_CHANGE_OUTLIER":
+        for previous,current in zip(window,window[1:]):
+            fields=[]
+            if abs(current[4]-previous[4])*10000>previous[4]*1000:
+                fields.append("CLOSE")
+            if abs(current[6]-previous[6])*10000>previous[6]*5000:
+                fields.append("OPEN_INTEREST")
+            if fields:
+                outlier={"previous":previous[0].isoformat(),"current":current[0].isoformat(),"fields":fields}
+                break
     print(STR177_MARKER+json.dumps({
         "state":"RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY","sessions":len(window),
         "decisionDate":RESEARCH_DAY.isoformat(),"expiry":RESEARCH_EXPIRY.isoformat(),
         "latestObservedAt":as_of.isoformat(),"outcome":status,"pattern":pattern,
-        "reason":reason,"certifiedStrategies":0,"orders":False
+        "reason":reason,"outlier":outlier,"certifiedStrategies":0,"orders":False
     },sort_keys=True),flush=True)
 
 def validate_report(data,expected_day):
@@ -500,7 +511,7 @@ def capture_on_host(day, str177=False):
                     raise Blocked("SOURCE_RECEIPT_INVALID")
                 data=json.loads(rows[0])
                 if (set(data)!={"state","sessions","decisionDate","expiry","latestObservedAt",
-                               "outcome","pattern","reason","certifiedStrategies","orders"}
+                               "outcome","pattern","reason","outlier","certifiedStrategies","orders"}
                         or data["state"]!="RETAINED_ARCHIVE_SIGNAL_RESEARCH_ONLY"
                         or data["sessions"]!=10 or data["decisionDate"]!=RESEARCH_DAY.isoformat()
                         or data["expiry"]!=RESEARCH_EXPIRY.isoformat()
@@ -509,6 +520,11 @@ def capture_on_host(day, str177=False):
                         or data["pattern"] not in ("NONE","LOW_EXTREME_REBOUND","HIGH_EXTREME_PULLBACK")
                         or not re.fullmatch(r"FUT_MR_[A-Z0-9_]+",data["reason"])
                         or datetime.fromisoformat(data["latestObservedAt"])>datetime.now(timezone.utc)):
+                    raise Blocked("SOURCE_RECEIPT_INVALID")
+                issue=data["outlier"]
+                if issue is not None and (type(issue) is not dict or set(issue)!={"previous","current","fields"}
+                    or [issue["previous"],issue["current"]] not in [[a.isoformat(),b.isoformat()] for a,b in zip(STR177_DAYS,STR177_DAYS[1:])]
+                    or issue["fields"] not in (["CLOSE"],["OPEN_INTEREST"],["CLOSE","OPEN_INTEREST"])):
                     raise Blocked("SOURCE_RECEIPT_INVALID")
                 print(STR177_MARKER+json.dumps(data,sort_keys=True),flush=True)
                 return
