@@ -393,7 +393,7 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     void rsiReversalCandidateUsesTheGuardedPaperEngine() {
         long instrumentId = instrument("SBIN-EQ", "3045");
         seedRsiRecoveryCandles(instrumentId, "SBIN-EQ", "3045", HistoricalCandleInterval.THREE_MINUTE.name());
-        recordTick(instrumentId, "105.00", NOW.minusSeconds(2));
+        recordTick(instrumentId, "98.00", NOW.minusSeconds(2));
         UUID owner = customer();
         UUID room = fundedRoom(owner);
         var entry = service(progress(), SOURCE).run(owner, room, "rsi_reversal_entry01", instrumentId,
