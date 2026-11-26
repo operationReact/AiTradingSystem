@@ -128,6 +128,21 @@ public class CustomerExecutionReadinessController {
         return noStore(liveEquityOrders.list(customer(authentication), roomId));
     }
 
+    /**
+     * Owner-scoped reconciliation of one reserved LIVE equity order against the
+     * authenticated customer's own selected-broker order book. It never submits
+     * or retries an order; it only reads the broker to prove a state, and fails
+     * closed (the order stays reserved) on any missing or contradictory evidence.
+     * No order can reach a reconcilable state while dispatch is disabled.
+     */
+    @PostMapping("/live/equity/orders/{orderId}/reconcile")
+    public ResponseEntity<CustomerLiveEquityOrderService.Order> reconcileLiveEquityOrder(
+            @PathVariable UUID roomId, @PathVariable UUID orderId,
+            Authentication authentication) {
+        return noStore(liveEquityOrders.reconcileFromBroker(
+            customer(authentication), roomId, orderId));
+    }
+
     @PostMapping("/execution/broker-selection")
     public ResponseEntity<CustomerExecutionReadinessService.Readiness> chooseBroker(
             @PathVariable UUID roomId,
