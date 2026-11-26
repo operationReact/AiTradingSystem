@@ -4,9 +4,14 @@ import in.aitradingsystem.execution.TradingExecutionAuthority;
 import org.springframework.beans.factory.annotation.Autowired;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.marketdata.IndianCashMarketCalendar;
 import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
 import in.aitradingsystem.provider.upstox.CustomerUpstoxOAuthService;
+import in.aitradingsystem.provider.upstox.UpstoxRegisteredIpAssessment;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +33,7 @@ public class CustomerExecutionReadinessService {
     private final CustomerAngelOneSessionService broker;
     private final CustomerUpstoxOAuthService upstox;
     private final InstrumentMasterService instruments;
+    private final IndianCashMarketCalendar cashCalendar;
 
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
@@ -35,16 +41,24 @@ public class CustomerExecutionReadinessService {
         this(jdbc, broker, upstox, instruments, new TradingExecutionAuthority(jdbc));
     }
 
-    @Autowired
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
             CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
             TradingExecutionAuthority authority) {
+        this(jdbc, broker, upstox, instruments, authority, null);
+    }
+
+    @Autowired
+    public CustomerExecutionReadinessService(
+            JdbcClient jdbc, CustomerAngelOneSessionService broker,
+            CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
+            TradingExecutionAuthority authority, IndianCashMarketCalendar cashCalendar) {
         this.authority = authority;
         this.jdbc = jdbc;
         this.broker = broker;
         this.upstox = upstox;
         this.instruments = instruments;
+        this.cashCalendar = cashCalendar;
     }
 
     public record Readiness(UUID roomId, String mode, String roomStatus,
@@ -58,12 +72,17 @@ public class CustomerExecutionReadinessService {
     }
 
     public record Preflight(UUID roomId, String mode, long instrumentId,
+                            String selectedBroker,
                             String tradingSymbol, String exchange, String side,
                             int quantity, String orderType, String duration,
-                            BigDecimal limitPrice, boolean executable,
+                            BigDecimal limitPrice, BigDecimal estimatedNotional,
+                            BigDecimal availableBrokerFunds, BigDecimal roomBudget,
+                            BigDecimal todayRoomBuyNotional,
+                            boolean brokerCashVerified, boolean roomExposureVerified,
+                            boolean executable,
                             List<String> blockers) {}
 
-    private record Room(String mode, String status, String marketScope) {}
+    private record Room(String mode, String status, String marketScope, long plannedBudgetInr) {}
 
     public Readiness readiness(UUID owner, UUID roomId) {
         Room room = ownedRoom(owner, roomId);
@@ -92,6 +111,13 @@ public class CustomerExecutionReadinessService {
         CustomerUpstoxOAuthService.FnoEntitlement fnoProfile =
             connected && "UPSTOX".equals(selected) && !"EQUITY".equals(room.marketScope())
                 ? upstox.fnoEntitlement(owner) : null;
+        CustomerUpstoxOAuthService.EquityEntitlement equityProfile =
+            connected && "UPSTOX".equals(selected)
+                    && !"FNO".equals(room.marketScope())
+                ? upstox.equityEntitlement(owner) : null;
+        boolean registeredIpMatches = connected && "UPSTOX".equals(selected)
+            && !"FNO".equals(room.marketScope())
+            && registeredUpstoxIpMatches(owner);
         List<String> blockers = new ArrayList<>();
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
@@ -107,10 +133,15 @@ public class CustomerExecutionReadinessService {
                 blockers.add("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
             }
             if (!connected) blockers.add("BROKER_NOT_CONNECTED");
+            if (!"FNO".equals(room.marketScope()) && "UPSTOX".equals(selected)
+                    && (equityProfile == null || !equityProfile.supportsIntradayLimits())) {
+                blockers.add("UPSTOX_EQUITY_INTRADAY_PERMISSION_NOT_VERIFIED");
+                if (equityProfile != null) blockers.add(equityProfile.status());
+            }
             // Selecting a broker does not establish approved static IP,
             // reconciled funds, risk policy, or execution consent.
             blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
-            blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
+            if (!registeredIpMatches) blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
             blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
             blockers.add("EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
             if (!"EQUITY".equals(room.marketScope())) {
@@ -156,7 +187,8 @@ public class CustomerExecutionReadinessService {
                 WHERE id=:room AND user_id=:owner FOR UPDATE
                 """)
             .param("room", roomId).param("owner", owner)
-            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"), rs.getString("market_scope")))
+            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"),
+                rs.getString("market_scope"), rs.getLong("planned_budget_inr")))
             .optional().orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND, "Trading Room not found"));
         if (!"LIVE".equals(room.mode())) {
@@ -198,6 +230,15 @@ public class CustomerExecutionReadinessService {
         };
     }
 
+    private boolean registeredUpstoxIpMatches(UUID owner) {
+        try {
+            return UpstoxRegisteredIpAssessment.assess(
+                upstox.staticIps(owner).data()).registrationMatchesEc2();
+        } catch (RuntimeException unavailable) {
+            return false;
+        }
+    }
+
     public Preflight preflight(UUID owner, UUID roomId, long instrumentId,
                               String side, int quantity, BigDecimal limitPrice) {
         Readiness readiness = readiness(owner, roomId);
@@ -223,22 +264,173 @@ public class CustomerExecutionReadinessService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Invalid quantity or proposed limit price");
         }
+        if (instrument.tickSize() == null || instrument.tickSize().signum() <= 0
+                || limitPrice.remainder(instrument.tickSize()).signum() != 0) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Proposed limit price does not match the instrument tick size");
+        }
+        Room room = ownedRoom(owner, roomId);
         List<String> blockers = new ArrayList<>(readiness.blockers());
-        blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED");
-        blockers.add("SERVER_SIDE_ORDER_RISK_NOT_EVALUATED");
+        boolean cashSessionOpen = cashCalendar == null
+            || cashCalendar.isInsideCashSession(Instant.now());
+        if (!cashSessionOpen) blockers.add("CASH_MARKET_SESSION_CLOSED");
+        if (cashSessionOpen
+                && !hasFreshCustomerQuote(owner, readiness.selectedBroker(), instrument)) {
+            blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED");
+        }
+        BigDecimal notional = limitPrice.multiply(BigDecimal.valueOf(quantity));
+        BigDecimal budget = BigDecimal.valueOf(room.plannedBudgetInr());
+        BigDecimal availableFunds = readAvailableFunds(owner, readiness.selectedBroker());
+        BigDecimal todayRoomBuyNotional = readTodayRoomBuyNotional(owner, roomId);
+        boolean cashBalanceVerified = availableFunds != null;
+        boolean roomExposureVerified = todayRoomBuyNotional != null;
+        blockers.addAll(assessOrderFunds(side, notional, budget, availableFunds,
+            todayRoomBuyNotional));
+        if ("SELL".equals(side)) blockers.add("SELL_POSITION_NOT_VERIFIED");
+        if (newOrdersHalted()) blockers.add("GLOBAL_NEW_ORDERS_HALTED");
+        if (hasUnreconciledLiveOrder(owner)) blockers.add("UNRECONCILED_LIVE_EQUITY_ORDERS_EXIST");
         return new Preflight(roomId, readiness.mode(), instrumentId,
+                readiness.selectedBroker(),
                 instrument.tradingSymbol(), instrument.exchange(), side,
-                quantity, "LIMIT", "DAY", limitPrice, false, List.copyOf(blockers));
+                quantity, "LIMIT", "DAY", limitPrice, notional, availableFunds, budget,
+                todayRoomBuyNotional, cashBalanceVerified, roomExposureVerified,
+                false, List.copyOf(blockers));
+    }
+
+    static List<String> assessOrderFunds(String side, BigDecimal notional,
+            BigDecimal roomBudget, BigDecimal availableFunds,
+            BigDecimal todayRoomBuyNotional) {
+        List<String> blockers = new ArrayList<>();
+        if (todayRoomBuyNotional == null) {
+            blockers.add("ROOM_DAILY_EXPOSURE_NOT_VERIFIED");
+        } else if ("BUY".equals(side)
+                && todayRoomBuyNotional.add(notional).compareTo(roomBudget) > 0) {
+            blockers.add("ORDER_EXCEEDS_REMAINING_ROOM_BUDGET");
+        }
+        if (availableFunds == null) {
+            blockers.add("BROKER_AVAILABLE_FUNDS_NOT_VERIFIED");
+        } else if ("BUY".equals(side) && notional.compareTo(availableFunds) > 0) {
+            blockers.add("INSUFFICIENT_BROKER_AVAILABLE_FUNDS");
+        }
+        return List.copyOf(blockers);
+    }
+
+    /** Today's non-rejected BUY intents consume room budget for the full session. */
+    private BigDecimal readTodayRoomBuyNotional(UUID owner, UUID roomId) {
+        try {
+            ZoneId zone = ZoneId.of("Asia/Kolkata");
+            LocalDate today = LocalDate.now(zone);
+            Instant start = today.atStartOfDay(zone).toInstant();
+            Instant end = today.plusDays(1).atStartOfDay(zone).toInstant();
+            return jdbc.sql("""
+                    SELECT COALESCE(SUM(limit_price * quantity), 0)
+                    FROM customer_live_equity_order
+                    WHERE user_id=:owner AND room_id=:room AND side='BUY'
+                      AND state <> 'REJECTED'
+                      AND created_at >= :start AND created_at < :end
+                    """)
+                .param("owner", owner).param("room", roomId)
+                .param("start", start).param("end", end)
+                .query(BigDecimal.class).single();
+        } catch (RuntimeException unavailable) {
+            // Ledger failure is not a clean zero-exposure account.
+            return null;
+        }
+    }
+
+    /** Broker-specific funds read; values are never inferred from platform or paper balances. */
+    private BigDecimal readAvailableFunds(UUID owner, String selectedBroker) {
+        try {
+            if ("UPSTOX".equals(selectedBroker)) {
+                var data = upstox.funds(owner).data();
+                return decimal(data == null ? null
+                    : data.path("equity").path("available_margin"));
+            }
+            if ("ANGEL_ONE".equals(selectedBroker)) {
+                var data = broker.funds(owner).data();
+                if (data == null) return null;
+                var root = data.has("data") && data.get("data").isObject()
+                    ? data.get("data") : data;
+                var value = root.has("availablecash") ? root.get("availablecash")
+                    : root.get("availableCash");
+                return decimal(value);
+            }
+        } catch (RuntimeException unavailableOrUnverified) {
+            // Missing/stale/failed broker funds are a blocker, not a zero or fallback.
+        }
+        return null;
+    }
+
+    private BigDecimal decimal(com.fasterxml.jackson.databind.JsonNode value) {
+        if (value == null || value.isNull() || value.isMissingNode()) return null;
+        try {
+            BigDecimal parsed = value.isNumber() ? value.decimalValue()
+                : new BigDecimal(value.asText().trim());
+            return parsed.signum() < 0 ? null : parsed;
+        } catch (NumberFormatException invalid) {
+            return null;
+        }
+    }
+
+    private boolean newOrdersHalted() {
+        try {
+            return jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id=1")
+                .query(Boolean.class).single();
+        } catch (RuntimeException unavailable) {
+            // If the control cannot be read, fail closed as halted.
+            return true;
+        }
+    }
+
+    private boolean hasUnreconciledLiveOrder(UUID owner) {
+        try {
+            return jdbc.sql("""
+                    SELECT EXISTS (SELECT 1 FROM customer_live_equity_order
+                      WHERE user_id=:owner
+                        AND state IN ('SUBMITTING','UNKNOWN','ACKNOWLEDGED','PARTIALLY_FILLED'))
+                    """)
+                .param("owner", owner).query(Boolean.class).single();
+        } catch (RuntimeException unavailable) {
+            // A missing ledger or DB read must not be interpreted as a clean account.
+            return true;
+        }
+    }
+
+    /** Read-only quote gate: always use the selected customer's own broker session. */
+    private boolean hasFreshCustomerQuote(UUID owner, String selectedBroker, Instrument instrument) {
+        try {
+            Instant now = Instant.now();
+            if ("ANGEL_ONE".equals(selectedBroker)) {
+                var quote = broker.quoteDetail(owner, instrument);
+                return quote.ltp() != null && quote.ltp().signum() > 0
+                    && quote.exchangeAt() != null
+                    && !quote.exchangeAt().isAfter(now.plusSeconds(2))
+                    && !quote.exchangeAt().isBefore(now.minusSeconds(5))
+                    && !quote.bids().isEmpty() && !quote.asks().isEmpty();
+            }
+            if ("UPSTOX".equals(selectedBroker)) {
+                var quote = upstox.cashEquityQuote(owner, instrument);
+                return quote.lastPrice().signum() > 0
+                    && quote.bestBid().signum() > 0 && quote.bestAsk().signum() > 0
+                    && quote.exchangeAt() != null
+                    && !quote.exchangeAt().isAfter(now.plusSeconds(2))
+                    && !quote.exchangeAt().isBefore(now.minusSeconds(5));
+            }
+        } catch (RuntimeException unavailableOrUnverified) {
+            // A failed provider read is a blocker, never a fallback to platform data.
+        }
+        return false;
     }
 
     private Room ownedRoom(UUID owner, UUID roomId) {
         return jdbc.sql("""
-                SELECT mode, status, market_scope
+                SELECT mode, status, market_scope, planned_budget_inr
                 FROM customer_trading_room
                 WHERE id = :id AND user_id = :user
                 """)
             .param("id", roomId).param("user", owner)
-            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"), rs.getString("market_scope")))
+            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"),
+                rs.getString("market_scope"), rs.getLong("planned_budget_inr")))
             .optional()
             .orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND, "Trading Room not found"));

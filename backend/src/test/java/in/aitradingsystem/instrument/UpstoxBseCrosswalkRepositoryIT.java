@@ -20,6 +20,9 @@ class UpstoxBseCrosswalkRepositoryIT extends AbstractPostgresIT {
         var source=new UpstoxBseCrosswalkParser.Parsed(150,100,50,verified(100));
         var state=crosswalk.publish(source,"aabbccddeeff0011".repeat(4),Instant.now());
         assertThat(state.version()).isNotNull();
+        assertThat(crosswalk.recentInstrumentKey("500325","RELIANCE"))
+            .contains("BSE_EQ|INE002A01018");
+        assertThat(crosswalk.recentInstrumentKey("500325","WRONG")).isEmpty();
         var result=crosswalk.enrich(List.of(
             row("BSE_CM","BSE","500325","RELIANCE",null),
             row("BSE_CM","BSE","500325","WRONG",null),

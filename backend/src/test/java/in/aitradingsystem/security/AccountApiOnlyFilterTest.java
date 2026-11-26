@@ -62,6 +62,9 @@ class AccountApiOnlyFilterTest {
         assertPasses("OPTIONS", roomId + "activate");
         String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
         assertPasses("GET", resource + "execution/readiness");
+        assertPasses("GET", resource + "live/equity/capability");
+        assertPasses("GET", resource + "live/equity/orders");
+        assertPasses("POST", resource + "live/equity/orders");
         assertPasses("POST", resource + "orders/preflight");
         assertPasses("POST", resource + "orders/intents");
         assertPasses("GET", resource + "orders/intents");
@@ -104,6 +107,9 @@ class AccountApiOnlyFilterTest {
         assertBlocked("DELETE", resource + "orders/intents");
         assertBlocked("POST", resource + "orders/intents/execute");
         assertBlocked("POST", resource + "execution/readiness");
+        assertBlocked("POST", resource + "live/equity/capability");
+        assertBlocked("PUT", resource + "live/equity/capability");
+        assertBlocked("PUT", resource + "live/equity/orders");
         assertBlocked("GET", resource + "orders/preflight");
         assertBlocked("DELETE", resource + "orders/preflight");
         assertBlocked("GET", roomId + "activate");

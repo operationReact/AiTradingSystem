@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -18,34 +19,53 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Both modes can inspect execution readiness and validate order intent.
- * No LIVE order submission route exists; preflight never trades. An explicit
- * broker-selection POST writes a room preference, not an order or grant.
+ * The reserved LIVE stock route currently validates and then fails closed;
+ * preflight never trades. Broker selection stores a room preference only.
  */
 @RestController
+@Validated
 @RequestMapping("/api/customer/trading-rooms/{roomId}")
 public class CustomerExecutionReadinessController {
     private final CustomerExecutionReadinessService service;
+    private final CustomerLiveEquityOrderService liveEquityOrders;
     private final CustomerIdentityStore identities;
 
     public CustomerExecutionReadinessController(
-            CustomerExecutionReadinessService service, CustomerIdentityStore identities) {
+            CustomerExecutionReadinessService service,
+            CustomerLiveEquityOrderService liveEquityOrders,
+            CustomerIdentityStore identities) {
         this.service = service;
+        this.liveEquityOrders = liveEquityOrders;
         this.identities = identities;
     }
 
     public record LiveBrokerSelectionRequest(
         @NotNull @Pattern(regexp = "ANGEL_ONE|UPSTOX") String broker) {}
+
+    /** Stock intraday LIVE route capability; informational and always fail-closed in this release. */
+    public record LiveEquityCapability(UUID roomId, String selectedBroker,
+            boolean brokerConnected, boolean orderRouteImplemented,
+            boolean executionEnabled, List<String> blockers) {}
+
+    public record LiveEquityOrderRequest(
+        @NotNull @Min(1) Long instrumentId,
+        @NotNull @Pattern(regexp = "BUY|SELL") String side,
+        @NotNull @Min(1) @Max(10000) Integer quantity,
+        @NotNull @DecimalMin("0.01") @DecimalMax("10000000") @Digits(integer=8, fraction=2)
+            BigDecimal limitPrice) {}
 
     public record OrderPreflightRequest(
         @NotNull @Min(1) Long instrumentId,
@@ -58,6 +78,54 @@ public class CustomerExecutionReadinessController {
     public ResponseEntity<CustomerExecutionReadinessService.Readiness> readiness(
             @PathVariable UUID roomId, Authentication authentication) {
         return noStore(service.readiness(customer(authentication), roomId));
+    }
+
+    @GetMapping("/live/equity/capability")
+    public ResponseEntity<LiveEquityCapability> liveEquityCapability(
+            @PathVariable UUID roomId, Authentication authentication) {
+        var readiness = service.readiness(customer(authentication), roomId);
+        var blockers = new java.util.ArrayList<>(readiness.blockers());
+        blockers.add("LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
+        blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER");
+        blockers.add("ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED");
+        blockers.add("BROKER_ORDER_DISPATCH_AND_RECONCILIATION_NOT_IMPLEMENTED");
+        blockers.add("ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED");
+        blockers.add("UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED");
+        return noStore(new LiveEquityCapability(roomId, readiness.selectedBroker(),
+            readiness.brokerConnected(), false, false, List.copyOf(blockers)));
+    }
+
+    /**
+     * Explicitly reserved route for stock intraday LIVE orders. It validates
+     * owner, room, equity instrument and intent, then fails closed until
+     * authoritative quote, account-wide risk, supported broker dispatch and
+     * reconciliation are wired.
+     */
+    @PostMapping("/live/equity/orders")
+    public ResponseEntity<Void> submitLiveEquityOrder(
+            @PathVariable UUID roomId,
+            @RequestHeader("Idempotency-Key") @Pattern(regexp="[A-Za-z0-9_-]{8,64}") String idempotencyKey,
+            @RequestHeader(value="X-Confirm-Live-Equity-Order", required=false) String confirmation,
+            @Valid @RequestBody LiveEquityOrderRequest input,
+            Authentication authentication) {
+        var owner = customer(authentication);
+        // Run the same authoritative validation as the read-only preflight.
+        // This prevents the reserved route from accepting non-equity symbols,
+        // malformed quantities or orders in F&O-only rooms.
+        service.preflight(owner, roomId, input.instrumentId(), input.side(),
+            input.quantity(), input.limitPrice());
+        if (!"CONFIRM_LIVE_INTRADAY_EQUITY".equals(confirmation)) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
+                "Explicit per-order LIVE equity confirmation required");
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+            "LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED; no order was sent to a broker");
+    }
+
+    @GetMapping("/live/equity/orders")
+    public ResponseEntity<List<CustomerLiveEquityOrderService.Order>> liveEquityOrders(
+            @PathVariable UUID roomId, Authentication authentication) {
+        return noStore(liveEquityOrders.list(customer(authentication), roomId));
     }
 
     @PostMapping("/execution/broker-selection")

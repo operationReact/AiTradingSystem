@@ -6,7 +6,7 @@ import '../data/customer_execution_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
 
-/// LIVE order drafting only. The backend has no customer LIVE submit route,
+/// LIVE order drafting only. The reserved backend submit route is fail-closed,
 /// and this widget never calls a broker placement API.
 class MintTickRoomLiveOrderTicket extends StatefulWidget {
   const MintTickRoomLiveOrderTicket({

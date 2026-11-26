@@ -499,6 +499,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
   TradingRoomDraft? _renamedRoom;
   CustomerPaperWallet? _wallet;
   CustomerExecutionReadiness? _readiness;
+  LiveEquityCapability? _liveEquityCapability;
   List<CustomerPaperCashEvent> _events = const [];
   String? _error;
   bool _busy = false;
@@ -518,9 +519,29 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
     if (widget.executionRepository == null) return;
     try {
       final data = await widget.executionRepository!.readiness(widget.room.id);
-      if (mounted) setState(() => _readiness = data);
+      LiveEquityCapability? equityCapability;
+      if (widget.room.mode == 'LIVE' && widget.room.marketScope != 'FNO') {
+        try {
+          equityCapability = await widget.executionRepository!
+              .liveEquityCapability(widget.room.id);
+          if (equityCapability.roomId != widget.room.id ||
+              equityCapability.executionEnabled ||
+              equityCapability.orderRouteImplemented) {
+            throw const FormatException('Unexpected LIVE equity capability');
+          }
+        } catch (_) {
+          equityCapability = null;
+        }
+      }
+      if (mounted) setState(() {
+        _readiness = data;
+        _liveEquityCapability = equityCapability;
+      });
     } catch (_) {
-      if (mounted) setState(() => _readiness = null);
+      if (mounted) setState(() {
+        _readiness = null;
+        _liveEquityCapability = null;
+      });
     }
   }
 
@@ -542,6 +563,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         throw const FormatException('Unexpected broker assignment readiness');
       }
       setState(() => _readiness = readiness);
+      await _loadReadiness();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -688,6 +710,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
       onRename: widget.repository == null ? null : _renameRoom,
       wallet: _wallet,
       readiness: _readiness,
+      liveEquityCapability: _liveEquityCapability,
       events: _events,
       market: widget.marketRepository,
       paper: widget.paperTradingRepository,

@@ -83,7 +83,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
 
     private static final java.util.regex.Pattern CUSTOMER_EXECUTION_RESOURCE =
         java.util.regex.Pattern.compile(
-            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/(execution/readiness|orders/preflight)$");
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/(execution/readiness|orders/preflight|live/equity/capability|live/equity/orders)$");
 
     private static final java.util.regex.Pattern CUSTOMER_INTENT_RESOURCE =
         java.util.regex.Pattern.compile(
@@ -193,6 +193,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (CUSTOMER_EXECUTION_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/execution/readiness") && "GET".equals(method))
+                    || (path.endsWith("/live/equity/capability") && "GET".equals(method))
+                    || (path.endsWith("/live/equity/orders") && Set.of("GET", "POST").contains(method))
                     || (path.endsWith("/orders/preflight") && "POST".equals(method))))
             || (CUSTOMER_INTENT_RESOURCE.matcher(path).matches()
                 && Set.of("GET", "POST", "OPTIONS").contains(method))

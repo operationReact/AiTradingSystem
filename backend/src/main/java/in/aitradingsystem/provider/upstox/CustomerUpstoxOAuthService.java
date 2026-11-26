@@ -2,6 +2,8 @@ package in.aitradingsystem.provider.upstox;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.instrument.UpstoxBseCrosswalkRepository;
 import in.aitradingsystem.provider.upstox.UpstoxApiClient.UpstoxProviderException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -11,6 +13,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Base64;
@@ -22,14 +25,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * Customer-bound Upstox OAuth authorization-code flow (read-only).
+ * Customer-bound Upstox OAuth authorization-code flow and account reads.
  * Only the platform has the OAuth client secret. Users authenticate on Upstox.
  *
  * <p>Pending state and access tokens are deliberately process-local for this
  * first integration: no unencrypted tokens or refresh credentials are stored
  * in PostgreSQL, frontend, logs, or the OAuth callback page. Multi-replica
  * production deployment requires a shared encrypted session store and
- * transactional one-time state consumption.
+ * transactional one-time state consumption. The private one-shot order
+ * transport has no customer route or execution coordinator wired.
  */
 @Service
 public class CustomerUpstoxOAuthService {
@@ -48,16 +52,28 @@ public class CustomerUpstoxOAuthService {
     private final UpstoxProperties props;
     private final UpstoxApiClient api;
     private final Clock clock;
+    private final UpstoxNseEquityIsinSource nseEquities;
+    private final UpstoxBseCrosswalkRepository bseEquities;
 
     @Autowired
-    public CustomerUpstoxOAuthService(UpstoxProperties props, UpstoxApiClient api) {
-        this(props, api, Clock.systemUTC());
+    public CustomerUpstoxOAuthService(UpstoxProperties props, UpstoxApiClient api,
+            UpstoxNseEquityIsinSource nseEquities,
+            UpstoxBseCrosswalkRepository bseEquities) {
+        this(props, api, Clock.systemUTC(), nseEquities, bseEquities);
     }
 
     CustomerUpstoxOAuthService(UpstoxProperties props, UpstoxApiClient api, Clock clock) {
+        this(props, api, clock, null, null);
+    }
+
+    CustomerUpstoxOAuthService(UpstoxProperties props, UpstoxApiClient api,
+            Clock clock, UpstoxNseEquityIsinSource nseEquities,
+            UpstoxBseCrosswalkRepository bseEquities) {
         this.props = props;
         this.api = api;
         this.clock = clock;
+        this.nseEquities = nseEquities;
+        this.bseEquities = bseEquities;
     }
 
     private record Pending(UUID customerId, Instant expiresAt) {}
@@ -77,6 +93,9 @@ public class CustomerUpstoxOAuthService {
         }
     }
     public record AccountData(String provider, Instant fetchedAt, JsonNode data) {}
+    public record EquityMarketQuote(String instrumentKey, java.math.BigDecimal lastPrice,
+            java.math.BigDecimal bestBid, java.math.BigDecimal bestAsk,
+            Instant exchangeAt, Instant receivedAt) {}
 
     /**
      * Broker-reported NFO entitlement only. A positive result is NOT an
@@ -89,6 +108,20 @@ public class CustomerUpstoxOAuthService {
         public boolean supportsLongOptionLimits() {
             return connected && nfoEnabled && limitEnabled
                 && (intradayEnabled || carryforwardEnabled);
+        }
+    }
+
+    /** Owner-profile permissions for cash-equity intraday LIMIT orders only. */
+    public record EquityEntitlement(boolean connected, boolean nseEnabled,
+            boolean bseEnabled, boolean limitEnabled, boolean intradayEnabled,
+            String status) {
+        public boolean supportsIntradayLimits() {
+            return connected && (nseEnabled || bseEnabled) && limitEnabled && intradayEnabled;
+        }
+        public boolean supportsIntradayLimits(String exchange) {
+            boolean exchangeEnabled = "NSE".equals(exchange) ? nseEnabled
+                : "BSE".equals(exchange) && bseEnabled;
+            return connected && exchangeEnabled && limitEnabled && intradayEnabled;
         }
     }
 
@@ -275,6 +308,107 @@ public class CustomerUpstoxOAuthService {
             response.orderIds(), response.code());
     }
 
+    /**
+     * One-shot customer-session transport for cash intraday LIMIT orders.
+     * Only an internal coordinator may call this after committing its durable
+     * order claim and passing independent compliance, quote and risk gates.
+     */
+    public record EquitySubmission(String outcome, String orderId, String code) {}
+
+    public EquitySubmission submitVerifiedEquityIntradayOnce(UUID owner,
+            ObjectNode payload) {
+        BrokerSession session = validSession(owner);
+        if (session == null) {
+            return new EquitySubmission("REJECTED", null, "UPSTOX_SESSION_MISSING");
+        }
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+            new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(4000);
+        var transport = new UpstoxIntradayEquityOrderTransport(
+            org.springframework.web.client.RestClient.builder().requestFactory(factory));
+        var response = transport.submitOnce(session.accessToken(), payload);
+        if ("UPSTOX_SESSION_EXPIRED".equals(response.code())) {
+            sessions.remove(owner, session);
+        }
+        return new EquitySubmission(response.outcome().name(),
+            response.orderId(), response.code());
+    }
+
+    /**
+     * Read one fresh, customer-session Upstox cash-equity snapshot. This is
+     * data only: it does not grant order permission or dispatch an order.
+     */
+    public EquityMarketQuote cashEquityQuote(UUID owner, Instrument instrument) {
+        if (instrument == null
+                || !"EQ".equalsIgnoreCase(instrument.instrumentType())) {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_INSTRUMENT_UNVERIFIED");
+        }
+        String instrumentKey;
+        if ("NSE".equals(instrument.exchange()) && nseEquities != null) {
+            String isin = nseEquities.resolve(instrument.exchange(), instrument.tradingSymbol())
+                .orElseThrow(() -> new UpstoxProviderException(
+                    "UPSTOX_EQUITY_INSTRUMENT_REFERENCE_STALE_OR_MISSING"));
+            instrumentKey = "NSE_EQ|" + isin;
+        } else if ("BSE".equals(instrument.exchange()) && bseEquities != null) {
+            instrumentKey = bseEquities.recentInstrumentKey(
+                instrument.symbolToken(), instrument.tradingSymbol())
+                .orElseThrow(() -> new UpstoxProviderException(
+                    "UPSTOX_EQUITY_INSTRUMENT_REFERENCE_STALE_OR_MISSING"));
+        } else {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_INSTRUMENT_UNVERIFIED");
+        }
+        if (!equityEntitlement(owner).supportsIntradayLimits(instrument.exchange())) {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_INTRADAY_PERMISSION_NOT_VERIFIED");
+        }
+        BrokerSession session = validSession(owner);
+        if (session == null) {
+            throw new UpstoxProviderException("UPSTOX_SESSION_MISSING");
+        }
+        JsonNode data;
+        try {
+            data = api.cashEquityQuote(session.accessToken(), instrumentKey);
+        } catch (UpstoxProviderException unavailable) {
+            if ("UPSTOX_SESSION_EXPIRED".equals(unavailable.code())) {
+                sessions.remove(owner, session);
+            }
+            throw unavailable;
+        }
+        JsonNode quote = null;
+        var values = data == null ? null : data.elements();
+        if (values != null) {
+            while (values.hasNext()) {
+                JsonNode candidate = values.next();
+                if (instrumentKey.equals(candidate.path("instrument_token").asText())) {
+                    quote = candidate;
+                    break;
+                }
+            }
+        }
+        if (quote == null || !quote.path("last_price").isNumber()) {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_QUOTE_UNVERIFIED");
+        }
+        java.math.BigDecimal ltp = quote.path("last_price").decimalValue();
+        java.math.BigDecimal bid = quote.path("depth").path("buy").path(0)
+            .path("price").decimalValue();
+        java.math.BigDecimal ask = quote.path("depth").path("sell").path(0)
+            .path("price").decimalValue();
+        Instant exchangeAt;
+        try {
+            exchangeAt = OffsetDateTime.parse(quote.path("timestamp").asText()).toInstant();
+        } catch (RuntimeException invalidTimestamp) {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_QUOTE_TIME_INVALID");
+        }
+        Instant receivedAt = clock.instant();
+        if (ltp.signum() <= 0 || bid.signum() <= 0 || ask.signum() <= 0
+                || bid.compareTo(ask) > 0
+                || exchangeAt.isAfter(receivedAt.plusSeconds(2))
+                || exchangeAt.isBefore(receivedAt.minusSeconds(5))) {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_QUOTE_STALE_OR_INVALID");
+        }
+        return new EquityMarketQuote(instrumentKey, ltp, bid, ask, exchangeAt, receivedAt);
+    }
+
 
     /**
      * Read the authenticated Upstox profile on demand, never from app-level
@@ -310,6 +444,40 @@ public class CustomerUpstoxOAuthService {
                 sessions.remove(customerId, session);
             }
             return new FnoEntitlement(false, false, false, false, false,
+                "UPSTOX_PROFILE_UNAVAILABLE");
+        }
+    }
+
+    /** Profile permission evidence is informative and never enables dispatch by itself. */
+    public EquityEntitlement equityEntitlement(UUID customerId) {
+        BrokerSession session = validSession(customerId);
+        if (session == null) {
+            return new EquityEntitlement(false, false, false, false, false,
+                "UPSTOX_NOT_CONNECTED");
+        }
+        try {
+            JsonNode profile = api.profile(session.accessToken());
+            if (profile == null || !profile.isObject()
+                    || !"UPSTOX".equalsIgnoreCase(profile.path("broker").asText(""))
+                    || !session.brokerUserId().equals(profile.path("user_id").asText(""))
+                    || !profile.path("is_active").asBoolean(false)) {
+                return new EquityEntitlement(true, false, false, false, false,
+                    "UPSTOX_PROFILE_UNVERIFIED");
+            }
+            boolean nse = hasProfilePermission(profile, "exchanges", "NSE");
+            boolean bse = hasProfilePermission(profile, "exchanges", "BSE");
+            boolean limit = hasProfilePermission(profile, "order_types", "LIMIT");
+            boolean intraday = hasProfilePermission(profile, "products", "I");
+            String status = !nse && !bse ? "UPSTOX_EQUITY_EXCHANGE_NOT_ENABLED"
+                : !limit ? "UPSTOX_LIMIT_NOT_ENABLED"
+                : !intraday ? "UPSTOX_INTRADAY_PRODUCT_NOT_ENABLED"
+                : "UPSTOX_EQUITY_PROFILE_VERIFIED";
+            return new EquityEntitlement(true, nse, bse, limit, intraday, status);
+        } catch (UpstoxProviderException unavailable) {
+            if ("UPSTOX_SESSION_EXPIRED".equals(unavailable.code())) {
+                sessions.remove(customerId, session);
+            }
+            return new EquityEntitlement(false, false, false, false, false,
                 "UPSTOX_PROFILE_UNAVAILABLE");
         }
     }

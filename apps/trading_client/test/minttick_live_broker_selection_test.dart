@@ -78,6 +78,33 @@ void main() {
     }).selectedBroker, isNull);
   });
 
+  test('cash intraday capability stays blocked until route and gates are ready', () {
+    final capability = LiveEquityCapability.decode({
+      'roomId': 'live-room-1',
+      'selectedBroker': 'ANGEL_ONE',
+      'brokerConnected': true,
+      'orderRouteImplemented': false,
+      'executionEnabled': false,
+      'blockers': [
+        'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED',
+        'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER',
+        'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED',
+      ],
+    });
+    expect(capability.selectedBroker, 'ANGEL_ONE');
+    expect(capability.brokerConnected, isTrue);
+    expect(capability.orderRouteImplemented, isFalse);
+    expect(capability.executionEnabled, isFalse);
+    expect(capability.blockers, hasLength(3));
+    expect(() => LiveEquityCapability.decode({
+      'roomId': 'live-room-1',
+      'brokerConnected': true,
+      'orderRouteImplemented': true,
+      'executionEnabled': true,
+      'blockers': ['BROKEN'],
+    }), throwsFormatException);
+  });
+
   testWidgets('Live room explicitly selects one broker but remains blocked',
       (tester) async {
     tester.view.devicePixelRatio = 1;
