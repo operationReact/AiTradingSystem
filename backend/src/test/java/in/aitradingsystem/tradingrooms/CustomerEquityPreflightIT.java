@@ -46,9 +46,12 @@ class CustomerEquityPreflightIT extends AbstractPostgresIT {
         var acceptedForReview = service.preflight(owner, room, 42L,
             "BUY", 1, new BigDecimal("194.55"));
         assertThat(acceptedForReview.executable()).isFalse();
+        // Room exposure is read from the ledger (zero here). It was previously
+        // reported unverified because of an Instant binding defect; that defect is fixed.
         assertThat(acceptedForReview.blockers()).contains(
-            "BROKER_AVAILABLE_FUNDS_NOT_VERIFIED", "ROOM_DAILY_EXPOSURE_NOT_VERIFIED",
-            "EXECUTION_DISABLED");
+            "BROKER_AVAILABLE_FUNDS_NOT_VERIFIED", "EXECUTION_DISABLED");
+        assertThat(acceptedForReview.blockers()).doesNotContain("ROOM_DAILY_EXPOSURE_NOT_VERIFIED");
+        assertThat(acceptedForReview.roomExposureVerified()).isTrue();
         assertThat(acceptedForReview.blockers().contains("CASH_MARKET_SESSION_CLOSED")
                 || acceptedForReview.blockers().contains("AUTHORITATIVE_QUOTE_NOT_VERIFIED"))
             .isTrue();

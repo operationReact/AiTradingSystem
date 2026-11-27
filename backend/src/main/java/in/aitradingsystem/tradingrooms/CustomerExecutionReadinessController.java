@@ -41,14 +41,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class CustomerExecutionReadinessController {
     private final CustomerExecutionReadinessService service;
     private final CustomerLiveEquityOrderService liveEquityOrders;
+    private final LiveEquityOrderCoordinator coordinator;
+    private final boolean dispatchEnabled;
     private final CustomerIdentityStore identities;
 
     public CustomerExecutionReadinessController(
             CustomerExecutionReadinessService service,
             CustomerLiveEquityOrderService liveEquityOrders,
+            LiveEquityOrderCoordinator coordinator,
+            LiveEquityExecutionPolicy policy,
             CustomerIdentityStore identities) {
         this.service = service;
         this.liveEquityOrders = liveEquityOrders;
+        this.coordinator = coordinator;
+        this.dispatchEnabled = policy != null && policy.dispatchEnabled();
         this.identities = identities;
     }
 
@@ -85,41 +91,40 @@ public class CustomerExecutionReadinessController {
             @PathVariable UUID roomId, Authentication authentication) {
         var readiness = service.readiness(customer(authentication), roomId);
         var blockers = new java.util.ArrayList<>(readiness.blockers());
-        blockers.add("LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
-        blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER");
-        blockers.add("ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED");
-        blockers.add("BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED");
-        blockers.add("ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED");
-        blockers.add("UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED");
+        // The route is reported as implemented only when the deployment dispatch
+        // gate is on. Otherwise it stays fail-closed and says so.
+        boolean routeOpen = dispatchEnabled;
+        if (!routeOpen) {
+            blockers.add("LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
+        } else {
+            blockers.add("PER_ORDER_PREFLIGHT_REQUIRED");
+        }
         return noStore(new LiveEquityCapability(roomId, readiness.selectedBroker(),
-            readiness.brokerConnected(), false, false, List.copyOf(blockers)));
+            readiness.brokerConnected(), routeOpen,
+            routeOpen && readiness.executionEnabled(), List.copyOf(blockers)));
     }
 
     /**
-     * Explicitly reserved route for stock intraday LIVE orders. It validates
-     * owner, room, equity instrument and intent, then fails closed until
-     * authoritative quote, account-wide risk, supported broker dispatch and
-     * reconciliation are wired.
+     * Stock intraday LIVE order route. Every gate is enforced server-side by
+     * {@code LiveEquityOrderCoordinator}: deployment dispatch gate, per-order
+     * consent, durable claim with recomputed preflight, account-wide risk, and
+     * exactly one broker request with no retry. The response carries only the
+     * order's own state; broker responses and credentials never leave the server.
      */
     @PostMapping("/live/equity/orders")
-    public ResponseEntity<Void> submitLiveEquityOrder(
+    public ResponseEntity<CustomerLiveEquityOrderService.Order> submitLiveEquityOrder(
             @PathVariable UUID roomId,
             @RequestHeader("Idempotency-Key") @Pattern(regexp="[A-Za-z0-9_-]{8,64}") String idempotencyKey,
             @RequestHeader(value="X-Confirm-Live-Equity-Order", required=false) String confirmation,
             @Valid @RequestBody LiveEquityOrderRequest input,
             Authentication authentication) {
         var owner = customer(authentication);
-        // Run the same authoritative validation as the read-only preflight.
-        // This prevents the reserved route from accepting non-equity symbols,
-        // malformed quantities or orders in F&O-only rooms.
-        service.preflight(owner, roomId, input.instrumentId(), input.side(),
-            input.quantity(), input.limitPrice());
-        if (!"CONFIRM_LIVE_INTRADAY_EQUITY".equals(confirmation)) {
-            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
-                "Explicit per-order LIVE equity confirmation required");
-        }
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-            "LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED; no order was sent to a broker");
+        var result = coordinator.submit(owner, roomId, idempotencyKey,
+            input.instrumentId(), input.side(), input.quantity(), input.limitPrice(),
+            confirmation);
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+            .cacheControl(CacheControl.noStore())
+            .body(result.order());
     }
 
     @GetMapping("/live/equity/orders")

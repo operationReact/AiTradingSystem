@@ -3,7 +3,6 @@ package in.aitradingsystem.tradingrooms;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,9 +14,11 @@ import in.aitradingsystem.support.AbstractPostgresIT;
 import in.aitradingsystem.user.UserAccountStore;
 import java.time.Instant;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Database-backed checks for the V100 custody migration and the broker-history
@@ -30,35 +31,32 @@ class CustomerLiveEquityReconciliationIT extends AbstractPostgresIT {
 
     @Autowired JdbcClient jdbc;
     @Autowired UserAccountStore users;
+    @Autowired CustomerLiveEquityOrderService orders;
+    @MockitoBean CustomerUpstoxOAuthService upstox;
+    @MockitoBean CustomerAngelOneSessionService angel;
+    @MockitoBean InstrumentMasterService instruments;
 
-    private CustomerUpstoxOAuthService upstox;
-    private CustomerLiveEquityOrderService orders;
-
-    private CustomerLiveEquityOrderService service() {
-        var angelOne = mock(CustomerAngelOneSessionService.class);
-        upstox = mock(CustomerUpstoxOAuthService.class);
-        var instruments = mock(InstrumentMasterService.class);
-        // readiness() only needs a non-throwing, disconnected broker status here.
+    /** Readiness reads the owner's broker status; the stub is connected, never a fallback. */
+    @BeforeEach
+    void connectedUpstoxSession() {
         when(upstox.status(any())).thenReturn(new CustomerUpstoxOAuthService.Status(
-            true, false, "UPSTOX", null, null, false));
-        var readiness = new CustomerExecutionReadinessService(jdbc, angelOne, upstox, instruments);
-        return new CustomerLiveEquityOrderService(jdbc, readiness, angelOne, upstox);
+            true, true, "UPSTOX", "***456", Instant.now().plusSeconds(3600), false));
     }
 
     @Test
     void fullFillReconciliationPersistsFilledStateAndQuantity() throws Exception {
-        orders = service();
         UUID owner = customer();
         UUID room = liveUpstoxRoom(owner);
-        String tag = "MTreconc001a";
+        String tag = LiveEquityCorrelationTag.generate();
+        String brokerId = "UP" + UUID.randomUUID().toString().substring(0, 8);
         UUID orderId = seedReconcilableOrder(owner, room, tag);
 
         JsonNode history = JSON.readTree("""
-            {"data":[{"order_id":"UP777","tag":"%s","exchange":"NSE",
+            {"data":[{"order_id":"%2$s","tag":"%1$s","exchange":"NSE",
               "trading_symbol":"RELIANCE","transaction_type":"BUY","quantity":10,
               "price":100.00,"product":"I","order_type":"LIMIT","validity":"DAY",
               "status":"complete","filled_quantity":10,"average_price":100.10}]}
-            """.formatted(tag));
+            """.formatted(tag, brokerId));
         when(upstox.orderHistoryByTag(eq(owner), eq(tag))).thenReturn(
             new CustomerUpstoxOAuthService.AccountData("UPSTOX", Instant.now(),
                 history.get("data")));
@@ -66,15 +64,14 @@ class CustomerLiveEquityReconciliationIT extends AbstractPostgresIT {
         var result = orders.reconcileFromBroker(owner, room, orderId);
         assertThat(result.state()).isEqualTo("FILLED");
         assertThat(result.filledQuantity()).isEqualTo(10);
-        assertThat(result.brokerOrderId()).isEqualTo("UP777");
+        assertThat(result.brokerOrderId()).isEqualTo(brokerId);
     }
 
     @Test
     void emptyBrokerHistoryLeavesOrderReservedAndRecordsOutcome() throws Exception {
-        orders = service();
         UUID owner = customer();
         UUID room = liveUpstoxRoom(owner);
-        String tag = "MTreconc002b";
+        String tag = LiveEquityCorrelationTag.generate();
         UUID orderId = seedReconcilableOrder(owner, room, tag);
 
         when(upstox.orderHistoryByTag(eq(owner), eq(tag))).thenReturn(
@@ -89,10 +86,9 @@ class CustomerLiveEquityReconciliationIT extends AbstractPostgresIT {
 
     @Test
     void migrationEnforcesUniqueBrokerTagPerBroker() {
-        orders = service();
         UUID owner = customer();
         UUID room = liveUpstoxRoom(owner);
-        String tag = "MTreconc003c";
+        String tag = LiveEquityCorrelationTag.generate();
         seedReconcilableOrder(owner, room, tag);
         // A second order reusing the same broker+tag must violate the unique index.
         try {

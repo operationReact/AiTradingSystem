@@ -339,25 +339,32 @@ public class CustomerUpstoxOAuthService {
      * Read one fresh, customer-session Upstox cash-equity snapshot. This is
      * data only: it does not grant order permission or dispatch an order.
      */
-    public EquityMarketQuote cashEquityQuote(UUID owner, Instrument instrument) {
+    /**
+     * Resolve the exact Upstox cash-equity instrument key from the fresh,
+     * source-custodied reference. Null-free: any gap is an exception, never a guess.
+     */
+    public String cashEquityInstrumentKey(Instrument instrument) {
         if (instrument == null
                 || !"EQ".equalsIgnoreCase(instrument.instrumentType())) {
             throw new UpstoxProviderException("UPSTOX_EQUITY_INSTRUMENT_UNVERIFIED");
         }
-        String instrumentKey;
         if ("NSE".equals(instrument.exchange()) && nseEquities != null) {
             String isin = nseEquities.resolve(instrument.exchange(), instrument.tradingSymbol())
                 .orElseThrow(() -> new UpstoxProviderException(
                     "UPSTOX_EQUITY_INSTRUMENT_REFERENCE_STALE_OR_MISSING"));
-            instrumentKey = "NSE_EQ|" + isin;
-        } else if ("BSE".equals(instrument.exchange()) && bseEquities != null) {
-            instrumentKey = bseEquities.recentInstrumentKey(
+            return "NSE_EQ|" + isin;
+        }
+        if ("BSE".equals(instrument.exchange()) && bseEquities != null) {
+            return bseEquities.recentInstrumentKey(
                 instrument.symbolToken(), instrument.tradingSymbol())
                 .orElseThrow(() -> new UpstoxProviderException(
                     "UPSTOX_EQUITY_INSTRUMENT_REFERENCE_STALE_OR_MISSING"));
-        } else {
-            throw new UpstoxProviderException("UPSTOX_EQUITY_INSTRUMENT_UNVERIFIED");
         }
+        throw new UpstoxProviderException("UPSTOX_EQUITY_INSTRUMENT_UNVERIFIED");
+    }
+
+    public EquityMarketQuote cashEquityQuote(UUID owner, Instrument instrument) {
+        String instrumentKey = cashEquityInstrumentKey(instrument);
         if (!equityEntitlement(owner).supportsIntradayLimits(instrument.exchange())) {
             throw new UpstoxProviderException("UPSTOX_EQUITY_INTRADAY_PERMISSION_NOT_VERIFIED");
         }

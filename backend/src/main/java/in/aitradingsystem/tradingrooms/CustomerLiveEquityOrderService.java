@@ -21,14 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Customer-scoped custody for the isolated LIVE intraday equity ledger: the
- * serialized durable claim, its read side, and broker-history reconciliation.
+ * Durable custody for the LIVE intraday equity ledger: the serialized claim,
+ * the single outcome write after a dispatch, and broker-history reconciliation.
  *
- * <p>This service never dispatches an order. A claim only reserves an intent
- * (persisting a unique correlation tag) after the authoritative preflight is
- * executable and all account-wide risk caps pass; reconciliation only reads the
- * owner's own selected-broker order book to prove a state. LIVE dispatch stays
- * disabled and is separately gated.
+ * <p>This service never contacts a broker to place an order. The broker
+ * request itself lives in {@code LiveEquityOrderCoordinator}, which runs it
+ * strictly after this class's claim transaction has committed.
  */
 @Service
 public class CustomerLiveEquityOrderService {
@@ -54,6 +52,14 @@ public class CustomerLiveEquityOrderService {
             BigDecimal limitPrice, String state, String brokerOrderId,
             int filledQuantity, String outcomeCode, Instant createdAt, Instant updatedAt) {}
 
+    /**
+     * {@code created=false} means an idempotent replay: never dispatch again and
+     * {@code brokerTag} is null. {@code brokerTag} is internal and never serialized.
+     */
+    public record Claim(Order order, boolean created, String brokerTag) {
+        @Override public String toString() { return "Claim[redacted]"; }
+    }
+
     private record StoredOrder(Order order, String payloadHash) {}
     private record ClaimRoom(String mode, String marketScope, long plannedBudgetInr,
                              String selectedBroker) {}
@@ -62,26 +68,27 @@ public class CustomerLiveEquityOrderService {
             int quantity, BigDecimal limitPrice, int filledQuantity) {}
 
     /**
-     * Reserve a single LIVE cash-equity order after every preflight gate and
-     * account-wide risk cap passes. The authoritative preflight is recomputed
-     * here (never trusted from a caller snapshot), so market session, quote
-     * freshness, tick size, broker permissions, registered IP, funds, room
-     * budget, global halt and unreconciled-order checks all apply at claim time.
-     * The customer row lock serializes reservations across every room for the
-     * same owner. This method never contacts a broker to place an order; its
-     * caller may dispatch once, only after this transaction commits.
+     * Reserve a single LIVE cash-equity order. The authoritative preflight and
+     * the account-wide risk policy are recomputed here, inside the transaction,
+     * under the owner's row lock. Per-order consent is required. The durable
+     * SUBMITTING row and unique correlation tag are committed before any broker
+     * request can be made.
      */
     @Transactional
-    public Order claimForSubmission(UUID owner, UUID roomId, String idempotencyKey,
-            long instrumentId, String side, int quantity, BigDecimal limitPrice) {
+    public Claim claimForSubmission(UUID owner, UUID roomId, String idempotencyKey,
+            long instrumentId, String side, int quantity, BigDecimal limitPrice,
+            boolean consentConfirmed) {
         if (owner == null || roomId == null || idempotencyKey == null
                 || !idempotencyKey.matches("[A-Za-z0-9_-]{8,64}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Invalid LIVE intraday equity order claim");
         }
-        // Recompute the authoritative preflight. This both validates the
-        // instrument/intent and re-runs all mutable readiness checks at claim
-        // time, so a stale client snapshot can never widen what is allowed.
+        if (!consentConfirmed) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
+                "Explicit per-order LIVE equity confirmation required");
+        }
+        // Recompute the authoritative preflight. A stale client snapshot is never
+        // trusted, and every mutable broker and risk gate applies at claim time.
         CustomerExecutionReadinessService.Preflight proposal =
             readiness.preflight(owner, roomId, instrumentId, side, quantity, limitPrice);
         if (proposal.instrumentId() != instrumentId
@@ -112,11 +119,11 @@ public class CustomerLiveEquityOrderService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Idempotency key was already used for a different order");
             }
-            return prior.order();
+            return new Claim(prior.order(), false, null);
         }
-        // The reserved route fails closed while any blocker (always at least
-        // EXECUTION_DISABLED in this release) is present.
-        if (!proposal.executable() || !proposal.blockers().isEmpty()) {
+        // Any blocker (including EXECUTION_DISABLED while the dispatch gate is off)
+        // refuses the claim. Nothing is reserved and nothing is sent.
+        if (!proposal.blockers().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "LIVE intraday equity preflight is not executable");
         }
@@ -135,7 +142,7 @@ public class CustomerLiveEquityOrderService {
                 rs.getString("broker")))
             .optional().orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND, "Trading Room not found"));
-        if (!"LIVE".equals(room.mode()) || "FNO".equals(room.marketScope())
+        if (!"LIVE".equals(room.mode()) || !"EQUITY".equals(room.marketScope())
                 || !Objects.equals(room.selectedBroker(), proposal.selectedBroker())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "LIVE room or selected broker changed during order preflight");
@@ -169,13 +176,13 @@ public class CustomerLiveEquityOrderService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Room budget changed during order preflight");
         }
-        // Account-wide risk caps across ALL of the customer's LIVE rooms. A
-        // missing/unreadable policy or exposure fails the claim closed.
+        // Account-wide caps across ALL of the customer's LIVE rooms. Missing or
+        // unreadable policy, exposure or day loss fails the claim closed.
         LiveEquityRiskPolicy policy = readRiskPolicy(owner);
         BigDecimal accountWideBuy = accountWideTodayBuyNotional(owner);
         List<String> riskBlockers = LiveEquityRiskPolicy.assessClaimRisk(
             proposal.side(), notional, proposal.quantity(), accountWideBuy,
-            /* realized loss source not yet wired; fails closed */ null, policy);
+            proposal.todayRealisedLoss(), policy);
         if (!riskBlockers.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Account-wide LIVE intraday risk policy blocks this order");
@@ -198,7 +205,60 @@ public class CustomerLiveEquityOrderService {
             .param("side", proposal.side()).param("quantity", proposal.quantity())
             .param("price", proposal.limitPrice()).param("idempotency", idempotencyKey)
             .param("hash", fingerprint).param("tag", brokerTag).update();
-        return byIdempotencyKey(owner, roomId, idempotencyKey).order();
+        return new Claim(byIdempotencyKey(owner, roomId, idempotencyKey).order(), true, brokerTag);
+    }
+
+    /**
+     * Record the single dispatch outcome. The write succeeds only from
+     * SUBMITTING, so a stale or duplicate writer cannot overwrite a recorded
+     * state. An ACKNOWLEDGED outcome without a broker order id is downgraded to
+     * UNKNOWN, which stays reserved until reconciliation.
+     */
+    @Transactional
+    public Order recordDispatchOutcome(UUID owner, UUID roomId, UUID orderId,
+            LiveEquityOrderState observed, String brokerOrderId, String outcomeCode) {
+        if (observed == null || outcomeCode == null
+                || !outcomeCode.matches("[A-Z0-9_:-]{1,64}")
+                || !(observed == LiveEquityOrderState.ACKNOWLEDGED
+                    || observed == LiveEquityOrderState.REJECTED
+                    || observed == LiveEquityOrderState.UNKNOWN)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Invalid dispatch outcome");
+        }
+        String state = jdbc.sql("""
+                SELECT state FROM customer_live_equity_order
+                WHERE id=:id AND user_id=:owner AND room_id=:room FOR UPDATE
+                """)
+            .param("id", orderId).param("owner", owner).param("room", roomId)
+            .query(String.class).optional().orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "LIVE equity order not found"));
+        if (!"SUBMITTING".equals(state)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Dispatch outcome already recorded");
+        }
+        LiveEquityOrderState effective = observed;
+        String effectiveCode = outcomeCode;
+        String effectiveBrokerId = null;
+        if (observed == LiveEquityOrderState.ACKNOWLEDGED) {
+            if (brokerOrderId != null && brokerOrderId.matches("[A-Za-z0-9_-]{1,64}")) {
+                effectiveBrokerId = brokerOrderId;
+            } else {
+                effective = LiveEquityOrderState.UNKNOWN;
+                effectiveCode = "BROKER_ACK_WITHOUT_ORDER_ID";
+            }
+        }
+        jdbc.sql("""
+                UPDATE customer_live_equity_order
+                SET state=:state, broker_order_id=:brokerOrderId,
+                    outcome_code=:code, updated_at=NOW()
+                WHERE id=:id AND user_id=:owner AND room_id=:room AND state='SUBMITTING'
+                """)
+            .param("state", effective.name())
+            .param("brokerOrderId", effectiveBrokerId)
+            .param("code", effectiveCode)
+            .param("id", orderId).param("owner", owner).param("room", roomId)
+            .update();
+        return requireOrder(owner, roomId, orderId);
     }
 
     @Transactional(readOnly = true)
@@ -241,8 +301,8 @@ public class CustomerLiveEquityOrderService {
                   AND created_at >= :start AND created_at < :end
                 """)
             .param("owner", owner).param("room", roomId)
-            .param("start", today.atStartOfDay(IST).toInstant())
-            .param("end", today.plusDays(1).atStartOfDay(IST).toInstant())
+            .param("start", java.sql.Timestamp.from(today.atStartOfDay(IST).toInstant()))
+            .param("end", java.sql.Timestamp.from(today.plusDays(1).atStartOfDay(IST).toInstant()))
             .query(BigDecimal.class).single();
     }
 
@@ -258,8 +318,8 @@ public class CustomerLiveEquityOrderService {
                       AND created_at >= :start AND created_at < :end
                     """)
                 .param("owner", owner)
-                .param("start", today.atStartOfDay(IST).toInstant())
-                .param("end", today.plusDays(1).atStartOfDay(IST).toInstant())
+                .param("start", java.sql.Timestamp.from(today.atStartOfDay(IST).toInstant()))
+                .param("end", java.sql.Timestamp.from(today.plusDays(1).atStartOfDay(IST).toInstant()))
                 .query(BigDecimal.class).single();
         } catch (RuntimeException unavailable) {
             // Unreadable ledger is not a clean zero-exposure account.
@@ -358,28 +418,14 @@ public class CustomerLiveEquityOrderService {
         LiveEquityReconciler.Resolution res = LiveEquityReconciler.reconcile(expected, records);
 
         if (res.reserved()) {
-            // Record only the sanitized reconcile outcome; never change state.
-            jdbc.sql("""
-                    UPDATE customer_live_equity_order
-                    SET outcome_code=:code, updated_at=NOW()
-                    WHERE id=:id AND user_id=:owner AND room_id=:room AND state=:state
-                    """)
-                .param("code", "RECONCILE_RESERVED:" + res.outcomeCode())
-                .param("id", orderId).param("owner", owner).param("room", roomId)
-                .param("state", current.name()).update();
+            recordReconcileReserved(owner, roomId, orderId, current, res.outcomeCode());
             return requireOrder(owner, roomId, orderId);
         }
 
         LiveEquityOrderState observed = res.observedState();
         // Fills must never regress; a lower broker-reported fill is contradictory.
         if (res.filledQuantity() < o.filledQuantity()) {
-            jdbc.sql("""
-                    UPDATE customer_live_equity_order
-                    SET outcome_code='RECONCILE_RESERVED:FILL_QUANTITY_REGRESSED', updated_at=NOW()
-                    WHERE id=:id AND user_id=:owner AND room_id=:room AND state=:state
-                    """)
-                .param("id", orderId).param("owner", owner).param("room", roomId)
-                .param("state", current.name()).update();
+            recordReconcileReserved(owner, roomId, orderId, current, "FILL_QUANTITY_REGRESSED");
             return requireOrder(owner, roomId, orderId);
         }
         // Identity: once a broker order id is known it must not change.
@@ -390,19 +436,12 @@ public class CustomerLiveEquityOrderService {
         }
         boolean sameState = observed == current;
         if (!sameState && !current.mayTransitionTo(observed)) {
-            // e.g. broker now reports a state the machine forbids from here.
-            jdbc.sql("""
-                    UPDATE customer_live_equity_order
-                    SET outcome_code='RECONCILE_RESERVED:DISALLOWED_TRANSITION', updated_at=NOW()
-                    WHERE id=:id AND user_id=:owner AND room_id=:room AND state=:state
-                    """)
-                .param("id", orderId).param("owner", owner).param("room", roomId)
-                .param("state", current.name()).update();
+            recordReconcileReserved(owner, roomId, orderId, current, "DISALLOWED_TRANSITION");
             return requireOrder(owner, roomId, orderId);
         }
         if (sameState && current != LiveEquityOrderState.ACKNOWLEDGED
-                && current != LiveEquityOrderState.PARTIALLY_FILLED) {
-            // Only non-terminal observe-in-place states may re-record fills.
+                && current != LiveEquityOrderState.PARTIALLY_FILLED
+                && current != LiveEquityOrderState.UNKNOWN) {
             return requireOrder(owner, roomId, orderId);
         }
         int updated = jdbc.sql("""
@@ -428,6 +467,18 @@ public class CustomerLiveEquityOrderService {
         return requireOrder(owner, roomId, orderId);
     }
 
+    private void recordReconcileReserved(UUID owner, UUID roomId, UUID orderId,
+            LiveEquityOrderState current, String reason) {
+        jdbc.sql("""
+                UPDATE customer_live_equity_order
+                SET outcome_code=:code, updated_at=NOW()
+                WHERE id=:id AND user_id=:owner AND room_id=:room AND state=:state
+                """)
+            .param("code", "RECONCILE_RESERVED:" + reason)
+            .param("id", orderId).param("owner", owner).param("room", roomId)
+            .param("state", current.name()).update();
+    }
+
     /**
      * Read the owner's own broker order book/history for this correlation tag.
      * Any provider failure or absent session yields {@code null} so the
@@ -441,7 +492,8 @@ public class CustomerLiveEquityOrderService {
             }
             if ("ANGEL_ONE".equals(broker)) {
                 JsonNode body = angelOne.orders(owner).data();
-                JsonNode array = body == null ? null : body.path("data");
+                JsonNode array = body == null ? null
+                    : (body.isArray() ? body : body.path("data"));
                 return AngelOneEquityOrderBookParser.parse(array);
             }
         } catch (RuntimeException providerUnavailable) {

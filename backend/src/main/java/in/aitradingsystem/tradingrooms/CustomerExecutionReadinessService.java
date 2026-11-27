@@ -1,5 +1,6 @@
 package in.aitradingsystem.tradingrooms;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import in.aitradingsystem.execution.TradingExecutionAuthority;
 import org.springframework.beans.factory.annotation.Autowired;
 import in.aitradingsystem.instrument.Instrument;
@@ -24,16 +25,24 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * Shared PAPER/LIVE order preflight boundary. Both modes use the same
  * validated instrument/order vocabulary, but NEVER share funds, orders
- * or execution authority. No provider order API is invoked from here.
+ * or execution authority.
+ *
+ * <p>This class reads broker state (session, funds, quote, positions) but never
+ * places an order. The only path to a broker order is
+ * {@code LiveEquityOrderCoordinator}, which additionally requires the
+ * deployment dispatch gate, a durable claim and per-order consent.
  */
 @Service
 public class CustomerExecutionReadinessService {
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+
     private final JdbcClient jdbc;
     private final TradingExecutionAuthority authority;
     private final CustomerAngelOneSessionService broker;
     private final CustomerUpstoxOAuthService upstox;
     private final InstrumentMasterService instruments;
     private final IndianCashMarketCalendar cashCalendar;
+    private final LiveEquityExecutionPolicy policy;
 
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
@@ -48,17 +57,27 @@ public class CustomerExecutionReadinessService {
         this(jdbc, broker, upstox, instruments, authority, null);
     }
 
-    @Autowired
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
             CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
             TradingExecutionAuthority authority, IndianCashMarketCalendar cashCalendar) {
+        this(jdbc, broker, upstox, instruments, authority, cashCalendar,
+            LiveEquityExecutionPolicy.DISABLED);
+    }
+
+    @Autowired
+    public CustomerExecutionReadinessService(
+            JdbcClient jdbc, CustomerAngelOneSessionService broker,
+            CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
+            TradingExecutionAuthority authority, IndianCashMarketCalendar cashCalendar,
+            LiveEquityExecutionPolicy policy) {
         this.authority = authority;
         this.jdbc = jdbc;
         this.broker = broker;
         this.upstox = upstox;
         this.instruments = instruments;
         this.cashCalendar = cashCalendar;
+        this.policy = policy == null ? LiveEquityExecutionPolicy.DISABLED : policy;
     }
 
     public record Readiness(UUID roomId, String mode, String roomStatus,
@@ -71,6 +90,11 @@ public class CustomerExecutionReadinessService {
         public record GlobalAutomation(String tradingMode, String orderExecutionMode, boolean automatedPaper) {}
     }
 
+    /**
+     * Authoritative per-order preflight. {@code todayRealisedLoss} is the broker's
+     * day realized loss as a positive magnitude, or {@code null} when the broker
+     * position book could not be verified.
+     */
     public record Preflight(UUID roomId, String mode, long instrumentId,
                             String selectedBroker,
                             String tradingSymbol, String exchange, String side,
@@ -79,6 +103,7 @@ public class CustomerExecutionReadinessService {
                             BigDecimal availableBrokerFunds, BigDecimal roomBudget,
                             BigDecimal todayRoomBuyNotional,
                             boolean brokerCashVerified, boolean roomExposureVerified,
+                            BigDecimal todayRealisedLoss,
                             boolean executable,
                             List<String> blockers) {}
 
@@ -118,6 +143,8 @@ public class CustomerExecutionReadinessService {
         boolean registeredIpMatches = connected && "UPSTOX".equals(selected)
             && !"FNO".equals(room.marketScope())
             && registeredUpstoxIpMatches(owner);
+        boolean riskPolicyConfigured = "LIVE".equals(room.mode())
+            && accountRiskPolicyConfigured(owner);
         List<String> blockers = new ArrayList<>();
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
@@ -138,13 +165,19 @@ public class CustomerExecutionReadinessService {
                 blockers.add("UPSTOX_EQUITY_INTRADAY_PERMISSION_NOT_VERIFIED");
                 if (equityProfile != null) blockers.add(equityProfile.status());
             }
-            // Selecting a broker does not establish approved static IP,
-            // reconciled funds, risk policy, or execution consent.
-            blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
-            if (!registeredIpMatches) blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
-            blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
-            blockers.add("EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
+            // Hosting is broker-specific. Upstox is verified against the
+            // registered static IP; Angel One needs an explicit operator attestation.
+            if ("UPSTOX".equals(selected) && !registeredIpMatches) {
+                blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
+            }
+            if ("ANGEL_ONE".equals(selected) && !policy.angelOneHostingAttested()) {
+                blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
+            }
+            if (!riskPolicyConfigured) blockers.add("ACCOUNT_WIDE_RISK_POLICY_NOT_CONFIGURED");
             if (!"EQUITY".equals(room.marketScope())) {
+                // Equity orders take consent per order. F&O rooms keep this
+                // room-level blocker: F&O execution is out of scope here.
+                blockers.add("EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
                 // LIVE room creation is an intent, never a permission grant.
                 // F&O requires a segment-authorized account and separate
                 // F&O order adapter/margin controls before any broker action.
@@ -156,12 +189,14 @@ public class CustomerExecutionReadinessService {
                 blockers.add("FNO_LIVE_ORDER_ADAPTER_NOT_ENABLED");
             }
         }
-        // The customer trading execution engine is unavailable in this stage.
-        // All mode-specific order submissions fail closed, regardless of
-        // application flags, UI state, or client-supplied claims.
-        blockers.add("EXECUTION_DISABLED");
+        // Deployment dispatch gate. Off by default; while off nothing can be claimed.
+        if (!policy.dispatchEnabled()) {
+            blockers.add("EXECUTION_DISABLED");
+        }
+        boolean executionEnabled = "LIVE".equals(room.mode()) && blockers.isEmpty();
         return new Readiness(roomId, room.mode(), room.status(), selected, connected, paperFunded,
-                false, false, false, false, List.copyOf(blockers), globalAutomation());
+                riskPolicyConfigured, false, false, executionEnabled,
+                List.copyOf(blockers), globalAutomation());
     }
 
     private Readiness.GlobalAutomation globalAutomation() {
@@ -230,6 +265,17 @@ public class CustomerExecutionReadinessService {
         };
     }
 
+    private boolean accountRiskPolicyConfigured(UUID owner) {
+        try {
+            return jdbc.sql("""
+                    SELECT EXISTS (SELECT 1 FROM customer_live_equity_risk_policy WHERE user_id=:owner)
+                    """)
+                .param("owner", owner).query(Boolean.class).single();
+        } catch (RuntimeException unavailable) {
+            return false;
+        }
+    }
+
     private boolean registeredUpstoxIpMatches(UUID owner) {
         try {
             return UpstoxRegisteredIpAssessment.assess(
@@ -239,6 +285,10 @@ public class CustomerExecutionReadinessService {
         }
     }
 
+    /**
+     * Preflight for one proposed order. The durable claim re-runs this exact
+     * method, so nothing here is trusted from a client snapshot.
+     */
     public Preflight preflight(UUID owner, UUID roomId, long instrumentId,
                               String side, int quantity, BigDecimal limitPrice) {
         Readiness readiness = readiness(owner, roomId);
@@ -271,8 +321,9 @@ public class CustomerExecutionReadinessService {
         }
         Room room = ownedRoom(owner, roomId);
         List<String> blockers = new ArrayList<>(readiness.blockers());
-        boolean cashSessionOpen = cashCalendar == null
-            || cashCalendar.isInsideCashSession(Instant.now());
+        // Fail closed: a missing calendar is a closed market, never an open one.
+        boolean cashSessionOpen = cashCalendar != null
+            && cashCalendar.isInsideCashSession(Instant.now());
         if (!cashSessionOpen) blockers.add("CASH_MARKET_SESSION_CLOSED");
         if (cashSessionOpen
                 && !hasFreshCustomerQuote(owner, readiness.selectedBroker(), instrument)) {
@@ -286,7 +337,15 @@ public class CustomerExecutionReadinessService {
         boolean roomExposureVerified = todayRoomBuyNotional != null;
         blockers.addAll(assessOrderFunds(side, notional, budget, availableFunds,
             todayRoomBuyNotional));
-        if ("SELL".equals(side)) blockers.add("SELL_POSITION_NOT_VERIFIED");
+        // Broker position book: verified SELL inventory and day realized loss.
+        List<LiveEquityPositionParser.Row> positions = readPositions(owner, readiness.selectedBroker());
+        BigDecimal todayRealisedLoss = LiveEquityPositionParser.realisedLoss(positions);
+        if (positions == null) {
+            blockers.add("BROKER_POSITIONS_NOT_VERIFIED");
+        } else if ("SELL".equals(side)) {
+            blockers.addAll(assessSellInventory(readiness.selectedBroker(),
+                instrument, quantity, positions));
+        }
         if (newOrdersHalted()) blockers.add("GLOBAL_NEW_ORDERS_HALTED");
         if (hasUnreconciledLiveOrder(owner)) blockers.add("UNRECONCILED_LIVE_EQUITY_ORDERS_EXIST");
         return new Preflight(roomId, readiness.mode(), instrumentId,
@@ -294,7 +353,46 @@ public class CustomerExecutionReadinessService {
                 instrument.tradingSymbol(), instrument.exchange(), side,
                 quantity, "LIMIT", "DAY", limitPrice, notional, availableFunds, budget,
                 todayRoomBuyNotional, cashBalanceVerified, roomExposureVerified,
-                false, List.copyOf(blockers));
+                todayRealisedLoss, false, List.copyOf(blockers));
+    }
+
+    /**
+     * Verified intraday long inventory must cover the SELL. Naked intraday
+     * shorting and unverifiable inventory both block.
+     */
+    private List<String> assessSellInventory(String selectedBroker, Instrument instrument,
+            int quantity, List<LiveEquityPositionParser.Row> positions) {
+        String key;
+        try {
+            key = "ANGEL_ONE".equals(selectedBroker)
+                ? instrument.symbolToken()
+                : upstox.cashEquityInstrumentKey(instrument);
+        } catch (RuntimeException unresolved) {
+            return List.of("SELL_POSITION_NOT_VERIFIED");
+        }
+        Long net = LiveEquityPositionParser.intradayNetQuantity(positions,
+            instrument.exchange(), key);
+        if (net == null || net < quantity) {
+            return List.of("SELL_POSITION_NOT_VERIFIED");
+        }
+        return List.of();
+    }
+
+    private List<LiveEquityPositionParser.Row> readPositions(UUID owner, String selectedBroker) {
+        try {
+            if ("ANGEL_ONE".equals(selectedBroker)) {
+                JsonNode body = broker.positions(owner).data();
+                JsonNode array = body == null ? null
+                    : (body.isArray() ? body : body.path("data"));
+                return LiveEquityPositionParser.angelOne(array);
+            }
+            if ("UPSTOX".equals(selectedBroker)) {
+                return LiveEquityPositionParser.upstox(upstox.positions(owner).data());
+            }
+        } catch (RuntimeException unavailable) {
+            // Unavailable position book is unverified, never an empty book.
+        }
+        return null;
     }
 
     static List<String> assessOrderFunds(String side, BigDecimal notional,
@@ -318,10 +416,9 @@ public class CustomerExecutionReadinessService {
     /** Today's non-rejected BUY intents consume room budget for the full session. */
     private BigDecimal readTodayRoomBuyNotional(UUID owner, UUID roomId) {
         try {
-            ZoneId zone = ZoneId.of("Asia/Kolkata");
-            LocalDate today = LocalDate.now(zone);
-            Instant start = today.atStartOfDay(zone).toInstant();
-            Instant end = today.plusDays(1).atStartOfDay(zone).toInstant();
+            LocalDate today = LocalDate.now(IST);
+            Instant start = today.atStartOfDay(IST).toInstant();
+            Instant end = today.plusDays(1).atStartOfDay(IST).toInstant();
             return jdbc.sql("""
                     SELECT COALESCE(SUM(limit_price * quantity), 0)
                     FROM customer_live_equity_order
@@ -330,7 +427,8 @@ public class CustomerExecutionReadinessService {
                       AND created_at >= :start AND created_at < :end
                     """)
                 .param("owner", owner).param("room", roomId)
-                .param("start", start).param("end", end)
+                .param("start", java.sql.Timestamp.from(start))
+                .param("end", java.sql.Timestamp.from(end))
                 .query(BigDecimal.class).single();
         } catch (RuntimeException unavailable) {
             // Ledger failure is not a clean zero-exposure account.
@@ -361,7 +459,7 @@ public class CustomerExecutionReadinessService {
         return null;
     }
 
-    private BigDecimal decimal(com.fasterxml.jackson.databind.JsonNode value) {
+    private BigDecimal decimal(JsonNode value) {
         if (value == null || value.isNull() || value.isMissingNode()) return null;
         try {
             BigDecimal parsed = value.isNumber() ? value.decimalValue()

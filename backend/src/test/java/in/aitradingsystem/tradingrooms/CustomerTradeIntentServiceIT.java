@@ -79,7 +79,7 @@ class CustomerTradeIntentServiceIT extends AbstractPostgresIT {
                 room, mode, 42L, "UPSTOX", "SBIN-EQ", "NSE",
                 call.getArgument(3), call.getArgument(4),
                 "LIMIT", "DAY", call.getArgument(5), BigDecimal.ZERO,
-                null, BigDecimal.ZERO, BigDecimal.ZERO, false, true, false,
+                null, BigDecimal.ZERO, BigDecimal.ZERO, false, true, null, false,
                 List.of("EXECUTION_DISABLED", "AUTHORITATIVE_QUOTE_NOT_VERIFIED")));
         when(readiness.readiness(any(), any()))
             .thenReturn(new CustomerExecutionReadinessService.Readiness(
