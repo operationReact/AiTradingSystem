@@ -88,7 +88,7 @@ public class CustomerExecutionReadinessController {
         blockers.add("LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
         blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER");
         blockers.add("ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED");
-        blockers.add("BROKER_ORDER_DISPATCH_AND_RECONCILIATION_NOT_IMPLEMENTED");
+        blockers.add("BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED");
         blockers.add("ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED");
         blockers.add("UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED");
         return noStore(new LiveEquityCapability(roomId, readiness.selectedBroker(),

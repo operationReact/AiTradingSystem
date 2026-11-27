@@ -533,15 +533,19 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           equityCapability = null;
         }
       }
-      if (mounted) setState(() {
-        _readiness = data;
-        _liveEquityCapability = equityCapability;
-      });
+      if (mounted) {
+        setState(() {
+          _readiness = data;
+          _liveEquityCapability = equityCapability;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() {
-        _readiness = null;
-        _liveEquityCapability = null;
-      });
+      if (mounted) {
+        setState(() {
+          _readiness = null;
+          _liveEquityCapability = null;
+        });
+      }
     }
   }
 
