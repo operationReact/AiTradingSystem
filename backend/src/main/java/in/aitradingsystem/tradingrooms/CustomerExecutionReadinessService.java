@@ -183,7 +183,7 @@ public class CustomerExecutionReadinessService {
                 "Choose Angel One or Upstox");
         }
         Room room = jdbc.sql("""
-                SELECT mode, status, market_scope FROM customer_trading_room
+                SELECT mode, status, market_scope, planned_budget_inr FROM customer_trading_room
                 WHERE id=:room AND user_id=:owner FOR UPDATE
                 """)
             .param("room", roomId).param("owner", owner)
