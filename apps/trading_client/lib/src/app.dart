@@ -94,6 +94,8 @@ import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
 import 'features/upstox_analytics/presentation/upstox_analytics_progress_page.dart';
+import 'features/mutual_funds/data/mf_alerts_repository.dart';
+import 'features/mutual_funds/presentation/mf_alerts_page.dart';
 import 'features/upstox_analytics/data/upstox_analytics_progress_repository.dart';
 import 'presentation/historical_data_monitor_page.dart';
 import 'data/history_monitor_repository.dart';
@@ -340,6 +342,9 @@ class _TradingAppState extends State<TradingApp> {
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/scenarios': (_) => ScenarioLookupPage(repository: HttpScenarioEvidenceRepository(_api)),
+        '/mutual-funds': (_) => widget.session.isCustomerAuthenticated
+            ? MfAlertsPage(repository: HttpMfAlertsRepository(_api))
+            : _overviewPage(),
         '/portfolio': (_) => widget.session.isCustomerAuthenticated
             ? MintTickCustomerPortfolioPage(
                 mode: _workspaceMode,
@@ -897,6 +902,7 @@ class _DesktopProductRail extends StatelessWidget {
           if (isCustomer)
             _RailAction(label: 'Trading Rooms', icon: Icons.layers_rounded, active: selectedRoute == '/rooms', onTap: () => onNavigate('/rooms')),
           _RailAction(label: 'Markets', icon: Icons.candlestick_chart_rounded, active: selectedRoute == '/market', onTap: () => onNavigate('/market')),
+          if (isCustomer) _RailAction(label: 'Mutual Funds', icon: Icons.savings_outlined, active: selectedRoute == '/mutual-funds', onTap: () => onNavigate('/mutual-funds')),
           if (isCustomer) _RailAction(label: 'MintTick Mind', icon: Icons.psychology_outlined, active: selectedRoute == '/mind', onTap: () => onNavigate('/mind')),
           if (!isCustomer)
             _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
@@ -987,6 +993,7 @@ class _MoreProductSheet extends StatelessWidget {
   static const _customerDestinations = <(String, IconData, String, String)>[
     ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room plans'),
     ('/brokers', Icons.account_balance_outlined, 'Connected brokers', 'Angel One and Upstox'),
+    ('/mutual-funds', Icons.savings_outlined, 'Mutual Funds', 'Watchlist and manual-investment review alerts'),
     ('/mind', Icons.psychology_outlined, 'MintTick Mind', 'Prototype UI with mock-only strategy data'),
     ('/activity', Icons.history_rounded, 'Mind activity', 'Decisions and audit history'),
     ('/notifications', Icons.notifications_none_rounded, 'Notifications', 'Account updates'),
