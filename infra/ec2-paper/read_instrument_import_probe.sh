@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Read-only, small SSM payload: market catalogue import diagnostics without secrets.
 set -Eeuo pipefail
 umask 077
 test "$(id -u)" -eq 0
@@ -31,8 +30,6 @@ except (OSError,ValueError):
     compose_key=""
 key_state=("MATCH" if runtime_key and compose_key and hmac.compare_digest(runtime_key,compose_key)
            else "MISMATCH" if runtime_key and compose_key else "MISSING")
-# Owner allowlist is required for the verified Cognito account to see
-# "Secure connect". Never reveal the subject, email or credential values.
 owner=[line.split("=",1)[1].strip() for line in lines
        if line.startswith("MINTTICK_ANGEL_ONE_OWNER_SUB=")]
 print("MINTTICK_OWNER_BINDING:",
@@ -44,8 +41,6 @@ try:
 except OSError:
     enabled=False
 print("MINTTICK_PRIVATE_FEED_MODE:", "ENABLED" if enabled else "NOT_ENABLED")
-# Bounded boolean-only owner Upstox state: compare runtime source and the
-# effective .env consumed by Compose, never emit either file or a secret.
 try:
     effective=(root/".env").read_text().splitlines()
 except (OSError,ValueError):
@@ -58,6 +53,7 @@ for key,label in (("MINTTICK_UPSTOX_OAUTH_SSM_ENABLED","MINTTICK_UPSTOX_OAUTH_FL
           "DISABLED" if a==["false"] and b==["false"] else "NOT_CONFIRMED")
     print(label+":",state)
 
+print("MINTTICK_DEPLOYED_RELEASE_SHA:",next((x[12:] for x in effective if re.fullmatch(r"RELEASE_SHA=[0-9a-f]{40}",x)),"UNAVAILABLE"))
 print("MINTTICK_OPERATOR_ENV_KEYS:",key_state)
 print("MINTTICK_OPERATOR_KEY:", "PRESENT" if key_ok else "MISSING_OR_INVALID")
 try:
@@ -92,8 +88,6 @@ def db(sql):
         return result.stdout.strip() if result.returncode==0 else None
     except (OSError,subprocess.TimeoutExpired):
         return None
-# Server-side identity association check. Cognito subject never appears
-# in logs, repo or SSM output; comparison is a read-only database boolean.
 linked="UNKNOWN"
 if len(owner)==1 and re.fullmatch(r"[A-Za-z0-9_-]{10,128}",owner[0]):
     count=db("SELECT CASE WHEN EXISTS (SELECT 1 FROM app_auth_identity ai "
