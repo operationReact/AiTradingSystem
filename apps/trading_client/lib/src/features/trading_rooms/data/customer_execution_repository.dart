@@ -131,13 +131,24 @@ class LiveEquityCapability {
       throw const FormatException('Invalid live cash-equity blockers');
     }
     final broker = raw['selectedBroker'];
+    final selectedBroker =
+        broker == 'ANGEL_ONE' || broker == 'UPSTOX' ? broker as String : null;
+    final brokerConnected = raw['brokerConnected'] as bool;
+    final orderRouteImplemented = raw['orderRouteImplemented'] as bool;
+    final executionEnabled = raw['executionEnabled'] as bool;
+    if (executionEnabled &&
+        (!orderRouteImplemented ||
+            !brokerConnected ||
+            selectedBroker == null ||
+            blockers.isNotEmpty)) {
+      throw const FormatException('Inconsistent executable cash-equity capability');
+    }
     return LiveEquityCapability(
       roomId: raw['roomId'] as String,
-      selectedBroker: broker == 'ANGEL_ONE' || broker == 'UPSTOX'
-          ? broker as String : null,
-      brokerConnected: raw['brokerConnected'] as bool,
-      orderRouteImplemented: raw['orderRouteImplemented'] as bool,
-      executionEnabled: raw['executionEnabled'] as bool,
+      selectedBroker: selectedBroker,
+      brokerConnected: brokerConnected,
+      orderRouteImplemented: orderRouteImplemented,
+      executionEnabled: executionEnabled,
       blockers: List.unmodifiable(blockers.cast<String>()),
     );
   }
