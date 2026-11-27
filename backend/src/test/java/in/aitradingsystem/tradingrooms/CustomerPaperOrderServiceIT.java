@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,24 @@ class CustomerPaperOrderServiceIT extends AbstractPostgresIT {
     @Autowired MarketLastTickStore lastTicks;
     @Autowired MarketSessionCalendar marketCalendar;
     @Autowired CustomerPaperWalletService wallets;
+
+    /**
+     * Each test imports its own 3-row catalogue and expects it to become the
+     * active one. The shared integration database may still hold a larger
+     * active catalogue from an earlier class (e.g. OfficialCashEquityUniverseIT
+     * leaves 4 rows), which the production retention guard correctly rejects as
+     * INCOMPLETE_CATALOGUE. Detach the active catalogue so this test starts from
+     * the state it assumes. Rows are not deleted: legacy paper tables reference
+     * instrument_master and may belong to other test classes.
+     */
+    @BeforeEach
+    void detachActiveCatalogue() {
+        jdbc.sql("""
+                UPDATE instrument_catalogue_state
+                   SET active_version = NULL, activated_at = NULL
+                 WHERE singleton_id = 1
+                """).update();
+    }
 
     @Test
     void paperBuyRetrySellAndTenantIsolationNeverTouchLive() {
