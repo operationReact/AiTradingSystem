@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/data/instrument_repository.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_execution_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_market_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_paper_trading_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_room_repository.dart';
@@ -64,6 +65,50 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
     );
   }
 }
+
+class _FakeExecution extends Fake implements HttpCustomerExecutionRepository {
+  int submits = 0;
+  @override
+  Future<Object?> preflight({
+    required String roomId,
+    required int instrumentId,
+    required String side,
+    required int quantity,
+    required num limitPrice,
+  }) async => {
+    'roomId': roomId, 'mode': 'LIVE', 'instrumentId': instrumentId,
+    'executable': false, 'blockers': <String>[],
+  };
+
+  @override
+  Future<LiveEquityOrder> submitLiveOrder({
+    required String roomId,
+    required String idempotencyKey,
+    required int instrumentId,
+    required String side,
+    required int quantity,
+    required num limitPrice,
+  }) async {
+    submits++;
+    return LiveEquityOrder(
+      id: 'live-order-1', roomId: roomId, broker: 'UPSTOX',
+      instrumentId: instrumentId, tradingSymbol: 'RELIANCE-EQ',
+      side: side, quantity: quantity, limitPrice: limitPrice,
+      state: 'ACKNOWLEDGED', filledQuantity: 0,
+    );
+  }
+}
+
+const _liveReady = LiveEquityCapability(
+  roomId: _id, selectedBroker: 'UPSTOX', brokerConnected: true,
+  orderRouteImplemented: true, executionEnabled: true, blockers: [],
+);
+
+const _liveBlocked = LiveEquityCapability(
+  roomId: _id, selectedBroker: 'UPSTOX', brokerConnected: true,
+  orderRouteImplemented: true, executionEnabled: false,
+  blockers: ['EXECUTION_DISABLED'],
+);
 
 class _FakePaper extends Fake implements HttpCustomerPaperTradingRepository {
   int submits = 0;
@@ -163,6 +208,62 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('room-stock-search-error')), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('LIVE ticket submits once only after capability, preflight and confirmation',
+      (tester) async {
+    final market = _FakeMarket();
+    final execution = _FakeExecution();
+    var refreshCalls = 0;
+    await tester.pumpWidget(MaterialApp(theme: buildTheme(Brightness.dark),
+      home: Scaffold(body: Builder(builder: (context) => FilledButton(
+        onPressed: () => showModalBottomSheet<void>(
+          context: context, isScrollControlled: true,
+          builder: (_) => MintTickRoomOrderSheet(
+            roomId: _id, mode: 'LIVE', side: 'BUY',
+            initialInstrument: _reliance, market: market,
+            execution: execution, liveEquityCapability: _liveReady,
+            onChanged: () async { refreshCalls++; },
+          )),
+        child: const Text('Open LIVE ticket')))),
+    ));
+    await tester.tap(find.text('Open LIVE ticket'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('room-ticket-quantity')), '2');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('room-ticket-review')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('real-money order'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('room-order-final-confirm')));
+    await tester.pumpAndSettle();
+    expect(execution.submits, 1);
+    expect(refreshCalls, 1);
+    expect(find.textContaining('LIVE order recorded: ACKNOWLEDGED'), findsOneWidget);
+  });
+
+  testWidgets('blocked LIVE capability shows blocker and never submits',
+      (tester) async {
+    final market = _FakeMarket();
+    final execution = _FakeExecution();
+    await tester.pumpWidget(MaterialApp(theme: buildTheme(Brightness.dark),
+      home: Scaffold(body: Builder(builder: (context) => FilledButton(
+        onPressed: () => showModalBottomSheet<void>(
+          context: context, isScrollControlled: true,
+          builder: (_) => MintTickRoomOrderSheet(
+            roomId: _id, mode: 'LIVE', side: 'BUY',
+            initialInstrument: _reliance, market: market,
+            execution: execution, liveEquityCapability: _liveBlocked,
+            onChanged: () async {},
+          )),
+        child: const Text('Open blocked LIVE ticket')))),
+    ));
+    await tester.tap(find.text('Open blocked LIVE ticket'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('room-ticket-review')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('EXECUTION DISABLED'), findsOneWidget);
+    expect(execution.submits, 0);
+    expect(find.byKey(const ValueKey('room-order-final-confirm')), findsNothing);
   });
 
   testWidgets('ticket stock selection prepares and submits one virtual Paper fill',
