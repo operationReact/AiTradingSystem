@@ -817,9 +817,14 @@ public class MindPaperCycleService {
 
         String signalId = "NEWS_" + hash(instrument.id() + "|" + interval.name() + "|"
             + latest.candleTime() + "|" + context.netDirection()).substring(0, 32);
+        List<String> evidenceRefs = context.evidence().stream()
+            .filter(NewsContext.Evidence::included)
+            .map(evidence -> "NEWS_ARTICLE_" + evidence.articleId()).limit(5).toList();
         if ("NEGATIVE".equals(context.direction())) {
+            List<String> reasons = new ArrayList<>(List.of("NEWS_DIRECTION_NEGATIVE", "NEWS_RISK_OFF_EXIT"));
+            reasons.addAll(evidenceRefs);
             CycleSignal riskOff = new CycleSignal(signalId, "SELL", latest.close(), null, null,
-                latest.candleTime(), source, List.of("NEWS_DIRECTION_NEGATIVE", "NEWS_RISK_OFF_EXIT"));
+                latest.candleTime(), source, List.copyOf(reasons));
             return new OrbEvaluation(riskOff, null, source, latest.candleTime(), latest.close());
         }
         if (!"POSITIVE".equals(context.direction())) {
@@ -835,9 +840,11 @@ public class MindPaperCycleService {
                 latest.candleTime(), close);
         }
         BigDecimal target = close.add(close.subtract(stop).multiply(new BigDecimal("2")));
+        List<String> reasons = new ArrayList<>(List.of("NEWS_DIRECTION_POSITIVE",
+            "NEWS_EVIDENCE_COUNT_" + context.includedCount(), "NEWS_2R_REFERENCE_TARGET"));
+        reasons.addAll(evidenceRefs);
         CycleSignal signal = new CycleSignal(signalId, "BUY", close, stop, target,
-            latest.candleTime(), source, List.of("NEWS_DIRECTION_POSITIVE",
-                "NEWS_EVIDENCE_COUNT_" + context.includedCount(), "NEWS_2R_REFERENCE_TARGET"));
+            latest.candleTime(), source, List.copyOf(reasons));
         return new OrbEvaluation(signal, null, source, latest.candleTime(), close);
     }
 
