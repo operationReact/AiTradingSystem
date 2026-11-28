@@ -1,13 +1,13 @@
 {
-    "kind": "minttick-expired-fno-ephemeral-pilot-v1",
-    "operation": "download-validate-expired-futures-options-in-memory",
-    "account": "098859530205",
-    "region": "ap-south-1",
-    "instance_id": "i-09c01b470fb39b85a",
-    "environment": "PAPER",
-    "authorization": "OWNER_APPROVED_MEMORY_ONLY_FNO_HISTORY_SAMPLE_2026_11_21",
-    "max_provider_gets": 16,
-    "persist_market_data": false,
-    "publish_market_data": false,
-    "trading_rights_change": false
+  "kind": "minttick-expired-fno-ephemeral-pilot-v1",
+  "operation": "download-validate-expired-futures-options-in-memory",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "environment": "PAPER",
+  "authorization": "OWNER_APPROVED_MEMORY_ONLY_FNO_HISTORY_SAMPLE_2026_11_21",
+  "max_provider_gets": 16,
+  "persist_market_data": false,
+  "publish_market_data": false,
+  "trading_rights_change": false
 }
