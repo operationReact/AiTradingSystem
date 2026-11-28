@@ -68,6 +68,7 @@ public class LiveEquityStrategyProposalService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid strategy proposal request");
         }
         requireIntradayLiveRoom(owner, liveRoomId);
+        requireIntradayPaperRoom(owner, sourcePaperRoomId);
         MindPaperCycleService.Cycle cycle = cycles.recent(owner, sourcePaperRoomId).stream()
             .filter(item -> sourceCycleId.equals(item.id()))
             .findFirst()
@@ -161,7 +162,9 @@ public class LiveEquityStrategyProposalService {
                 || cycle.candleTime() == null || cycle.quoteExchangeAt() == null
                 || cycle.createdAt() == null || cycle.tradingSymbol() == null
                 || cycle.tradingSymbol().isBlank() || cycle.dataLabel() == null
-                || cycle.dataLabel().equals("NO_DATA")) {
+                || !cycle.dataLabel().contains("VERIFIED_LIVE_TICK")
+                || !Set.of("ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR")
+                    .contains(cycle.interval())) {
             return false;
         }
         Duration createdAge = Duration.between(cycle.createdAt(), now);
@@ -180,6 +183,22 @@ public class LiveEquityStrategyProposalService {
         if (!eligibleCycle(cycle, now)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "PAPER cycle is not a fresh, filled intraday strategy candidate");
+        }
+    }
+
+    private void requireIntradayPaperRoom(UUID owner, UUID paperRoomId) {
+        record Room(String marketScope, String focus) {}
+        Room room = jdbc.sql("""
+            SELECT market_scope,focus FROM customer_trading_room
+             WHERE id=:room AND user_id=:owner AND mode='PAPER' AND status='PAPER_FUNDED'
+            """).param("room", paperRoomId).param("owner", owner)
+            .query((rs, row) -> new Room(rs.getString("market_scope"), rs.getString("focus")))
+            .optional().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Owner's funded PAPER room not found"));
+        if (!("EQUITY".equals(room.marketScope()) || "ALL".equals(room.marketScope()))
+                || !"INTRADAY".equals(room.focus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Strategy proposals require an intraday PAPER equity room");
         }
     }
 
