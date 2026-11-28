@@ -29,7 +29,7 @@ public class LiveEquityStrategyProposalService {
         "MA_RECLAIM_V1", "VOLUME_BREAKOUT_V1", "RSI_REVERSAL_V1");
 
     private static final String SELECT = """
-        SELECT proposal_id,user_id,live_room_id,source_paper_room_id,source_cycle_id,
+        SELECT proposal_id,user_id,live_room_id,source_paper_room_id,source_cycle_id,selected_broker,
                strategy_code,instrument_id,trading_symbol,side,quantity,limit_price,
                stop_price,target_price,signal_id,candle_at,quote_exchange_at,
                created_at,expires_at,live_order_id
@@ -39,18 +39,21 @@ public class LiveEquityStrategyProposalService {
     private final JdbcClient jdbc;
     private final MindPaperCycleService cycles;
     private final LiveEquityOrderCoordinator coordinator;
+    private final CustomerExecutionReadinessService readiness;
     private final Clock clock;
 
     public LiveEquityStrategyProposalService(JdbcClient jdbc, MindPaperCycleService cycles,
-            LiveEquityOrderCoordinator coordinator, Clock clock) {
+            LiveEquityOrderCoordinator coordinator, CustomerExecutionReadinessService readiness,
+            Clock clock) {
         this.jdbc = jdbc;
         this.cycles = cycles;
         this.coordinator = coordinator;
+        this.readiness = readiness;
         this.clock = clock;
     }
 
     public record Proposal(UUID id, UUID liveRoomId, UUID sourcePaperRoomId, UUID sourceCycleId,
-            String strategyCode, long instrumentId, String tradingSymbol, String side, int quantity,
+            String selectedBroker, String strategyCode, long instrumentId, String tradingSymbol, String side, int quantity,
             BigDecimal limitPrice, BigDecimal stopPrice, BigDecimal targetPrice, String signalId,
             Instant candleAt, Instant quoteExchangeAt, Instant createdAt, Instant expiresAt,
             UUID liveOrderId, String status) {}
@@ -69,6 +72,11 @@ public class LiveEquityStrategyProposalService {
         }
         requireIntradayLiveRoom(owner, liveRoomId);
         requireIntradayPaperRoom(owner, sourcePaperRoomId);
+        CustomerExecutionReadinessService.Readiness liveReadiness = readiness.readiness(owner, liveRoomId);
+        if (liveReadiness.selectedBroker() == null || !liveReadiness.brokerConnected()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Select and connect a LIVE broker before creating a strategy proposal");
+        }
         MindPaperCycleService.Cycle cycle = cycles.recent(owner, sourcePaperRoomId).stream()
             .filter(item -> sourceCycleId.equals(item.id()))
             .findFirst()
@@ -80,16 +88,16 @@ public class LiveEquityStrategyProposalService {
         UUID proposalId = UUID.randomUUID();
         jdbc.sql("""
             INSERT INTO customer_live_equity_strategy_proposal
-              (proposal_id,user_id,live_room_id,source_paper_room_id,source_cycle_id,
+              (proposal_id,user_id,live_room_id,source_paper_room_id,source_cycle_id,selected_broker,
                strategy_code,instrument_id,trading_symbol,side,quantity,limit_price,
                stop_price,target_price,signal_id,candle_at,quote_exchange_at,expires_at)
-            VALUES (:id,:owner,:liveRoom,:paperRoom,:cycle,:strategy,:instrument,:symbol,:side,:quantity,
+            VALUES (:id,:owner,:liveRoom,:paperRoom,:cycle,:broker,:strategy,:instrument,:symbol,:side,:quantity,
                     :limit,:stop,:target,:signal,:candleAt,:quoteAt,:expires)
             ON CONFLICT (user_id,source_cycle_id) DO NOTHING
             """)
             .param("id", proposalId).param("owner", owner).param("liveRoom", liveRoomId)
             .param("paperRoom", sourcePaperRoomId).param("cycle", sourceCycleId)
-            .param("strategy", cycle.strategyCode()).param("instrument", cycle.instrumentId())
+            .param("broker", liveReadiness.selectedBroker()).param("strategy", cycle.strategyCode()).param("instrument", cycle.instrumentId())
             .param("symbol", cycle.tradingSymbol()).param("side", cycle.side())
             .param("quantity", cycle.quantity()).param("limit", cycle.limitPrice())
             .param("stop", cycle.stopPrice()).param("target", cycle.targetPrice())
@@ -119,6 +127,12 @@ public class LiveEquityStrategyProposalService {
         if (!now.isBefore(proposal.expiresAt())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Strategy proposal expired; run a new PAPER cycle");
+        }
+        CustomerExecutionReadinessService.Readiness liveReadiness = readiness.readiness(owner, liveRoomId);
+        if (!proposal.selectedBroker().equals(liveReadiness.selectedBroker())
+                || !liveReadiness.brokerConnected()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "LIVE broker changed or disconnected; review a fresh strategy proposal");
         }
         if (proposal.liveOrderId() != null) {
             CustomerLiveEquityOrderService.Order prior = jdbc.sql("""
@@ -245,7 +259,7 @@ public class LiveEquityStrategyProposalService {
         String status = orderId != null ? "SUBMITTED" : now.isBefore(expiresAt) ? "PENDING" : "EXPIRED";
         return new Proposal(rs.getObject("proposal_id", UUID.class), rs.getObject("live_room_id", UUID.class),
             rs.getObject("source_paper_room_id", UUID.class), rs.getObject("source_cycle_id", UUID.class),
-            rs.getString("strategy_code"), rs.getLong("instrument_id"), rs.getString("trading_symbol"),
+            rs.getString("selected_broker"), rs.getString("strategy_code"), rs.getLong("instrument_id"), rs.getString("trading_symbol"),
             rs.getString("side"), rs.getInt("quantity"), rs.getBigDecimal("limit_price"),
             rs.getBigDecimal("stop_price"), rs.getBigDecimal("target_price"), rs.getString("signal_id"),
             rs.getTimestamp("candle_at").toInstant(), rs.getTimestamp("quote_exchange_at").toInstant(),
