@@ -128,12 +128,6 @@ public class LiveEquityStrategyProposalService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Strategy proposal expired; run a new PAPER cycle");
         }
-        CustomerExecutionReadinessService.Readiness liveReadiness = readiness.readiness(owner, liveRoomId);
-        if (!proposal.selectedBroker().equals(liveReadiness.selectedBroker())
-                || !liveReadiness.brokerConnected()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "LIVE broker changed or disconnected; review a fresh strategy proposal");
-        }
         if (proposal.liveOrderId() != null) {
             CustomerLiveEquityOrderService.Order prior = jdbc.sql("""
                 SELECT id,room_id,broker,instrument_id,trading_symbol,exchange,side,quantity,
@@ -149,7 +143,8 @@ public class LiveEquityStrategyProposalService {
 
         String key = "MINDLIVE_" + proposal.id().toString().replace("-", "");
         LiveEquityOrderCoordinator.Dispatch dispatch = coordinator.submit(owner, liveRoomId, key,
-            proposal.instrumentId(), proposal.side(), proposal.quantity(), proposal.limitPrice(), confirmation);
+            proposal.instrumentId(), proposal.side(), proposal.quantity(), proposal.limitPrice(),
+            confirmation, proposal.selectedBroker());
         jdbc.sql("""
             UPDATE customer_live_equity_strategy_proposal
                SET live_order_id=:order
