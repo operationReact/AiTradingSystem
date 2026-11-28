@@ -78,6 +78,58 @@ void main() {
     }).selectedBroker, isNull);
   });
 
+  test('cash intraday capability stays blocked until route and gates are ready', () {
+    final capability = LiveEquityCapability.decode({
+      'roomId': 'live-room-1',
+      'selectedBroker': 'ANGEL_ONE',
+      'brokerConnected': true,
+      'orderRouteImplemented': false,
+      'executionEnabled': false,
+      'blockers': [
+        'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED',
+        'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER',
+        'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED',
+      ],
+    });
+    expect(capability.selectedBroker, 'ANGEL_ONE');
+    expect(capability.brokerConnected, isTrue);
+    expect(capability.orderRouteImplemented, isFalse);
+    expect(capability.executionEnabled, isFalse);
+    expect(capability.blockers, hasLength(3));
+    expect(() => LiveEquityCapability.decode({
+      'roomId': 'live-room-1',
+      'brokerConnected': true,
+      'orderRouteImplemented': true,
+      'executionEnabled': true,
+      'blockers': ['BROKEN'],
+    }), throwsFormatException);
+  });
+
+  test('a consistent implemented capability decodes without becoming executable', () {
+    final capability = LiveEquityCapability.decode({
+      'roomId': 'live-room-2',
+      'selectedBroker': 'UPSTOX',
+      'brokerConnected': true,
+      'orderRouteImplemented': true,
+      'executionEnabled': true,
+      'blockers': <String>[],
+    });
+    expect(capability.orderRouteImplemented, isTrue);
+    expect(capability.executionEnabled, isTrue);
+    expect(capability.blockers, isEmpty);
+  });
+
+  test('an implemented route with a blocker is rejected as inconsistent', () {
+    expect(() => LiveEquityCapability.decode({
+      'roomId': 'live-room-2',
+      'selectedBroker': 'UPSTOX',
+      'brokerConnected': true,
+      'orderRouteImplemented': true,
+      'executionEnabled': true,
+      'blockers': ['ACCOUNT_WIDE_RISK_POLICY_NOT_CONFIGURED'],
+    }), throwsFormatException);
+  });
+
   testWidgets('Live room explicitly selects one broker but remains blocked',
       (tester) async {
     tester.view.devicePixelRatio = 1;

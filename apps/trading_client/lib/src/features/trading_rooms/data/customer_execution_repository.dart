@@ -62,6 +62,12 @@ class HttpCustomerExecutionRepository {
     ));
   }
 
+  Future<LiveEquityCapability> liveEquityCapability(String roomId) async {
+    return LiveEquityCapability.decode(await api.getJson(
+      '/api/customer/trading-rooms/$roomId/live/equity/capability',
+    ));
+  }
+
   /// Saves an explicitly chosen broker for one owner's LIVE Room only.
   /// This does not authenticate a broker or authorize real-money orders.
   Future<CustomerExecutionReadiness> selectLiveBroker(
@@ -92,4 +98,58 @@ class HttpCustomerExecutionRepository {
       'limitPrice': limitPrice,
     },
   );
+}
+
+/// Server-owned readiness for the live cash intraday order surface. A broker
+/// connection alone never marks this path executable.
+class LiveEquityCapability {
+  const LiveEquityCapability({
+    required this.roomId,
+    this.selectedBroker,
+    required this.brokerConnected,
+    required this.orderRouteImplemented,
+    required this.executionEnabled,
+    required this.blockers,
+  });
+
+  final String roomId;
+  final String? selectedBroker;
+  final bool brokerConnected;
+  final bool orderRouteImplemented;
+  final bool executionEnabled;
+  final List<String> blockers;
+
+  factory LiveEquityCapability.decode(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['roomId'] is! String ||
+        raw['brokerConnected'] is! bool ||
+        raw['orderRouteImplemented'] is! bool ||
+        raw['executionEnabled'] is! bool || raw['blockers'] is! List) {
+      throw const FormatException('Invalid live cash-equity capability');
+    }
+    final blockers = raw['blockers'] as List;
+    if (blockers.any((item) => item is! String)) {
+      throw const FormatException('Invalid live cash-equity blockers');
+    }
+    final broker = raw['selectedBroker'];
+    final selectedBroker =
+        broker == 'ANGEL_ONE' || broker == 'UPSTOX' ? broker as String : null;
+    final brokerConnected = raw['brokerConnected'] as bool;
+    final orderRouteImplemented = raw['orderRouteImplemented'] as bool;
+    final executionEnabled = raw['executionEnabled'] as bool;
+    if (executionEnabled &&
+        (!orderRouteImplemented ||
+            !brokerConnected ||
+            selectedBroker == null ||
+            blockers.isNotEmpty)) {
+      throw const FormatException('Inconsistent executable cash-equity capability');
+    }
+    return LiveEquityCapability(
+      roomId: raw['roomId'] as String,
+      selectedBroker: selectedBroker,
+      brokerConnected: brokerConnected,
+      orderRouteImplemented: orderRouteImplemented,
+      executionEnabled: executionEnabled,
+      blockers: List.unmodifiable(blockers.cast<String>()),
+    );
+  }
 }

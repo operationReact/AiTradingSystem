@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -118,6 +119,29 @@ public class UpstoxBseCrosswalkRepository {
                 while(rs.next()) found.put(rs.getString(1),rs.getString(2));
                 return Map.copyOf(found);
             });
+    }
+
+    /** Resolve a BSE stock only when both the active broker token and symbol
+     * match the fresh, source-custodied Upstox BSE reference. */
+    public Optional<String> recentInstrumentKey(String exchangeToken, String tradingSymbol) {
+        if (exchangeToken == null || !exchangeToken.matches("[0-9]{1,15}")
+                || tradingSymbol == null
+                || !tradingSymbol.matches("[A-Za-z0-9&._/+\\-]{1,100}")) {
+            return Optional.empty();
+        }
+        List<String> matches = jdbc.query("""
+            SELECT q.instrument_key
+              FROM upstox_bse_reference_equity q
+              JOIN upstox_bse_reference_active a ON a.active_import=q.import_id
+              JOIN upstox_bse_reference_import src ON src.id=a.active_import
+             WHERE a.singleton_id=1
+               AND src.source_fetched_at <= now()
+               AND src.source_fetched_at >= now() - interval '36 hours'
+               AND q.exchange_token=?
+               AND q.trading_symbol=?
+             LIMIT 2
+            """, (rs,row) -> rs.getString(1), exchangeToken, tradingSymbol);
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 
     public List<InstrumentMasterParser.InstrumentDraft> enrich(

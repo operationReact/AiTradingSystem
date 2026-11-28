@@ -115,4 +115,51 @@ class CustomerAngelOneSessionServiceTest {
         assertThatThrownBy(() -> service.positions(user)).isInstanceOf(AngelOneException.class);
         assertThat(service.status(user).connected()).isFalse();
     }
+
+    @Test
+    void internalCustomerOrderTransportIsOneShotAndSanitizesAcknowledgement() throws Exception {
+        var service = service(Clock.fixed(Instant.parse("2026-11-07T06:00:00Z"), ZoneOffset.UTC));
+        UUID user = UUID.randomUUID();
+        when(api.customerLogin("key", "AL1234", "1234", "123456"))
+            .thenReturn(new AngelOneApiClient.LoginTokens("jwt", "refresh"));
+        when(api.customerProfile("key", "jwt"))
+            .thenReturn(mapper.readTree("{\"clientcode\":\"AL1234\"}"));
+        service.connect(user, "key", "AL1234", "1234", "123456");
+        var instrument = new Instrument(42L, "NSE_CM", "NSE", "99999", "TEST-EQ",
+            "Test", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        var payload = new AngelOneLimitOrderPayload(mapper).build(
+            new AngelOneLimitOrderPayload.ApprovedParameters(instrument, "BUY", 2,
+                new BigDecimal("125.55"), "INTRADAY", "mt_eq_0001", false));
+        when(api.postInternalApprovedLimitOrder(eq("key"), eq("jwt"), any()))
+            .thenReturn(mapper.readTree("{\"orderid\":\"123456789\"}"));
+
+        var result = service.submitVerifiedIntradayLimitOnce(user, payload);
+        assertThat(result.outcome()).isEqualTo("ACKNOWLEDGED");
+        assertThat(result.orderId()).isEqualTo("123456789");
+        assertThat(result.code()).isEqualTo("ANGEL_ONE_ORDER_ACK");
+        verify(api, times(1)).postInternalApprovedLimitOrder(eq("key"), eq("jwt"), any());
+    }
+
+    @Test
+    void customerOrderTransportTreatsMissingAcknowledgementAsUnknownAndNeverRetries() throws Exception {
+        var service = service(Clock.fixed(Instant.parse("2026-11-07T06:00:00Z"), ZoneOffset.UTC));
+        UUID user = UUID.randomUUID();
+        when(api.customerLogin("key", "AL1234", "1234", "123456"))
+            .thenReturn(new AngelOneApiClient.LoginTokens("jwt", "refresh"));
+        when(api.customerProfile("key", "jwt"))
+            .thenReturn(mapper.readTree("{\"clientcode\":\"AL1234\"}"));
+        service.connect(user, "key", "AL1234", "1234", "123456");
+        var instrument = new Instrument(42L, "NSE_CM", "NSE", "99999", "TEST-EQ",
+            "Test", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        var payload = new AngelOneLimitOrderPayload(mapper).build(
+            new AngelOneLimitOrderPayload.ApprovedParameters(instrument, "BUY", 1,
+                new BigDecimal("125.55"), "INTRADAY", "mt_eq_0002", false));
+        when(api.postInternalApprovedLimitOrder(eq("key"), eq("jwt"), any()))
+            .thenReturn(mapper.readTree("{\"status\":true}"));
+
+        var result = service.submitVerifiedIntradayLimitOnce(user, payload);
+        assertThat(result.outcome()).isEqualTo("UNKNOWN");
+        assertThat(result.code()).isEqualTo("ANGEL_ONE_ORDER_ACK_UNCERTAIN");
+        verify(api, times(1)).postInternalApprovedLimitOrder(eq("key"), eq("jwt"), any());
+    }
 }

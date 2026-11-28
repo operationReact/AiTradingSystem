@@ -124,6 +124,37 @@ class UpstoxApiClientTest {
     }
 
     @Test
+    void cashEquityQuoteUsesEncodedIsinKeyAndCustomerBearer() {
+        server.expect(requestTo("https://api.upstox.com/v3/market-quote/quotes?instrument_key=NSE_EQ%7CINE848E01016"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header("Authorization", "Bearer customer-session"))
+            .andRespond(withSuccess("""
+                {"status":"success","data":{"NSE_EQ:NHPC":{
+                  "instrument_token":"NSE_EQ|INE848E01016","timestamp":"2026-11-26T10:00:00+05:30",
+                  "last_price":76.59,"depth":{"buy":[{"price":76.58,"quantity":100}],
+                  "sell":[{"price":76.60,"quantity":80}]}}}}
+                """, MediaType.APPLICATION_JSON));
+
+        var quote = api.cashEquityQuote("customer-session", "NSE_EQ|INE848E01016");
+        assertThat(quote.path("NSE_EQ:NHPC").path("instrument_token").asText())
+            .isEqualTo("NSE_EQ|INE848E01016");
+        assertThat(quote.path("NSE_EQ:NHPC").path("last_price").decimalValue())
+            .isEqualByComparingTo("76.59");
+        server.verify();
+    }
+
+    @Test
+    void cashEquityQuoteRejectsArbitraryOrNonEquityInstrumentKeys() {
+        assertThatThrownBy(() -> api.cashEquityQuote("session", "NSE_FO|43919"))
+            .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)
+            .hasMessage("UPSTOX_EQUITY_INSTRUMENT_KEY_INVALID");
+        assertThatThrownBy(() -> api.cashEquityQuote("session", "https://example.com"))
+            .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)
+            .hasMessage("UPSTOX_EQUITY_INSTRUMENT_KEY_INVALID");
+        server.verify();
+    }
+
+    @Test
     void fundamentalsRejectUnverifiedIsinOrArbitrarySectionWithoutProviderCall() {
         assertThatThrownBy(() -> api.fundamentals("session", "../other", "ratios"))
             .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)

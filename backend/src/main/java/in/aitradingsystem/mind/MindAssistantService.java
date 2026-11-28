@@ -127,7 +127,7 @@ public class MindAssistantService {
             String text = strategy == null ? "Strategy registry not available."
                 : "Strategy registry: " + strategy.denominator() + " catalog entries; " + strategy.tested()
                     + " with tested code, " + strategy.done() + " runtime verified, " + strategy.blocked()
-                    + " data-blocked. Only SMA_TREND_VOLUME_V1 is wired to PAPER cycles.";
+                    + " data-blocked. Six intraday strategy codes can create guarded LIVE proposals from fresh PAPER cycles; every order still requires per-order confirmation and all LIVE server gates.";
             return answer("STRATEGIES", text, List.of(
                 new Source("Progress registry", "/api/customer/mind/v1/progress", snapshot.generatedAt())), now);
         }
