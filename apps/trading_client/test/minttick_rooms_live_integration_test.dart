@@ -4,6 +4,7 @@ import 'package:trading_client/src/data/instrument_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_execution_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_market_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/domain/trading_room_draft.dart';
+import 'package:trading_client/src/features/trading_rooms/presentation/minttick_room_order_sheet.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_room_production_workspace.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
@@ -177,7 +178,10 @@ void main() {
 
     // Order handoff: the ticket opens on the instrument chosen on the desk,
     // and the unresolved order blocks review until the server resolves it.
-    expect(find.text('RELIANCE-EQ'), findsOneWidget);
+    // RELIANCE-EQ also appears on the chart header, so scope the check to the sheet.
+    expect(find.descendant(
+        of: find.byType(MintTickRoomOrderSheet),
+        matching: find.text('RELIANCE-EQ')), findsOneWidget);
     expect(find.byKey(const ValueKey('room-live-unresolved')), findsOneWidget);
     expect(tester.widget<FilledButton>(
         find.byKey(const ValueKey('room-ticket-review'))).onPressed, isNull);

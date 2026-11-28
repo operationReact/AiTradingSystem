@@ -662,6 +662,13 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                   message: _reconcileMessage,
                   onReconcile: _reconcile,
                 ),
+              // The server's result of a reconcile stays visible after the banner
+              // clears, so the user sees that the order was resolved.
+              if (isLiveTicket && _unresolved.isEmpty && _reconcileMessage != null)
+                Padding(padding: const EdgeInsets.only(top: 9),
+                  child: Text(_reconcileMessage!,
+                    key: const ValueKey('room-live-reconcile-message'),
+                    style: type.bodySmall)),
               if (isLiveTicket && _liveExecutable && !_liveOrdersVerified)
                 Padding(padding: const EdgeInsets.only(top: 9),
                   child: Text('LIVE order history could not be verified. '
