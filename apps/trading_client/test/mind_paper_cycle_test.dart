@@ -70,6 +70,31 @@ void main() {
     expect(() => MindPaperCycle.parse({...cycleJson(), 'outcome': 'LIVE_FILLED'}), throwsFormatException);
   });
 
+  test('LIVE proposal decoder requires the exact strategy order and expiry contract', () {
+    final proposal = MindLiveStrategyProposal.parse({
+      'id': _room,
+      'selectedBroker': 'ANGEL_ONE',
+      'strategyCode': 'OPENING_RANGE_BREAKOUT_V1',
+      'tradingSymbol': 'MINDA-EQ',
+      'side': 'BUY',
+      'quantity': 37,
+      'limitPrice': 105.85,
+      'stopPrice': 105.27,
+      'targetPrice': 106.86,
+      'expiresAt': '2026-11-12T05:02:00Z',
+      'status': 'PENDING',
+    });
+    expect(proposal.strategyCode, 'OPENING_RANGE_BREAKOUT_V1');
+    expect(proposal.quantity, 37);
+    expect(() => MindLiveStrategyProposal.parse({
+      'id': _room, 'selectedBroker': 'ANGEL_ONE',
+      'strategyCode': 'OPENING_RANGE_BREAKOUT_V1',
+      'tradingSymbol': 'MINDA-EQ', 'side': 'SELL', 'quantity': 37,
+      'limitPrice': 105.85, 'stopPrice': 105.27, 'targetPrice': 106.86,
+      'expiresAt': 'not-a-date', 'status': 'PENDING',
+    }), throwsFormatException);
+  });
+
   for (final width in [360.0, 1280.0]) {
     testWidgets('owner runs one PAPER cycle and sees server fill, cash and P&L at $width', (tester) async {
       tester.view.devicePixelRatio = 1;
@@ -90,6 +115,7 @@ void main() {
       repo.gate!.complete();
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('mind-paper-result')), findsOneWidget);
+      expect(find.byKey(const ValueKey('mind-paper-review-live-proposal')), findsOneWidget);
       expect(find.text('PAPER FILL'), findsWidgets);
       expect(find.text('BUY 37 @ 105.85'), findsOneWidget);
       expect(find.text('₹16081.59'), findsOneWidget);
