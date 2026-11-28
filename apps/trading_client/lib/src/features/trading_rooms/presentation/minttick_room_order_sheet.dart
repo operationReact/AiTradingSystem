@@ -6,7 +6,6 @@ import '../data/customer_execution_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_room_repository.dart';
-import '../data/customer_trade_intent_repository.dart';
 import 'minttick_room_stock_picker.dart';
 
 /// The Buy/Sell bottom sheet matches the interactive MintTick HTML blueprint.
@@ -23,7 +22,6 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     this.wallet,
     this.paper,
     this.execution,
-    this.intents,
     this.liveEquityCapability,
     super.key,
   });
@@ -33,7 +31,6 @@ class MintTickRoomOrderSheet extends StatefulWidget {
   final CustomerPaperWallet? wallet;
   final HttpCustomerPaperTradingRepository? paper;
   final HttpCustomerExecutionRepository? execution;
-  final HttpCustomerTradeIntentRepository? intents;
   final LiveEquityCapability? liveEquityCapability;
   final Future<void> Function() onChanged;
   final ValueChanged<InstrumentRecord>? onInstrumentSelected;
@@ -44,7 +41,6 @@ class MintTickRoomOrderSheet extends StatefulWidget {
 
 class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   late String _side;
-  String _product = 'DELIVERY';
   late InstrumentRecord? _stock;
   final _qty = TextEditingController(text: '1');
   final _limit = TextEditingController();
@@ -59,7 +55,6 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     super.initState();
     _side = widget.side;
     _stock = widget.initialInstrument;
-    if (widget.mode == 'LIVE') _product = 'INTRADAY';
     _paperEnabled = widget.wallet?.halted == false;
     if (_stock != null) {
       _verifyQuote();
