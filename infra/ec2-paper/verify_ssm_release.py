@@ -43,6 +43,12 @@ PREFLIGHT_STAGES = {
     "intake_diagnostic", "complete",
 }
 
+PAPER_ACTIVATION_STAGES = {
+    "HOST_PRECHECK", "IMAGE_CHECK", "EGRESS_CHECK", "NETWORK_IDENTITY",
+    "COMPOSE_CONFIG", "DATABASE_BACKUP", "COMPOSE_START", "API_HEALTH",
+    "WEB_HEALTH", "PROXY_HEALTH", "BRIDGE_HEALTH", "PORT_CONTRACT",
+}
+
 
 class Rejected(RuntimeError):
     """A deployment precondition was not met."""
@@ -166,6 +172,14 @@ def safe_preflight_failure_stage(output: str) -> str | None:
     return None
 
 
+def safe_paper_activation_failure_stage(output: str) -> str | None:
+    """Extract only the fixed stage emitted by the PAPER host activation script."""
+    match = re.search(r"MINTTICK_PAPER_FAILED_STAGE:([A-Z_]+)(?:\s|$)", output)
+    if match and match.group(1) in PAPER_ACTIVATION_STAGES:
+        return match.group(1)
+    return None
+
+
 def safe_preflight_intake_receipt(output: str) -> str | None:
     """Return the fixed boolean-only STR176 intake receipt, never raw SSM output."""
     pattern = (
@@ -241,6 +255,13 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
                     raise Rejected(f"SSM artifact download failed: {issue.group(1)}")
                 match = re.search(r"MINTTICK_DEPLOY_FAILED_STAGE:([a-z_]+)", combined)
                 if match and match.group(1) in stages:
+                    if match.group(1) == "host_activation":
+                        activation_stage = safe_paper_activation_failure_stage(combined)
+                        if activation_stage:
+                            raise Rejected(
+                                "SSM deploy failed at safe host activation stage: "
+                                f"{activation_stage}"
+                            )
                     raise Rejected(f"SSM deploy failed at safe stage: {match.group(1)}")
             raise Rejected(f"SSM {action} did not pass host validation ({status})")
         if status not in {"Pending", "InProgress", "Delayed"}:

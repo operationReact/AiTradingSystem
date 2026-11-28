@@ -86,6 +86,38 @@ class SafeSsmPreflightDiagnostics(unittest.TestCase):
             )
         )
 
+    def test_paper_activation_marker_is_allowlisted(self):
+        self.assertEqual(
+            gate.safe_paper_activation_failure_stage(
+                "MINTTICK_PAPER_FAILED_STAGE:API_HEALTH"
+            ),
+            "API_HEALTH",
+        )
+        for value in (
+            "MINTTICK_PAPER_FAILED_STAGE:DB_PASSWORD",
+            "MINTTICK_PAPER_FAILED_STAGE:API_HEALTH;secret",
+            "raw password=never-print",
+        ):
+            with self.subTest(value=value):
+                self.assertIsNone(gate.safe_paper_activation_failure_stage(value))
+
+    def test_activation_error_reports_inner_safe_stage_without_host_output(self):
+        responses = iter((
+            {"Command": {"CommandId": "12345678-1234-1234-1234-123456789abc"}},
+            {
+                "Status": "Failed",
+                "StandardOutputContent": "MINTTICK_PAPER_FAILED_STAGE:API_HEALTH\nDB_PASSWORD=private",
+                "StandardErrorContent": "MINTTICK_DEPLOY_FAILED_STAGE:host_activation private stderr",
+            },
+        ))
+        with patch.object(gate, "aws_json", side_effect=lambda *args: next(responses)):
+            with patch.object(gate.time, "sleep"):
+                with self.assertRaises(gate.Rejected) as caught:
+                    gate.send_command("deploy", "a" * 40, "b" * 64)
+        message = str(caught.exception)
+        self.assertIn("API_HEALTH", message)
+        self.assertNotIn("DB_PASSWORD", message)
+        self.assertNotIn("private", message)
     def test_successful_preflight_prints_only_boolean_receipt(self):
         from contextlib import redirect_stdout
         from io import StringIO
