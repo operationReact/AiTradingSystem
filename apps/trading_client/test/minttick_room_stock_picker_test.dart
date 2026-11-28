@@ -77,7 +77,7 @@ class _FakeExecution extends Fake implements HttpCustomerExecutionRepository {
     required num limitPrice,
   }) async => {
     'roomId': roomId, 'mode': 'LIVE', 'instrumentId': instrumentId,
-    'executable': false, 'blockers': <String>[],
+    'executable': true, 'blockers': <String>[],
   };
 
   @override
