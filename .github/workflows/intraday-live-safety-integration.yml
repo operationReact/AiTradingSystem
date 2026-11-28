@@ -1,0 +1,43 @@
+name: Intraday LIVE safety integration
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - "backend/**"
+      - ".github/workflows/intraday-live-safety-integration.yml"
+  push:
+    branches:
+      - work/intraday-live-readiness-20261126
+    paths:
+      - "backend/**"
+      - ".github/workflows/intraday-live-safety-integration.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intraday-live-safety-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-postgres-tests:
+    name: Backend tests with PostgreSQL and Testcontainers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Run backend unit and PostgreSQL integration tests
+        working-directory: backend
+        run: mvn --batch-mode --no-transfer-progress test

@@ -1,6 +1,7 @@
 package in.aitradingsystem.provider.angelone;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import in.aitradingsystem.instrument.Instrument;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -10,17 +11,19 @@ import java.time.ZonedDateTime;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 /**
- * Customer-scoped, read-only broker sessions.
+ * Customer-scoped broker sessions with customer-facing account reads.
  *
  * <p>Only the customer's API key and a short-lived broker JWT are retained
  * in process memory, keyed by authenticated MintTick user UUID. Never stores
  * login PIN, current TOTP, TOTP seed, refresh token, or credentials in the DB.
- * Restart and IST midnight revoke the session. No order execution API exists.
+ * Restart and IST midnight revoke the session. The private one-shot order
+ * transport is not a customer API and has no execution coordinator wired.
  *
  * <p>A future multi-instance deployment must replace this local session store
  * with a purpose-built secure session service before exposing multiple replicas.
@@ -48,6 +51,7 @@ public class CustomerAngelOneSessionService {
                                    Instant expiresAt, boolean orderExecutionEnabled) {}
 
     public record BrokerRead(String provider, Instant fetchedAt, JsonNode data) {}
+    public record OrderSubmission(String outcome, String orderId, String code) {}
 
     private record BrokerSession(String apiKey, String clientCode, String jwt,
                                  String feedToken, Instant expiresAt) {
@@ -128,6 +132,88 @@ public class CustomerAngelOneSessionService {
 
     public BrokerRead orders(UUID userId) {
         return read(userId, AngelOneRateLimiter.Category.ACCOUNT_PORTFOLIO, api::customerOrders);
+    }
+
+    /**
+     * Customer-session transport for one already approved intraday LIMIT
+     * order. Only an internal coordinator may call this after committing a
+     * durable order claim and passing policy, consent, quote and risk checks.
+     */
+    public OrderSubmission submitVerifiedIntradayLimitOnce(UUID userId,
+            ObjectNode verifiedPayload) {
+        BrokerSession session = current(userId);
+        if (session == null) {
+            return new OrderSubmission("REJECTED", null, "ANGEL_ONE_SESSION_MISSING");
+        }
+        if (!validIntradayPayload(verifiedPayload)) {
+            return new OrderSubmission("REJECTED", null, "ANGEL_ONE_INVALID_ORDER");
+        }
+        try {
+            limiter.acquire(AngelOneRateLimiter.Category.ACCOUNT_PORTFOLIO);
+        } catch (AngelOneException limited) {
+            if (limited.kind() == AngelOneException.Kind.RATE_LIMITED) {
+                return new OrderSubmission("REJECTED", null, "ANGEL_ONE_ORDER_RATE_LIMITED");
+            }
+            throw limited;
+        }
+        try {
+            JsonNode data = api.postInternalApprovedLimitOrder(
+                session.apiKey(), session.jwt(), verifiedPayload);
+            JsonNode brokerOrder = data.path("orderid");
+            if (brokerOrder.isTextual()
+                    && brokerOrder.asText().matches("[A-Za-z0-9_-]{1,64}")) {
+                return new OrderSubmission("ACKNOWLEDGED", brokerOrder.asText(),
+                    "ANGEL_ONE_ORDER_ACK");
+            }
+            return new OrderSubmission("UNKNOWN", null,
+                "ANGEL_ONE_ORDER_ACK_UNCERTAIN");
+        } catch (AngelOneException failure) {
+            if (failure.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
+                sessions.remove(userId, session);
+                return new OrderSubmission("REJECTED", null,
+                    "ANGEL_ONE_SESSION_EXPIRED");
+            }
+            if (failure.kind() == AngelOneException.Kind.REJECTED) {
+                return new OrderSubmission("REJECTED", null,
+                    "ANGEL_ONE_BROKER_REJECTED");
+            }
+            // Network, provider rate-limit, 408 and 5xx outcomes may be
+            // accepted-but-unacknowledged. The coordinator must reconcile.
+            return new OrderSubmission("UNKNOWN", null,
+                "ANGEL_ONE_ORDER_STATUS_UNKNOWN");
+        } catch (RuntimeException uncertain) {
+            return new OrderSubmission("UNKNOWN", null,
+                "ANGEL_ONE_ORDER_STATUS_UNKNOWN");
+        }
+    }
+
+    private static boolean validIntradayPayload(ObjectNode payload) {
+        if (payload == null
+                || !"NORMAL".equals(payload.path("variety").asText())
+                || !"LIMIT".equals(payload.path("ordertype").asText())
+                || !"INTRADAY".equals(payload.path("producttype").asText())
+                || !"DAY".equals(payload.path("duration").asText())
+                || !Set.of("NSE", "BSE").contains(payload.path("exchange").asText())
+                || !Set.of("BUY", "SELL").contains(payload.path("transactiontype").asText())
+                || !payload.path("symboltoken").asText("").matches("[0-9]{1,32}")
+                || !payload.path("ordertag").asText("").matches("[A-Za-z0-9_-]{1,19}")) {
+            return false;
+        }
+        try {
+            String rawQuantity = payload.path("quantity").asText("");
+            String rawPrice = payload.path("price").asText("");
+            if (!rawQuantity.matches("[1-9][0-9]{0,4}")
+                    || !rawPrice.matches("[0-9]{1,8}(?:\\.[0-9]{1,2})?")) {
+                return false;
+            }
+            int quantity = Integer.parseInt(rawQuantity);
+            java.math.BigDecimal price = new java.math.BigDecimal(rawPrice);
+            return quantity >= 1 && quantity <= 10000 && price.signum() > 0
+                && price.scale() <= 2
+                && price.compareTo(new java.math.BigDecimal("10000000")) <= 0;
+        } catch (NumberFormatException malformed) {
+            return false;
+        }
     }
 
     /** On-demand LTP using only this user's own verified and unexpired broker session. */

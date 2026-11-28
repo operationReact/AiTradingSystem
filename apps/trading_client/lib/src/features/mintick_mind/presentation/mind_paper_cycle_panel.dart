@@ -33,6 +33,8 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
   String _strategyCode = 'SMA_TREND_VOLUME_V1';
   String _interval = 'FIFTEEN_MINUTE';
   bool _running = false;
+  bool _liveActionBusy = false;
+  String? _liveMessage;
   MindPaperCycleResult? _result;
   List<MindPaperCycle> _recent = const [];
   String? _error;
@@ -88,6 +90,112 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
     }
   }
 
+  Future<void> _createLiveProposal(MindPaperCycle cycle) async {
+    final repository = widget.repository;
+    if (repository is! MindLiveStrategyProposalRepository ||
+        _roomId == null || cycle.outcome != MindPaperOutcome.filled ||
+        cycle.stopPrice == null || cycle.targetPrice == null) {
+      setState(() => _liveMessage = 'This PAPER cycle is not eligible for a LIVE proposal.');
+      return;
+    }
+    final liveRepository = repository as MindLiveStrategyProposalRepository;
+    setState(() { _liveActionBusy = true; _liveMessage = null; });
+    try {
+      final liveRooms = await liveRepository.liveIntradayRooms();
+      if (!mounted) return;
+      if (liveRooms.isEmpty) {
+        setState(() => _liveMessage = 'Create an intraday LIVE equity room first.');
+        return;
+      }
+      final liveRoom = await _chooseLiveRoom(liveRooms);
+      if (!mounted || liveRoom == null) return;
+      final proposal = await liveRepository.createLiveProposal(
+        liveRoomId: liveRoom.id,
+        sourcePaperRoomId: _roomId!,
+        sourceCycleId: cycle.id,
+      );
+      if (!mounted) return;
+      if (proposal.status != 'PENDING' || !DateTime.now().isBefore(proposal.expiresAt)) {
+        setState(() => _liveMessage = 'This strategy proposal has expired. Run a fresh PAPER cycle.');
+        return;
+      }
+      final confirmed = await _confirmLiveProposal(proposal, liveRoom.name);
+      if (!mounted || confirmed != true) return;
+      final response = await liveRepository.submitLiveProposal(
+        liveRoomId: liveRoom.id, proposalId: proposal.id);
+      if (!mounted) return;
+      final order = response is Map<String, dynamic> ? response['order'] : null;
+      final state = order is Map<String, dynamic> && order['state'] is String
+          ? order['state'] as String : 'UNVERIFIED';
+      setState(() => _liveMessage =
+          'LIVE order state: $state. The strategy stop/target are reference levels; broker exits are not attached.');
+    } catch (_) {
+      if (mounted) {
+        setState(() => _liveMessage =
+            'No verified LIVE result returned. Check LIVE order history before retrying.');
+      }
+    } finally {
+      if (mounted) setState(() => _liveActionBusy = false);
+    }
+  }
+
+  Future<MindPaperRoom?> _chooseLiveRoom(List<MindPaperRoom> rooms) async {
+    String selected = rooms.first.id;
+    return showDialog<MindPaperRoom>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: MindPalette.panel,
+          title: const Text('Choose LIVE intraday room'),
+          content: DropdownButtonFormField<String>(
+            initialValue: selected,
+            isExpanded: true,
+            items: [for (final room in rooms)
+              DropdownMenuItem(value: room.id, child: Text(room.name))],
+            onChanged: (value) {
+              if (value != null) setDialogState(() => selected = value);
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext,
+                rooms.firstWhere((room) => room.id == selected)),
+                child: const Text('Review')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<bool?> _confirmLiveProposal(
+      MindLiveStrategyProposal proposal, String roomName) =>
+      showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: MindPalette.panel,
+          title: const Text('Confirm LIVE intraday order'),
+          content: Text(
+            '${proposal.strategyCode} · ${proposal.tradingSymbol} · $roomName\n'
+            'Broker: ${proposal.selectedBroker}\n'
+            '${proposal.side} ${proposal.quantity} LIMIT DAY @ ${proposal.limitPrice}\n'
+            'Strategy stop / target: ${proposal.stopPrice} / ${proposal.targetPrice}\n\n'
+            'If all server checks pass, this sends one real order to your selected broker. '
+            'The stop and target are reference levels only; broker-side exits are not attached. '
+            'You must supervise and manage the position. Proposal expires in two minutes.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: MindPalette.red),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Confirm and submit'),
+            ),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) => MindPanel(
         key: const ValueKey('mind-paper-cycle-panel'),
@@ -105,17 +213,17 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
               ]),
               const SizedBox(height: 4),
               Text('$_strategyCode on stored broker candles → verified live quote → automatic risk '
-                  'sizing → existing PAPER engine. No broker order is ever placed.',
+                  'sizing → existing PAPER engine. LIVE submission is a separate owner-confirmed action with server-side gates.',
                   style: TextStyle(color: MindPalette.muted, fontSize: 11)),
               if (_strategyCode == 'OPENING_RANGE_BREAKOUT_V1') ...[
                 const SizedBox(height: 4),
-                const Text('Research candidate only. This cycle uses virtual funds and cannot enable LIVE orders.',
+                const Text('Research candidate only. A PAPER result can create a short-lived LIVE proposal but never authorizes or sends an order by itself.',
                     key: ValueKey('mind-orb-paper-only'),
                     style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
               ],
               if (_strategyCode == 'RSI_REVERSAL_V1') ...[
                 const SizedBox(height: 4),
-                const Text('Research candidate only; no strategy performance certification or LIVE order authority.',
+                const Text('Research candidate only; no strategy performance certification. Any LIVE proposal still needs explicit order confirmation and server approval.',
                     key: ValueKey('mind-rsi-paper-only'),
                     style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
               ],
@@ -133,7 +241,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
             final (rooms, instruments) = snap.data!;
             if (rooms.isEmpty || instruments.isEmpty) {
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header,
-                Text(rooms.isEmpty ? 'Fund a PAPER room first (Trading Rooms → Activate PAPER wallet).'
+                Text(rooms.isEmpty ? 'Create and fund an INTRADAY PAPER equity room first.'
                     : 'Add an NSE/BSE cash equity to your watchlist first.',
                     key: const ValueKey('mind-paper-setup-missing'),
                     style: const TextStyle(color: MindPalette.text, fontSize: 12))]);
@@ -263,6 +371,18 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
         if (c.outcome == MindPaperOutcome.filled)
           kv('Virtual fill', '${c.side} ${c.quantity} @ ${r.fillPrice ?? c.limitPrice}', color: MindPalette.mint),
         if (c.stopPrice != null) kv('Stop / target', '${c.stopPrice} / ${c.targetPrice ?? '-'}'),
+        if (c.outcome == MindPaperOutcome.filled)
+          OutlinedButton.icon(
+            key: const ValueKey('mind-paper-review-live-proposal'),
+            onPressed: _liveActionBusy ? null : () => _createLiveProposal(c),
+            icon: _liveActionBusy
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.open_in_new, size: 16),
+            label: Text(_liveActionBusy ? 'Preparing proposal…' : 'Review in LIVE room'),
+          ),
+        if (_liveMessage != null)
+          Text(_liveMessage!, key: const ValueKey('mind-live-proposal-message'),
+              style: const TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
         kv('Virtual cash', _inr(r.availableCashPaise)),
         kv('Realized P&L', _inr(r.realizedPnlPaise), color: r.realizedPnlPaise < 0 ? MindPalette.red : MindPalette.text),
         kv('Unrealized P&L', unrealized == null ? 'Mark unavailable' : _inr(unrealized)),

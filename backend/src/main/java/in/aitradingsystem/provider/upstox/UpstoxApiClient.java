@@ -207,6 +207,21 @@ public class UpstoxApiClient {
     }
 
     /**
+     * Customer-authorized, exchange-sourced cash-equity quote snapshot. Only
+     * exact ISIN-based Upstox instrument keys are accepted; callers must
+     * resolve these through a current provider instrument reference first.
+     */
+    public JsonNode cashEquityQuote(String token, String instrumentKey) {
+        if (instrumentKey == null
+                || !instrumentKey.matches("(?:NSE_EQ|BSE_EQ)\\|[A-Z]{2}[A-Z0-9]{9}[0-9]")) {
+            throw new UpstoxProviderException("UPSTOX_EQUITY_INSTRUMENT_KEY_INVALID");
+        }
+        String encoded = java.net.URLEncoder.encode(instrumentKey, java.nio.charset.StandardCharsets.UTF_8);
+        return get(token, java.net.URI.create(
+            "https://api.upstox.com/v3/market-quote/quotes?instrument_key=" + encoded), true);
+    }
+
+    /**
      * Provider-authoritative one-day order history. The unique tag is
      * allowlisted before becoming a URI query parameter; no arbitrary broker
      * URL is ever accepted. An empty broker result is NOT proof of rejection.
@@ -244,12 +259,16 @@ public class UpstoxApiClient {
     }
 
     private JsonNode get(String token, String fixedPath, boolean bounded) {
+        return get(token, java.net.URI.create("https://api.upstox.com" + fixedPath), bounded);
+    }
+
+    private JsonNode get(String token, java.net.URI fixedUri, boolean bounded) {
         if (token == null || token.isBlank()) {
             throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
         }
         try {
             String payload = (bounded ? tokenHttp : http).get()
-                .uri(fixedPath)
+                .uri(fixedUri)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve().body(String.class);
@@ -266,7 +285,7 @@ public class UpstoxApiClient {
             // Upstox explicitly closes the funds endpoint 00:00–05:30 IST
             // with HTTP 423. Do not misclassify the closed funds service as
             // empty holdings, zero cash, or an expired customer connection.
-            if ("/v2/user/get-funds-and-margin".equals(fixedPath)
+            if ("/v2/user/get-funds-and-margin".equals(fixedUri.getPath())
                     && ex.getStatusCode().value() == 423) {
                 throw new UpstoxProviderException("UPSTOX_FUNDS_MAINTENANCE");
             }

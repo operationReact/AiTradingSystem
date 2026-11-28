@@ -76,9 +76,11 @@ class CustomerTradeIntentServiceIT extends AbstractPostgresIT {
         var readiness = mock(CustomerExecutionReadinessService.class);
         when(readiness.preflight(any(), any(), anyLong(), any(), anyInt(), any()))
             .thenAnswer(call -> new CustomerExecutionReadinessService.Preflight(
-                room, mode, 42L, "SBIN-EQ", "NSE",
+                room, mode, 42L, "UPSTOX", "SBIN-EQ", "NSE",
                 call.getArgument(3), call.getArgument(4),
-                "LIMIT", "DAY", call.getArgument(5), false,
+                "LIMIT", "DAY", call.getArgument(5), BigDecimal.ZERO,
+                null, BigDecimal.ZERO, BigDecimal.ZERO, false, true, null,
+                java.time.Instant.now(), false,
                 List.of("EXECUTION_DISABLED", "AUTHORITATIVE_QUOTE_NOT_VERIFIED")));
         when(readiness.readiness(any(), any()))
             .thenReturn(new CustomerExecutionReadinessService.Readiness(

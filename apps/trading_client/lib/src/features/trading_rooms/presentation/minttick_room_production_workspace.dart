@@ -30,6 +30,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
     required this.onSelectBroker,
     this.wallet,
     this.readiness,
+    this.liveEquityCapability,
     this.events = const [],
     this.market,
     this.paper,
@@ -45,6 +46,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
   final TradingRoomDraft room;
   final CustomerPaperWallet? wallet;
   final CustomerExecutionReadiness? readiness;
+  final LiveEquityCapability? liveEquityCapability;
   final List<CustomerPaperCashEvent> events;
   final HttpCustomerMarketRepository? market;
   final HttpCustomerPaperTradingRepository? paper;
@@ -75,6 +77,19 @@ class _MintTickRoomProductionWorkspaceState
     'ALL' => 'Equity + F&O',
     _ => 'NSE/BSE equities',
   };
+  List<String> get _equityRouteBlockers =>
+      (widget.liveEquityCapability?.blockers ?? const <String>[])
+          .where((blocker) => blocker ==
+                  'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED' ||
+              blocker == 'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER' ||
+              blocker == 'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED' ||
+              blocker == 'ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED' ||
+              blocker == 'BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED' ||
+              blocker ==
+                  'BROKER_ORDER_DISPATCH_AND_RECONCILIATION_NOT_IMPLEMENTED' ||
+              blocker == 'ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED' ||
+              blocker == 'UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED')
+          .toList(growable: false);
   InstrumentRecord? _selected;
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
@@ -811,6 +826,30 @@ class _MintTickRoomProductionWorkspaceState
         secondary: 'Backend broker and policy readiness',
         middle: '', right: read == null ? 'UNKNOWN'
           : read.executionEnabled ? 'READY' : 'BLOCKED'),
+      if (live && widget.room.marketScope != 'FNO')
+        _DataLine(
+          primary: 'Cash intraday order route',
+          secondary: widget.liveEquityCapability?.orderRouteImplemented == true
+            ? 'Server route reported implemented'
+            : 'Broker dispatch and execution are unavailable',
+          middle: '',
+          right: widget.liveEquityCapability == null ? 'UNKNOWN'
+            : widget.liveEquityCapability!.executionEnabled ? 'READY' : 'BLOCKED'),
+      if (live && widget.room.marketScope != 'FNO')
+        for (final blocker in _equityRouteBlockers)
+          Padding(
+            padding: const EdgeInsets.only(top: 7),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                blocker.replaceAll('_', ' '),
+                key: ValueKey('live-equity-blocker-$blocker'),
+                style: type.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
       const _DataLine(primary: 'Capital & risk',
         secondary: 'Authoritative MintTick Mind / server',
         middle: '', right: 'AUTOMATIC'),
