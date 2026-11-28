@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/data/instrument_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_market_repository.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_room_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_room_equity_desk.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
@@ -13,6 +14,7 @@ const _reliance = InstrumentRecord(
   name: 'Reliance Industries', instrumentType: 'EQ',
   expiry: null, strike: null, lotSize: 1, tickSize: .05,
 );
+const _roomId = '11111111-1111-1111-1111-111111111111';
 
 /// Serves verified-shaped market data. Fields mirror what the real HTTP
 /// repository decodes; the desk never estimates anything from them.
@@ -85,8 +87,33 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
       CustomerWatchlist(items: watched, maxItems: 50);
 }
 
+class _FakeRoomRepository extends Fake implements HttpCustomerRoomRepository {
+  CustomerRoomThesis stored = const CustomerRoomThesis(
+    roomId: _roomId, content: '', revision: 0, updatedAt: null);
+  int saves = 0;
+
+  @override
+  Future<CustomerRoomThesis> thesis(String roomId) async => stored;
+
+  @override
+  Future<CustomerRoomThesis> saveThesis({
+    required String roomId,
+    required String content,
+    required int expectedRevision,
+  }) async {
+    saves++;
+    if (stored.revision != expectedRevision) {
+      throw StateError('revision conflict');
+    }
+    stored = CustomerRoomThesis(
+      roomId: roomId, content: content, revision: expectedRevision + 1,
+      updatedAt: DateTime.utc(2026, 11, 28));
+    return stored;
+  }
+}
+
 Future<void> _pump(WidgetTester tester, String focus,
-    {_FakeMarket? market}) async {
+    {_FakeMarket? market, _FakeRoomRepository? roomRepository}) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -94,7 +121,9 @@ Future<void> _pump(WidgetTester tester, String focus,
   await tester.pumpWidget(MaterialApp(
     theme: buildTheme(Brightness.dark),
     home: Scaffold(body: MintTickRoomEquityDesk(
+      roomId: _roomId,
       market: market ?? _FakeMarket(),
+      roomRepository: roomRepository,
       focus: focus,
       initialInstrument: _reliance,
       onInstrument: (_) {},
@@ -211,15 +240,34 @@ void main() {
 
   testWidgets('swing room surfaces 52-week position, holding and watch toggle',
       (tester) async {
-    await _pump(tester, 'Swing', market: _FakeMarket(quoteStatus: 'LAST_CLOSE'));
+    final roomRepository = _FakeRoomRepository();
+    await _pump(tester, 'Swing', market: _FakeMarket(quoteStatus: 'LAST_CLOSE'),
+        roomRepository: roomRepository);
     expect(find.text('SWING'), findsOneWidget);
     expect(find.text('52-WEEK RANGE'), findsOneWidget);
     expect(find.text('PREV CLOSE'), findsOneWidget);
     expect(find.text('3 sh'), findsOneWidget);
     expect(find.byKey(const ValueKey('room-equity-watch-toggle')), findsOneWidget);
-    expect(find.textContaining('Thesis & notes are not yet available'),
+    expect(find.text('Add a room thesis or notes'),
         findsOneWidget);
     expect(find.text('DAY RANGE'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('swing thesis editor saves room-owned notes with revision',
+      (tester) async {
+    final roomRepository = _FakeRoomRepository();
+    await _pump(tester, 'Swing', roomRepository: roomRepository);
+    await tester.tap(find.byKey(const ValueKey('room-thesis-open')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('room-thesis-editor')),
+        'Entry on a confirmed pullback; invalidate below support.');
+    await tester.tap(find.byKey(const ValueKey('room-thesis-save')));
+    await tester.pumpAndSettle();
+
+    expect(roomRepository.saves, 1);
+    expect(roomRepository.stored.revision, 1);
+    expect(find.textContaining('Entry on a confirmed pullback'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

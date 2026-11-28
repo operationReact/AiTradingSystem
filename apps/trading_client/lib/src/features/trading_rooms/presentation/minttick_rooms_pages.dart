@@ -718,6 +718,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
       liveEquityCapability: _liveEquityCapability,
       events: _events,
       market: widget.marketRepository,
+      roomRepository: widget.repository,
       paper: widget.paperTradingRepository,
       fno: widget.paperFnoRepository,
       execution: widget.executionRepository,

@@ -33,6 +33,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
     this.liveEquityCapability,
     this.events = const [],
     this.market,
+    this.roomRepository,
     this.paper,
     this.fno,
     this.execution,
@@ -49,6 +50,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
   final LiveEquityCapability? liveEquityCapability;
   final List<CustomerPaperCashEvent> events;
   final HttpCustomerMarketRepository? market;
+  final HttpCustomerRoomRepository? roomRepository;
   final HttpCustomerPaperTradingRepository? paper;
   /// PAPER-only NIFTY options. Null hides the F&O section.
   final CustomerPaperFnoRepository? fno;
@@ -647,7 +649,9 @@ class _MintTickRoomProductionWorkspaceState
       if (widget.market != null)
         Expanded(child: MintTickRoomEquityDesk(
           key: ValueKey('room-equity-$_chartVersion'),
+          roomId: widget.room.id,
           market: widget.market!,
+          roomRepository: widget.roomRepository,
           focus: widget.room.focus,
           initialInstrument: _selected,
           onInstrument: (selected) => _selected = selected,
