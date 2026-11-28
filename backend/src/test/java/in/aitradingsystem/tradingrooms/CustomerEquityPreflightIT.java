@@ -45,6 +45,8 @@ class CustomerEquityPreflightIT extends AbstractPostgresIT {
 
         var acceptedForReview = service.preflight(owner, room, 42L,
             "BUY", 1, new BigDecimal("194.55"));
+        assertThat(acceptedForReview.executable()).isEqualTo(
+            acceptedForReview.blockers().isEmpty());
         assertThat(acceptedForReview.executable()).isFalse();
         // Room exposure is read from the ledger (zero here). It was previously
         // reported unverified because of an Instant binding defect; that defect is fixed.
