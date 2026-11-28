@@ -156,48 +156,6 @@ extension _MindNewsScreens on _MindWorkspaceState {
       Text(_newsLoading?'Updating':_newsLoaded?'${_newsArticles.length} loaded':'Waiting',style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
   );
 
-  Widget _newsSourceSummary() {
-    const names=['NSE','Moneycontrol','Economic Times','SEBI'];
-    String key(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-    MarketNewsSource? sourceFor(String name) {
-      final wanted = key(name);
-      for (final source in _newsSources) {
-        final candidate = key('${source.sourceId} ${source.publisher}');
-        if (candidate.contains(wanted) || wanted.contains(key(source.sourceId))) return source;
-      }
-      return null;
-    }
-    Widget sourceCard(String name) {
-      final source = sourceFor(name);
-      final ok = source?.status.toUpperCase() == 'SUCCESS';
-      return Expanded(child: Container(
-        margin: EdgeInsets.only(right: name == names.last ? 0 : 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(color: MindPalette.panel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: MindPalette.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: MindPalette.muted, fontSize: 9,
-              fontWeight: FontWeight.w600)),
-          Text(source == null ? '—' : '${source.fetchedItems}',
-            style: const TextStyle(color: MindPalette.text, fontSize: 16,
-              fontWeight: FontWeight.w800)),
-          Text(source == null ? 'health n/a' : ok ? 'fetched' : source.status.toLowerCase(),
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: source == null ? MindPalette.muted :
-              ok ? MindPalette.mint : MindPalette.yellow, fontSize: 8)),
-        ]),
-      ));
-    }
-    return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      Row(children:[const Expanded(child:Text('LATEST SOURCE CHECK',style:TextStyle(color:MindPalette.muted,fontSize:10,fontWeight:FontWeight.w700))),
-        Text(_newsSourceHealthError ?? (_newsSources.isEmpty?'Checking sources':'Backend health'),style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
-      const SizedBox(height:5),
-      Row(children: [for (final name in names) sourceCard(name)]),
-    ]);
-  }
-
   Widget _newsCompactMetrics() {
     final items = _currentMindNewsItems;
     final positive = items.where((item) => item.article?.stockImpact?.sentiment == 'POSITIVE').length;
@@ -215,8 +173,8 @@ extension _MindNewsScreens on _MindWorkspaceState {
       ('$needsReview', 'Unclear / pending'),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('ARTICLE READ · LOADED PAGE',
-          style: TextStyle(color: MindPalette.muted, fontSize: 10, fontWeight: FontWeight.w800)),
+      Text('ARTICLE READ · ${items.length} LOADED · $_newsTotalItems TOTAL',
+          style: const TextStyle(color: MindPalette.muted, fontSize: 10, fontWeight: FontWeight.w800)),
       const SizedBox(height: 5),
       Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
