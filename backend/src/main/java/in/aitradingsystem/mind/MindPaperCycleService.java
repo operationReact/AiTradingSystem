@@ -9,6 +9,8 @@ import in.aitradingsystem.marketdata.MarketDataQualityService;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import in.aitradingsystem.marketdata.MarketLastTickStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
+import in.aitradingsystem.news.feature.NewsContext;
+import in.aitradingsystem.news.feature.NewsFeatureService;
 import in.aitradingsystem.mind.MindCapabilityProgressService.EventType;
 import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
 import in.aitradingsystem.scanner.MovingAverageReclaimStrategy;
@@ -77,6 +79,8 @@ public class MindPaperCycleService {
     public static final String MA_RECLAIM_STRATEGY_CODE = MovingAverageReclaimStrategy.NAME;
     public static final String VOLUME_BREAKOUT_STRATEGY_CODE = VolumeBreakoutStrategy.NAME;
     public static final String RSI_REVERSAL_STRATEGY_CODE = RsiReversalStrategy.NAME;
+    public static final String NEWS_IMPACT_STRATEGY_CODE = "NEWS_IMPACT_V1";
+    private static final BigDecimal MIN_NEWS_DIRECTION = new BigDecimal("0.50");
     private static final String ORB_STRATEGY_CAPABILITY = "strategy.STR-024";
     private static final String RSI_REVERSAL_STRATEGY_CAPABILITY = "strategy.STR-036";
     /** Catalog entry "SMA Cross" (STR-001) maps to SMA_TREND_VOLUME_V1. */
@@ -137,6 +141,7 @@ public class MindPaperCycleService {
     private final MovingAverageReclaimStrategy maReclaim;
     private final VolumeBreakoutStrategy volumeBreakout;
     private final RsiReversalStrategy rsiReversal;
+    private final NewsFeatureService newsFeatures;
 
     public MindPaperCycleService(JdbcClient jdbc, InstrumentMasterService instruments,
             StrategyService strategies, CustomerPaperOrderService orders,
@@ -198,7 +203,6 @@ public class MindPaperCycleService {
             liveFeed, permittedSources, marketData, dataQuality, orb, vwap, maReclaim, volumeBreakout, null);
     }
 
-    @Autowired
     public MindPaperCycleService(JdbcClient jdbc, InstrumentMasterService instruments,
             StrategyService strategies, CustomerPaperOrderService orders,
             CustomerPaperWalletService wallets, MarketLastTickStore ticks,
@@ -209,6 +213,22 @@ public class MindPaperCycleService {
             OpeningRangeBreakoutStrategy orb, VwapMomentumStrategy vwap,
             MovingAverageReclaimStrategy maReclaim, VolumeBreakoutStrategy volumeBreakout,
             RsiReversalStrategy rsiReversal) {
+        this(jdbc, instruments, strategies, orders, wallets, ticks, calendar, progress, clock,
+            liveFeed, permittedSources, marketData, dataQuality, orb, vwap, maReclaim,
+            volumeBreakout, rsiReversal, null);
+    }
+
+    @Autowired
+    public MindPaperCycleService(JdbcClient jdbc, InstrumentMasterService instruments,
+            StrategyService strategies, CustomerPaperOrderService orders,
+            CustomerPaperWalletService wallets, MarketLastTickStore ticks,
+            MarketSessionCalendar calendar, MindCapabilityProgressService progress, Clock clock,
+            AppAngelOneMarketFeedService liveFeed,
+            @Value("${app.mind.paper.permitted-candle-sources:ANGEL_ONE_SMARTAPI}") String permittedSources,
+            MarketDataRepository marketData, MarketDataQualityService dataQuality,
+            OpeningRangeBreakoutStrategy orb, VwapMomentumStrategy vwap,
+            MovingAverageReclaimStrategy maReclaim, VolumeBreakoutStrategy volumeBreakout,
+            RsiReversalStrategy rsiReversal, NewsFeatureService newsFeatures) {
         this.liveFeed = liveFeed;
         this.jdbc = jdbc;
         this.instruments = instruments;
@@ -228,6 +248,7 @@ public class MindPaperCycleService {
         this.maReclaim = maReclaim;
         this.volumeBreakout = volumeBreakout;
         this.rsiReversal = rsiReversal;
+        this.newsFeatures = newsFeatures;
     }
 
     public CycleResult run(UUID owner, UUID roomId, String requestKey, long instrumentId,
@@ -244,7 +265,8 @@ public class MindPaperCycleService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Mind PAPER cycle request");
         }
         if (!Set.of(STRATEGY_CODE, ORB_STRATEGY_CODE, VWAP_STRATEGY_CODE, MA_RECLAIM_STRATEGY_CODE,
-                VOLUME_BREAKOUT_STRATEGY_CODE, RSI_REVERSAL_STRATEGY_CODE).contains(strategyCode)) {
+                VOLUME_BREAKOUT_STRATEGY_CODE, RSI_REVERSAL_STRATEGY_CODE, NEWS_IMPACT_STRATEGY_CODE)
+                .contains(strategyCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported Mind PAPER strategy");
         }
         if (interval == null || !INTERVALS.contains(interval)) {
@@ -304,7 +326,9 @@ public class MindPaperCycleService {
                 case RSI_REVERSAL_STRATEGY_CODE -> rsiReversal;
                 default -> volumeBreakout;
             };
-            OrbEvaluation evaluation = isOrb ? evaluateOrb(instrument, interval, now)
+            OrbEvaluation evaluation = NEWS_IMPACT_STRATEGY_CODE.equals(strategyCode)
+                ? evaluateNews(instrument, interval, now)
+                : isOrb ? evaluateOrb(instrument, interval, now)
                 : evaluateIntraday(instrument, interval, now, selectedEvaluator, strategyCode);
             d.source = evaluation.source();
             d.candleTime = evaluation.latestCandleAt();
@@ -365,7 +389,8 @@ public class MindPaperCycleService {
             MarketLastTickStore.LastTick preview = freshTick(instrument, now);
             boolean trendBroken = !"BUY".equals(signal.action())
                 && (signal.reasonCodes().contains("CLOSE_NOT_ABOVE_SLOW_SMA")
-                    || signal.reasonCodes().contains("TREND_NOT_BULLISH"));
+                    || signal.reasonCodes().contains("TREND_NOT_BULLISH")
+                    || signal.reasonCodes().contains("NEWS_DIRECTION_NEGATIVE"));
             boolean stopHit = preview != null && protective != null && protective.stop() != null
                 && preview.ltp().compareTo(protective.stop()) <= 0;
             boolean targetHit = preview != null && protective != null && protective.target() != null
@@ -727,6 +752,95 @@ public class MindPaperCycleService {
     private record OrbEvaluation(CycleSignal signal, String blockingReason, String source,
                                  Instant latestCandleAt, BigDecimal latestClose) {}
 
+    private OrbEvaluation evaluateNews(Instrument instrument, HistoricalCandleInterval interval, Instant now) {
+        if (newsFeatures == null || !newsFeatures.enabled()) {
+            return new OrbEvaluation(null, "NEWS_CONTEXT_DISABLED", null, null, null);
+        }
+        if (marketData == null) {
+            return new OrbEvaluation(null, "NEWS_MARKET_DATA_UNAVAILABLE", null, null, null);
+        }
+        if (!(interval == HistoricalCandleInterval.ONE_MINUTE
+                || interval == HistoricalCandleInterval.THREE_MINUTE
+                || interval == HistoricalCandleInterval.FIVE_MINUTE)) {
+            return new OrbEvaluation(null, "NEWS_INTERVAL_NOT_SUPPORTED", null, null, null);
+        }
+        List<MarketCandle> stored = marketData.recentCandles(instrument.id(), interval.name(), 64);
+        Duration step = candleStep(interval);
+        List<MarketCandle> completed = stored.stream()
+            .filter(c -> c.candleTime() != null && !c.candleTime().plus(step).isAfter(now)).toList();
+        if (completed.size() < 20) {
+            return new OrbEvaluation(null, "INSUFFICIENT_COMPLETED_CANDLES", null,
+                completed.isEmpty() ? null : completed.getLast().candleTime(), null);
+        }
+        MarketCandle latest = completed.getLast();
+        String source = latest.source();
+        boolean identityValid = completed.stream().allMatch(c -> c.instrumentId() == instrument.id()
+            && Objects.equals(c.exchange(), instrument.exchange())
+            && Objects.equals(c.tradingSymbol(), instrument.tradingSymbol())
+            && Objects.equals(c.symbolToken(), instrument.symbolToken())
+            && Objects.equals(c.catalogueVersion(), instrument.catalogueVersion())
+            && Objects.equals(c.interval(), interval.name())
+            && Objects.equals(c.source(), source)
+            && c.fetchedAt() != null && !c.fetchedAt().isAfter(now)
+            && c.open() != null && c.high() != null && c.low() != null && c.close() != null
+            && c.high().compareTo(c.open()) >= 0 && c.high().compareTo(c.close()) >= 0
+            && c.low().compareTo(c.open()) <= 0 && c.low().compareTo(c.close()) <= 0
+            && c.high().compareTo(c.low()) >= 0 && c.volume() > 0);
+        if (!identityValid || source == null || !permittedSources.contains(source)) {
+            return new OrbEvaluation(null, "NEWS_CANDLE_IDENTITY_OR_SOURCE_NOT_PERMITTED", source,
+                latest.candleTime(), latest.close());
+        }
+        var validation = CandleSeriesValidator.validate(completed, now, maxCandleAge(interval));
+        if (!validation.valid()) {
+            return new OrbEvaluation(null, validation.reason(), source, latest.candleTime(), latest.close());
+        }
+        if (dataQuality != null && !dataQuality.eligibleForResearch(
+                dataQuality.evaluateBars(instrument.id(), interval, completed))) {
+            return new OrbEvaluation(null, "DATA_QUALITY_NOT_ELIGIBLE", source,
+                latest.candleTime(), latest.close());
+        }
+
+        NewsContext context;
+        try {
+            context = newsFeatures.contextFor(instrument.id(), instrument.tradingSymbol(), now);
+        } catch (RuntimeException unavailable) {
+            return new OrbEvaluation(null, "NEWS_CONTEXT_UNAVAILABLE", source, latest.candleTime(), latest.close());
+        }
+        if (context == null || !NewsContext.STATUS_INCLUDED_EVIDENCE.equals(context.status())
+                || context.netDirection() == null || context.includedCount() == 0
+                || context.netDirection().abs().compareTo(MIN_NEWS_DIRECTION) < 0
+                || !"LOW".equals(context.uncertainty()) || context.blackout()) {
+            return new OrbEvaluation(null, context != null && context.blackout()
+                ? "NEWS_EVENT_BLACKOUT" : "NEWS_EVIDENCE_NOT_ELIGIBLE",
+                source, latest.candleTime(), latest.close());
+        }
+
+        String signalId = "NEWS_" + hash(instrument.id() + "|" + interval.name() + "|"
+            + latest.candleTime() + "|" + context.netDirection()).substring(0, 32);
+        if ("NEGATIVE".equals(context.direction())) {
+            CycleSignal riskOff = new CycleSignal(signalId, "SELL", latest.close(), null, null,
+                latest.candleTime(), source, List.of("NEWS_DIRECTION_NEGATIVE", "NEWS_RISK_OFF_EXIT"));
+            return new OrbEvaluation(riskOff, null, source, latest.candleTime(), latest.close());
+        }
+        if (!"POSITIVE".equals(context.direction())) {
+            return new OrbEvaluation(null, "NEWS_DIRECTION_NOT_ACTIONABLE", source,
+                latest.candleTime(), latest.close());
+        }
+
+        BigDecimal close = latest.close();
+        BigDecimal stop = completed.subList(Math.max(0, completed.size() - 5), completed.size()).stream()
+            .map(MarketCandle::low).filter(value -> value != null).min(BigDecimal::compareTo).orElse(null);
+        if (stop == null || stop.signum() <= 0 || stop.compareTo(close) >= 0) {
+            return new OrbEvaluation(null, "NEWS_STRUCTURE_STOP_UNAVAILABLE", source,
+                latest.candleTime(), close);
+        }
+        BigDecimal target = close.add(close.subtract(stop).multiply(new BigDecimal("2")));
+        CycleSignal signal = new CycleSignal(signalId, "BUY", close, stop, target,
+            latest.candleTime(), source, List.of("NEWS_DIRECTION_POSITIVE",
+                "NEWS_EVIDENCE_COUNT_" + context.includedCount(), "NEWS_2R_REFERENCE_TARGET"));
+        return new OrbEvaluation(signal, null, source, latest.candleTime(), close);
+    }
+
     private OrbEvaluation evaluateOrb(Instrument instrument, HistoricalCandleInterval interval, Instant now) {
         if (marketData == null || orb == null) {
             return new OrbEvaluation(null, "ORB_PAPER_EVALUATOR_UNAVAILABLE", null, null, null);
@@ -787,6 +901,7 @@ public class MindPaperCycleService {
             case VWAP_STRATEGY_CODE -> "VWAP";
             case MA_RECLAIM_STRATEGY_CODE -> "MA_RECLAIM";
             case RSI_REVERSAL_STRATEGY_CODE -> "RSI_REVERSAL";
+            case NEWS_IMPACT_STRATEGY_CODE -> "NEWS_IMPACT";
             default -> "VOLUME_BREAKOUT";
         };
         if (marketData == null || evaluator == null) {
@@ -882,6 +997,7 @@ public class MindPaperCycleService {
             case VWAP_STRATEGY_CODE -> "VWAP momentum";
             case MA_RECLAIM_STRATEGY_CODE -> "moving-average reclaim";
             case RSI_REVERSAL_STRATEGY_CODE -> "RSI reversal";
+            case NEWS_IMPACT_STRATEGY_CODE -> "news impact";
             default -> "volume breakout";
         };
     }

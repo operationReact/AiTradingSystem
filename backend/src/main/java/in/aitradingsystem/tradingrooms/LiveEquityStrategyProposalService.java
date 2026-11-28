@@ -26,7 +26,7 @@ public class LiveEquityStrategyProposalService {
     static final Duration MAX_SIGNAL_AGE = Duration.ofMinutes(2);
     private static final Set<String> STRATEGIES = Set.of(
         "SMA_TREND_VOLUME_V1", "OPENING_RANGE_BREAKOUT_V1", "VWAP_MOMENTUM_V1",
-        "MA_RECLAIM_V1", "VOLUME_BREAKOUT_V1", "RSI_REVERSAL_V1");
+        "MA_RECLAIM_V1", "VOLUME_BREAKOUT_V1", "RSI_REVERSAL_V1", "NEWS_IMPACT_V1");
 
     private static final String SELECT = """
         SELECT proposal_id,user_id,live_room_id,source_paper_room_id,source_cycle_id,selected_broker,
