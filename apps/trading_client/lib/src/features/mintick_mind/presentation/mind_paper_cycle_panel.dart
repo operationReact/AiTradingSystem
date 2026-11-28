@@ -227,6 +227,12 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                     key: ValueKey('mind-rsi-paper-only'),
                     style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
               ],
+              if (_strategyCode == 'NEWS_IMPACT_V1') ...[
+                const SizedBox(height: 4),
+                const Text('News-first direction. Positive evidence may enter long after all PAPER gates; negative evidence only exits an existing position. No short entry.',
+                    key: ValueKey('mind-news-paper-only'),
+                    style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
+              ],
               const SizedBox(height: 10),
             ]);
             if (snap.connectionState != ConnectionState.done) {
@@ -263,6 +269,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
                   ('MA_RECLAIM_V1', 'Moving Average Reclaim'),
                   ('VOLUME_BREAKOUT_V1', 'Volume Breakout'),
                   ('RSI_REVERSAL_V1', 'RSI Reversal'),
+                  ('NEWS_IMPACT_V1', 'News Impact'),
                 ])
                   ChoiceChip(label: Text(label), selected: _strategyCode == code,
                       onSelected: (_) => setState(() {

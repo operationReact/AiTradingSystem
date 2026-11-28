@@ -195,9 +195,54 @@ class MarketNewsPage {
   }
 }
 
+class NewsDrivenMindScan {
+  const NewsDrivenMindScan({required this.id, required this.status,
+    required this.scannedCount, required this.candidateCount});
+  final String id;
+  final String status;
+  final int scannedCount;
+  final int candidateCount;
+
+  factory NewsDrivenMindScan.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['id'] is! String ||
+        raw['status'] is! String || raw['scannedCount'] is! int ||
+        raw['candidateCount'] is! int) {
+      throw const FormatException('Invalid news-driven Mind scan response');
+    }
+    return NewsDrivenMindScan(id: raw['id'] as String, status: raw['status'] as String,
+      scannedCount: raw['scannedCount'] as int, candidateCount: raw['candidateCount'] as int);
+  }
+}
+
+class NewsDrivenMindCandidate {
+  const NewsDrivenMindCandidate({required this.symbol, required this.score,
+    required this.referencePrice, required this.reasons});
+  final String symbol;
+  final double score;
+  final num? referencePrice;
+  final List<String> reasons;
+
+  factory NewsDrivenMindCandidate.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['tradingSymbol'] is! String ||
+        raw['score'] is! num || !(raw['score'] as num).isFinite ||
+        (raw['referencePrice'] != null && raw['referencePrice'] is! num) ||
+        raw['reasons'] is! List || (raw['reasons'] as List).any((v) => v is! String)) {
+      throw const FormatException('Invalid news-driven candidate');
+    }
+    return NewsDrivenMindCandidate(
+      symbol: raw['tradingSymbol'] as String,
+      score: (raw['score'] as num).toDouble(),
+      referencePrice: raw['referencePrice'] as num?,
+      reasons: List.unmodifiable((raw['reasons'] as List).cast<String>()),
+    );
+  }
+}
+
 abstract interface class MarketNewsRepository {
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol});
   Future<List<MarketNewsSource>> sources();
+  Future<NewsDrivenMindScan> runNewsDrivenScan({String interval = 'FIVE_MINUTE', int limit = 100});
+  Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId);
 }
 
 class MarketNewsSource {
@@ -257,5 +302,28 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
     final response = await api.getJson('/api/customer/market-intelligence/sources');
     if (response is! List) throw const FormatException('Invalid news source health response');
     return List.unmodifiable(response.map(MarketNewsSource.fromJson));
+  }
+
+  @override
+  Future<NewsDrivenMindScan> runNewsDrivenScan({String interval = 'FIVE_MINUTE', int limit = 100}) async {
+    if (!const {'ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'}.contains(interval) ||
+        limit < 1 || limit > 1000) {
+      throw ArgumentError('Invalid news-driven scan request');
+    }
+    final response = await api.postJson('/api/research/news-driven-scans',
+        query: {'interval': interval, 'limit': '$limit'});
+    return NewsDrivenMindScan.fromJson(response);
+  }
+
+  @override
+  Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId) async {
+    if (!RegExp(r'^[0-9a-fA-F-]{36}
+).hasMatch(runId)) {
+      throw ArgumentError('Invalid news scan id');
+    }
+    final response = await api.getJson('/api/research/scans/$runId/candidates',
+        query: {'limit': '20'});
+    if (response is! List) throw const FormatException('Invalid news-driven candidate list');
+    return List.unmodifiable(response.map(NewsDrivenMindCandidate.fromJson));
   }
 }
