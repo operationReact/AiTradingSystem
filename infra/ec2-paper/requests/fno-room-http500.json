@@ -1,1 +1,8 @@
-{"application":"MintTick","environment":"PAPER","operation":"read-only-fno-room-http500-diagnose","region":"ap-south-1","aws_account":"098859530205","instance_id":"i-09c01b470fb39b85a"}
+{
+  "application": "MintTick",
+  "environment": "PAPER",
+  "operation": "read-only-fno-room-http500-diagnose",
+  "region": "ap-south-1",
+  "aws_account": "098859530205",
+  "instance_id": "i-09c01b470fb39b85a"
+}
