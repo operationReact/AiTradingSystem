@@ -1,9 +1,11 @@
 # LIVE intraday cash-equity dispatch: enablement runbook
 
 Status: dispatch is **disabled** (`minttick.live-equity.dispatch-enabled` defaults to `false`).
-Nothing here runs automatically. Each step needs an authorized operator, real evidence, or an
-approved release. Never record a placeholder as evidence, and never paste credentials into
-chat, tickets or source control.
+The PAPER Compose host forwards `MINTTICK_LIVE_EQUITY_DISPATCH_ENABLED` with a `false` default;
+setting it to `true` only opens the master gate and does not bypass broker, account-risk, or
+per-order checks. Nothing here runs automatically. Each step needs an authorized operator, real
+evidence, or an approved release. Never record a placeholder as evidence, and never paste
+credentials into chat, tickets or source control.
 
 Operator calls below use the operator key in the `X-API-Key` header (ROLE_OPERATOR). They are
 not reachable from the public customer account edge.
@@ -91,7 +93,8 @@ terminal orders are refused with `409`.
 Only after steps 1 to 3 are complete, all CI checks are green on the release commit, and the
 release approval is recorded:
 
-1. Set `minttick.live-equity.dispatch-enabled=true` in the approved target environment only.
+1. Set `MINTTICK_LIVE_EQUITY_DISPATCH_ENABLED=true` (Spring property
+   `minttick.live-equity.dispatch-enabled`) in the approved target environment only.
 2. Verify, as the authorized customer, with
    `GET /api/customer/trading-rooms/{roomId}/live/equity/capability`:
    - `orderRouteImplemented` is `true`.

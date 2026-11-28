@@ -99,12 +99,15 @@ public class CustomerExecutionReadinessController {
     /**
      * Capability contract shared with the Flutter decoder: executionEnabled is
      * true only when the dispatch gate is on AND readiness has no blockers, and an
-     * executable capability never carries a blocker. With the gate off the route
-     * reports itself as not implemented.
+     * executable capability never carries a blocker. A closed deployment gate is
+     * reported as LIVE_DISPATCH_DISABLED so the customer UI can explain the block.
      */
     static LiveEquityCapability capability(UUID roomId,
             CustomerExecutionReadinessService.Readiness readiness, boolean dispatchEnabled) {
         var blockers = new java.util.ArrayList<>(readiness.blockers());
+        if (!dispatchEnabled && !blockers.contains("LIVE_DISPATCH_DISABLED")) {
+            blockers.add("LIVE_DISPATCH_DISABLED");
+        }
         boolean executable = dispatchEnabled && readiness.executionEnabled() && blockers.isEmpty();
         return new LiveEquityCapability(roomId, readiness.selectedBroker(),
             readiness.brokerConnected(), true, executable, List.copyOf(blockers));

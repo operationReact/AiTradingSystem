@@ -25,7 +25,7 @@ class LiveEquityCapabilityContractTest {
             List.of("EXECUTION_DISABLED")), false);
         assertThat(c.orderRouteImplemented()).isTrue();
         assertThat(c.executionEnabled()).isFalse();
-        assertThat(c.blockers()).containsExactly("EXECUTION_DISABLED");
+        assertThat(c.blockers()).containsExactly("EXECUTION_DISABLED", "LIVE_DISPATCH_DISABLED");
     }
 
     @Test
