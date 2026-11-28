@@ -22,9 +22,21 @@ class FlywayMigrationVersionUniquenessTest {
             .getContextClassLoader()
             .getResource("db/migration");
         assertNotNull(migrationDirectory, "Flyway migration resources must be on the test classpath");
+        Path migrationRoot = Path.of(migrationDirectory.toURI());
+        for (String requiredMigration : List.of(
+                "V133__expanded_english_news_source_policy.sql",
+                "V134__news_analysis_event_and_result_metrics.sql",
+                "V135__news_english_display_translation.sql",
+                "V139__customer_trading_room_thesis.sql",
+                "V140__customer_live_intraday_equity_order_custody.sql",
+                "V141__live_equity_operator_controls.sql",
+                "V142__live_intraday_strategy_proposal.sql")) {
+            assertTrue(Files.isRegularFile(migrationRoot.resolve(requiredMigration)),
+                () -> "Production Flyway history requires " + requiredMigration);
+        }
 
         Map<Integer, List<String>> migrationsByVersion = new TreeMap<>();
-        try (Stream<Path> files = Files.list(Path.of(migrationDirectory.toURI()))) {
+        try (Stream<Path> files = Files.list(migrationRoot)) {
             files.filter(Files::isRegularFile)
                 .map(path -> path.getFileName().toString())
                 .filter(name -> name.startsWith("V") && name.endsWith(".sql"))
