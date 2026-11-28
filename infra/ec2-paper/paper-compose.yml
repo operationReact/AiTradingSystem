@@ -35,6 +35,9 @@ services:
       - no-new-privileges:true
     environment:
       TRADING_MODE: PAPER
+      # Separate deployment gate for cash-equity intraday LIVE order dispatch.
+      # Off by default; broker hosting, account risk and per-order owner checks remain required.
+      MINTTICK_LIVE_EQUITY_DISPATCH_ENABLED: ${MINTTICK_LIVE_EQUITY_DISPATCH_ENABLED:-false}
       # Exact deployed commit; Mind progress evidence is only RUNTIME_VERIFIED on a known revision.
       APP_BUILD_REVISION: ${RELEASE_SHA:?required}
       # Preserve legacy owner Lambda reads, but authenticate live streams on
