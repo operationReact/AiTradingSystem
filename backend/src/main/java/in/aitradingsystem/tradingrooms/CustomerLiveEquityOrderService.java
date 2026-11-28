@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,11 +34,20 @@ public class CustomerLiveEquityOrderService {
 
     private final JdbcClient jdbc;
     private final CustomerExecutionReadinessService readiness;
+    private final LiveEquityRiskLimits configuredRiskLimits;
 
     public CustomerLiveEquityOrderService(JdbcClient jdbc,
             CustomerExecutionReadinessService readiness) {
+        this(jdbc, readiness, LiveEquityRiskLimits.disabled());
+    }
+
+    @Autowired
+    public CustomerLiveEquityOrderService(JdbcClient jdbc,
+            CustomerExecutionReadinessService readiness, LiveEquityRiskLimits configuredRiskLimits) {
         this.jdbc = jdbc;
         this.readiness = readiness;
+        this.configuredRiskLimits = configuredRiskLimits == null
+            ? LiveEquityRiskLimits.disabled() : configuredRiskLimits;
     }
 
     public record Order(UUID id, UUID roomId, String broker, long instrumentId,
@@ -364,7 +374,7 @@ public class CustomerLiveEquityOrderService {
                     rs.getLong("max_order_value_inr"),
                     rs.getInt("max_order_quantity"),
                     rs.getLong("daily_realized_loss_limit_inr")))
-                .optional().orElse(null);
+                .optional().orElseGet(() -> configuredRiskLimits.configuredPolicy().orElse(null));
         } catch (RuntimeException unavailable) {
             // Unreadable policy must fail closed, never default to permissive.
             return null;
