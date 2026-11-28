@@ -249,8 +249,10 @@ class _MintTickRoomProductionWorkspaceState
       await execution.reconcileLiveOrder(roomId: widget.room.id, orderId: order.id);
       if (mounted) await _loadHistory();
     } catch (_) {
-      if (mounted) setState(() =>
-          _historyError = 'Broker reconciliation is inconclusive. Do not resubmit.');
+      if (mounted) {
+        setState(() =>
+            _historyError = 'Broker reconciliation is inconclusive. Do not resubmit.');
+      }
     } finally {
       if (mounted) setState(() => _historyLoading = false);
     }
