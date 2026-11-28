@@ -301,12 +301,12 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository, MindLive
       required String interval, required String strategyCode}) async {
     _room(roomId);
     final intraday = const ['OPENING_RANGE_BREAKOUT_V1', 'VWAP_MOMENTUM_V1',
-      'MA_RECLAIM_V1', 'VOLUME_BREAKOUT_V1', 'RSI_REVERSAL_V1'].contains(strategyCode);
+      'MA_RECLAIM_V1', 'VOLUME_BREAKOUT_V1', 'RSI_REVERSAL_V1', 'NEWS_IMPACT_V1'].contains(strategyCode);
     final allowedIntervals = intraday
         ? const ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'] : intervals;
     if (!allowedIntervals.contains(interval) ||
         !const ['SMA_TREND_VOLUME_V1', 'OPENING_RANGE_BREAKOUT_V1', 'VWAP_MOMENTUM_V1',
-          'MA_RECLAIM_V1', 'VOLUME_BREAKOUT_V1', 'RSI_REVERSAL_V1']
+          'MA_RECLAIM_V1', 'VOLUME_BREAKOUT_V1', 'RSI_REVERSAL_V1', 'NEWS_IMPACT_V1']
             .contains(strategyCode) ||
         instrumentId < 1) {
       throw ArgumentError('Invalid PAPER cycle request');
