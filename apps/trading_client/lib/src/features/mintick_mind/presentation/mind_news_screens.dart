@@ -206,7 +206,8 @@ extension _MindNewsScreens on _MindWorkspaceState {
       final impact = item.article?.stockImpact;
       return impact == null || impact.sentiment == 'MIXED' ||
           impact.ambiguity != false || impact.contradiction != false ||
-          (impact.directionScore?.abs() ?? 0) < 0.20;
+          impact.confidence == null || impact.confidence! < 0.5 ||
+          impact.materiality == null || (impact.directionScore?.abs() ?? 0) < 0.20;
     }).length;
     final cells = <(String, String)>[
       ('$positive', 'Positive tone'),
@@ -320,11 +321,20 @@ extension _MindNewsScreens on _MindWorkspaceState {
                         ? 'Negative news' : 'Directional',
                     style: const TextStyle(color: MindPalette.mint, fontSize: 10)),
                 const SizedBox(width: 7),
-                Text('${(candidate.score * 100).round()}%',
+                Text('dir ${candidate.score.toStringAsFixed(2)}',
                     style: const TextStyle(color: MindPalette.text, fontSize: 11,
                         fontWeight: FontWeight.w700)),
               ]),
             ),
+        ],
+        if (_newsScanCandidates.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
+            onPressed: () => _go('trading-rooms'),
+            icon: const Icon(Icons.meeting_room_outlined, size: 16),
+            label: const Text('Open PAPER rooms'),
+            style: OutlinedButton.styleFrom(foregroundColor: MindPalette.mint),
+          )),
         ],
         const SizedBox(height: 4),
         const Text('A research scan only. PAPER rechecks live data and risk; LIVE remains behind the existing proposal and order-confirmation gates.',
@@ -535,13 +545,17 @@ extension _MindNewsScreens on _MindWorkspaceState {
       'MIXED' => 'Mixed tone',
       _ => 'Unknown tone',
     };
-    final uncertain = impact.ambiguity != false ||
+    final uncertain = impact.sentiment == 'MIXED' ||
+        impact.ambiguity != false ||
         impact.contradiction != false ||
         impact.directionScore == null ||
         impact.materiality == null ||
         impact.confidence == null ||
         impact.confidence! < 0.5;
-    final color = uncertain ? MindPalette.yellow : MindPalette.mint;
+    final color = uncertain ? MindPalette.yellow
+        : impact.sentiment == 'NEGATIVE' ? MindPalette.red
+        : impact.sentiment == 'POSITIVE' ? MindPalette.mint
+        : MindPalette.muted;
     final direction = impact.directionScore == null
         ? 'direction not scored'
         : 'direction ${impact.directionScore! >= 0 ? '+' : ''}${impact.directionScore!.toStringAsFixed(2)}';

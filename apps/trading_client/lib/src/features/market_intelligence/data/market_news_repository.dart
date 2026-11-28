@@ -311,7 +311,8 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
       throw ArgumentError('Invalid news-driven scan request');
     }
     final response = await api.postJson('/api/research/news-driven-scans',
-        query: {'interval': interval, 'limit': '$limit'});
+        query: {'interval': interval, 'limit': '$limit'},
+        timeout: const Duration(seconds: 90));
     return NewsDrivenMindScan.fromJson(response);
   }
 
