@@ -98,6 +98,42 @@ class HttpCustomerExecutionRepository {
       'limitPrice': limitPrice,
     },
   );
+
+  Future<LiveEquityOrder> submitLiveOrder({
+    required String roomId,
+    required String idempotencyKey,
+    required int instrumentId,
+    required String side,
+    required int quantity,
+    required num limitPrice,
+  }) async => LiveEquityOrder.decode(await api.postJson(
+    '/api/customer/trading-rooms/$roomId/live/equity/orders',
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+      'X-Confirm-Live-Equity-Order': 'CONFIRM_LIVE_INTRADAY_EQUITY',
+    },
+    body: {
+      'instrumentId': instrumentId,
+      'side': side,
+      'quantity': quantity,
+      'limitPrice': limitPrice,
+    },
+  ));
+
+  Future<List<LiveEquityOrder>> liveOrders(String roomId) async {
+    final raw = await api.getJson(
+      '/api/customer/trading-rooms/$roomId/live/equity/orders',
+    );
+    if (raw is! List) throw const FormatException('Invalid LIVE order history');
+    return List.unmodifiable(raw.map(LiveEquityOrder.decode));
+  }
+
+  Future<LiveEquityOrder> reconcileLiveOrder({
+    required String roomId,
+    required String orderId,
+  }) async => LiveEquityOrder.decode(await api.postJson(
+    '/api/customer/trading-rooms/$roomId/live/equity/orders/$orderId/reconcile',
+  ));
 }
 
 /// Server-owned readiness for the live cash intraday order surface. A broker
@@ -150,6 +186,61 @@ class LiveEquityCapability {
       orderRouteImplemented: orderRouteImplemented,
       executionEnabled: executionEnabled,
       blockers: List.unmodifiable(blockers.cast<String>()),
+    );
+  }
+}
+
+/// Owner-scoped state returned by the guarded LIVE equity order API.
+class LiveEquityOrder {
+  const LiveEquityOrder({
+    required this.id,
+    required this.roomId,
+    required this.broker,
+    required this.instrumentId,
+    required this.tradingSymbol,
+    required this.side,
+    required this.quantity,
+    required this.limitPrice,
+    required this.state,
+    required this.filledQuantity,
+  });
+
+  final String id, roomId, broker, tradingSymbol, side, state;
+  final int instrumentId, quantity, filledQuantity;
+  final num limitPrice;
+
+  bool get requiresReconciliation =>
+      const {'SUBMITTING', 'UNKNOWN', 'ACKNOWLEDGED', 'PARTIALLY_FILLED'}.contains(state);
+
+  factory LiveEquityOrder.decode(Object? raw) {
+    const states = {
+      'SUBMITTING', 'UNKNOWN', 'ACKNOWLEDGED', 'PARTIALLY_FILLED',
+      'FILLED', 'REJECTED', 'CANCELLED',
+    };
+    if (raw is! Map<String, dynamic> ||
+        raw['id'] is! String ||
+        raw['roomId'] is! String ||
+        !const {'ANGEL_ONE', 'UPSTOX'}.contains(raw['broker']) ||
+        raw['instrumentId'] is! int ||
+        raw['tradingSymbol'] is! String ||
+        !const {'BUY', 'SELL'}.contains(raw['side']) ||
+        raw['quantity'] is! int ||
+        raw['limitPrice'] is! num ||
+        !states.contains(raw['state']) ||
+        raw['filledQuantity'] is! int) {
+      throw const FormatException('Invalid LIVE equity order');
+    }
+    return LiveEquityOrder(
+      id: raw['id'] as String,
+      roomId: raw['roomId'] as String,
+      broker: raw['broker'] as String,
+      instrumentId: raw['instrumentId'] as int,
+      tradingSymbol: raw['tradingSymbol'] as String,
+      side: raw['side'] as String,
+      quantity: raw['quantity'] as int,
+      limitPrice: raw['limitPrice'] as num,
+      state: raw['state'] as String,
+      filledQuantity: raw['filledQuantity'] as int,
     );
   }
 }
