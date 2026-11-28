@@ -65,11 +65,12 @@ public class CustomerLiveEquityOrderService {
             int quantity, BigDecimal limitPrice, int filledQuantity) {}
 
     /**
-     * Reserve a single LIVE cash-equity order. The authoritative preflight and
-     * the account-wide risk policy are recomputed here, inside the transaction,
-     * under the owner's row lock. Per-order consent is required. The durable
-     * SUBMITTING row and unique correlation tag are committed before any broker
-     * request can be made.
+     * Reserve a single LIVE cash-equity order. The coordinator supplies a fresh,
+     * time-limited broker-backed preflight before this transaction. This transaction
+     * validates the proposal and recomputes database-owned room, halt, exposure, and
+     * account-wide risk gates under the owner's row lock. Broker network calls stay
+     * outside the transaction. Per-order consent is required. The durable SUBMITTING
+     * row and unique correlation tag are committed before any broker request.
      */
     @Transactional
     public Claim claimForSubmission(UUID owner, UUID roomId, String idempotencyKey,
