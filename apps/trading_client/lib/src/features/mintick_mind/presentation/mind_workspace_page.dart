@@ -246,6 +246,11 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   bool _newsLoadingMore = false;
   bool _newsLoaded = false;
   String? _newsError;
+  bool _newsScanRunning = false;
+  NewsDrivenMindScan? _newsScan;
+  List<NewsDrivenMindCandidate> _newsScanCandidates = const [];
+  List<NewsDrivenMindDecision> _newsScanDecisions = const [];
+  String? _newsScanError;
   int _newsRequestGeneration = 0;
   Timer? _newsRefreshTimer;
   String _agentIncident = 'INC-102';

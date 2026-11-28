@@ -195,9 +195,108 @@ class MarketNewsPage {
   }
 }
 
+class NewsDrivenMindScan {
+  const NewsDrivenMindScan({required this.id, required this.status,
+    required this.scannedCount, required this.candidateCount});
+  final String id;
+  final String status;
+  final int scannedCount;
+  final int candidateCount;
+
+  factory NewsDrivenMindScan.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['id'] is! String ||
+        raw['status'] is! String || raw['scannedCount'] is! int ||
+        raw['candidateCount'] is! int) {
+      throw const FormatException('Invalid news-driven Mind scan response');
+    }
+    return NewsDrivenMindScan(id: raw['id'] as String, status: raw['status'] as String,
+      scannedCount: raw['scannedCount'] as int, candidateCount: raw['candidateCount'] as int);
+  }
+}
+
+class NewsDrivenMindEvidence {
+  const NewsDrivenMindEvidence({required this.publisher, required this.title,
+    required this.url, required this.summary, required this.publishedAt});
+  final String publisher, title, url, summary;
+  final DateTime? publishedAt;
+
+  factory NewsDrivenMindEvidence.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['source'] is! String ||
+        raw['title'] is! String || raw['url'] is! String ||
+        raw['evidenceSummary'] is! String) {
+      throw const FormatException('Invalid supporting news evidence');
+    }
+    final uri = Uri.tryParse(raw['url'] as String);
+    final published = raw['publishedAt'] == null
+        ? null : DateTime.tryParse('${raw['publishedAt']}');
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
+        uri.host.isEmpty || (raw['publishedAt'] != null && published == null)) {
+      throw const FormatException('Invalid supporting news evidence fields');
+    }
+    return NewsDrivenMindEvidence(publisher: raw['source'] as String,
+      title: raw['title'] as String, url: uri.toString(),
+      summary: raw['evidenceSummary'] as String, publishedAt: published?.toUtc());
+  }
+}
+
+class NewsDrivenMindCandidate {
+  const NewsDrivenMindCandidate({required this.symbol, required this.score,
+    required this.direction, required this.evidence});
+  final String symbol;
+  final double score;
+  final String direction;
+  final List<NewsDrivenMindEvidence> evidence;
+
+  factory NewsDrivenMindCandidate.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['tradingSymbol'] is! String ||
+        raw['directionStrength'] is! num || !(raw['directionStrength'] as num).isFinite ||
+        !const ['POSITIVE', 'NEGATIVE'].contains(raw['direction']) ||
+        raw['supportingEvidence'] is! List) {
+      throw const FormatException('Invalid news-driven candidate');
+    }
+    return NewsDrivenMindCandidate(
+      symbol: raw['tradingSymbol'] as String,
+      score: (raw['directionStrength'] as num).toDouble(),
+      direction: raw['direction'] as String,
+      evidence: List.unmodifiable((raw['supportingEvidence'] as List)
+          .map(NewsDrivenMindEvidence.fromJson)),
+    );
+  }
+}
+
+class NewsDrivenMindDecision {
+  const NewsDrivenMindDecision({required this.instrumentId, required this.symbol,
+    required this.outcome, required this.reasonCode, required this.dataCutoffAt});
+  final int instrumentId;
+  final String symbol, outcome, reasonCode;
+  final DateTime? dataCutoffAt;
+
+  factory NewsDrivenMindDecision.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['instrumentId'] is! int ||
+        raw['tradingSymbol'] is! String || raw['outcome'] is! String ||
+        raw['reasonCode'] is! String) {
+      throw const FormatException('Invalid news scan decision');
+    }
+    final cutoffRaw = raw['dataCutoffAt'];
+    final cutoff = cutoffRaw == null ? null : DateTime.tryParse(cutoffRaw.toString());
+    if (cutoffRaw != null && cutoff == null) {
+      throw const FormatException('Invalid news scan decision cutoff');
+    }
+    if (!const {'CANDIDATE', 'NO_SIGNAL', 'NOT_EVALUATED'}.contains(raw['outcome'])) {
+      throw const FormatException('Invalid news scan decision outcome');
+    }
+    return NewsDrivenMindDecision(instrumentId: raw['instrumentId'] as int,
+      symbol: raw['tradingSymbol'] as String, outcome: raw['outcome'] as String,
+      reasonCode: raw['reasonCode'] as String, dataCutoffAt: cutoff?.toUtc());
+  }
+}
+
 abstract interface class MarketNewsRepository {
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol});
   Future<List<MarketNewsSource>> sources();
+  Future<NewsDrivenMindScan> runNewsDrivenScan({String interval = 'FIVE_MINUTE', int limit = 100});
+  Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId);
+  Future<List<NewsDrivenMindDecision>> newsDrivenDecisions(String runId);
 }
 
 class MarketNewsSource {
@@ -257,5 +356,39 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
     final response = await api.getJson('/api/customer/market-intelligence/sources');
     if (response is! List) throw const FormatException('Invalid news source health response');
     return List.unmodifiable(response.map(MarketNewsSource.fromJson));
+  }
+
+  @override
+  Future<NewsDrivenMindScan> runNewsDrivenScan({String interval = 'FIVE_MINUTE', int limit = 100}) async {
+    if (!const {'ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE'}.contains(interval) ||
+        limit < 1 || limit > 1000) {
+      throw ArgumentError('Invalid news-driven scan request');
+    }
+    final response = await api.postJson('/api/research/news-driven-scans',
+        query: {'interval': interval, 'limit': '$limit'},
+        timeout: const Duration(seconds: 90));
+    return NewsDrivenMindScan.fromJson(response);
+  }
+
+  @override
+  Future<List<NewsDrivenMindDecision>> newsDrivenDecisions(String runId) async {
+    if (runId.length != 36 ||
+        !RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(runId)) {
+      throw ArgumentError('Invalid news scan id');
+    }
+    final response = await api.getJson('/api/research/news-driven-scans/$runId/decisions');
+    if (response is! List) throw const FormatException('Invalid news-driven decision list');
+    return List.unmodifiable(response.map(NewsDrivenMindDecision.fromJson));
+  }
+
+  @override
+  Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId) async {
+    if (runId.length != 36 ||
+        !RegExp(r'^[0-9a-fA-F-]{36}').hasMatch(runId)) {
+      throw ArgumentError('Invalid news scan id');
+    }
+    final response = await api.getJson('/api/research/news-driven-scans/$runId/candidates');
+    if (response is! List) throw const FormatException('Invalid news-driven candidate list');
+    return List.unmodifiable(response.map(NewsDrivenMindCandidate.fromJson));
   }
 }

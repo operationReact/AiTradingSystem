@@ -128,8 +128,6 @@ extension _MindNewsScreens on _MindWorkspaceState {
           ),
         ]),
         const SizedBox(height: 7),
-        _newsSourceSummary(),
-        const SizedBox(height: 7),
         _newsCompactMetrics(),
         const SizedBox(height: 8),
         Row(children:[for(final tab in _newsTabs) Expanded(child: InkWell(
@@ -158,55 +156,220 @@ extension _MindNewsScreens on _MindWorkspaceState {
       Text(_newsLoading?'Updating':_newsLoaded?'${_newsArticles.length} loaded':'Waiting',style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
   );
 
-  Widget _newsSourceSummary() {
-    const names=['NSE','Moneycontrol','Economic Times','SEBI'];
-    String key(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-    MarketNewsSource? sourceFor(String name) {
-      final wanted = key(name);
-      for (final source in _newsSources) {
-        final candidate = key('${source.sourceId} ${source.publisher}');
-        if (candidate.contains(wanted) || wanted.contains(key(source.sourceId))) return source;
-      }
-      return null;
-    }
-    Widget sourceCard(String name) {
-      final source = sourceFor(name);
-      final ok = source?.status.toUpperCase() == 'SUCCESS';
-      return Expanded(child: Container(
-        margin: EdgeInsets.only(right: name == names.last ? 0 : 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+  Widget _newsCompactMetrics() {
+    final items = _currentMindNewsItems;
+    final positive = items.where((item) => item.article?.stockImpact?.sentiment == 'POSITIVE').length;
+    final negative = items.where((item) => item.article?.stockImpact?.sentiment == 'NEGATIVE').length;
+    final needsReview = items.where((item) {
+      final impact = item.article?.stockImpact;
+      return impact == null || impact.sentiment == 'MIXED' ||
+          impact.ambiguity != false || impact.contradiction != false ||
+          impact.confidence == null || impact.confidence! < 0.5 ||
+          impact.materiality == null || (impact.directionScore?.abs() ?? 0) < 0.20;
+    }).length;
+    final cells = <(String, String)>[
+      ('$positive', 'Positive tone'),
+      ('$negative', 'Negative tone'),
+      ('$needsReview', 'Unclear / pending'),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('ARTICLE READ · ${items.length} LOADED · $_newsTotalItems TOTAL',
+          style: const TextStyle(color: MindPalette.muted, fontSize: 10, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 5),
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(color: MindPalette.panel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: MindPalette.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: MindPalette.muted, fontSize: 9,
-              fontWeight: FontWeight.w600)),
-          Text(source == null ? '—' : '${source.fetchedItems}',
-            style: const TextStyle(color: MindPalette.text, fontSize: 16,
-              fontWeight: FontWeight.w800)),
-          Text(source == null ? 'health n/a' : ok ? 'fetched' : source.status.toLowerCase(),
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: source == null ? MindPalette.muted :
-              ok ? MindPalette.mint : MindPalette.yellow, fontSize: 8)),
+            borderRadius: BorderRadius.circular(11), border: Border.all(color: MindPalette.border)),
+        child: Row(children: [
+          for (var i = 0; i < cells.length; i++)
+            Expanded(child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(border: i == 0 ? null :
+                  const Border(left: BorderSide(color: MindPalette.border))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(cells[i].$1, style: const TextStyle(
+                    color: MindPalette.text, fontSize: 16, fontWeight: FontWeight.w800)),
+                Text(cells[i].$2, style: const TextStyle(
+                    color: MindPalette.muted, fontSize: 10)),
+              ]),
+            )),
         ]),
-      ));
-    }
-    return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-      Row(children:[const Expanded(child:Text('LATEST SOURCE CHECK',style:TextStyle(color:MindPalette.muted,fontSize:10,fontWeight:FontWeight.w700))),
-        Text(_newsSourceHealthError ?? (_newsSources.isEmpty?'Checking sources':'Backend health'),style:const TextStyle(color:MindPalette.muted,fontSize:9))]),
-      const SizedBox(height:5),
-      Row(children: [for (final name in names) sourceCard(name)]),
+      ),
+      const SizedBox(height: 4),
+      const Text('Article tone is evidence, not a buy/sell call.',
+          style: TextStyle(color: MindPalette.muted, fontSize: 10)),
     ]);
   }
 
-  Widget _newsCompactMetrics(){
-    final analyzed=_newsArticles.where((a)=>a.analysisStatus=='ANALYZED' && a.stockImpact?.provider?.toUpperCase()=='GEMINI').length;
-    final symbols=_newsArticles.expand((a)=>a.stockImpact?.impactedSymbols??const <String>[]).toSet().length;
-    final cells=[('$_newsTotalItems','articles'),('$symbols','stocks linked · page'),('$analyzed','Gemini · page')];
-    return Container(padding:const EdgeInsets.symmetric(vertical:8),decoration:BoxDecoration(color:MindPalette.panel,borderRadius:BorderRadius.circular(11),border:Border.all(color:MindPalette.border)),
-      child:Row(children:[for(var i=0;i<cells.length;i++)Expanded(child:Container(padding:const EdgeInsets.symmetric(horizontal:10),decoration:BoxDecoration(border:i==0?null:const Border(left:BorderSide(color:MindPalette.border))),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(_newsLoading&&!_newsLoaded?'—':cells[i].$1,style:const TextStyle(color:MindPalette.text,fontSize:15,fontWeight:FontWeight.w800)),Text(cells[i].$2,style:const TextStyle(color:MindPalette.muted,fontSize:9))])))]));
+  Future<void> _runNewsDrivenScan() async {
+    final repository = widget.marketNewsRepository;
+    if (_newsScanRunning || repository == null) return;
+    _updateMind(() {
+      _newsScanRunning = true;
+      _newsScanError = null;
+      _newsScan = null;
+      _newsScanCandidates = const [];
+      _newsScanDecisions = const [];
+    });
+    try {
+      final scan = await repository.runNewsDrivenScan(limit: 20);
+      final candidates = await repository.newsDrivenCandidates(scan.id);
+      final decisions = await repository.newsDrivenDecisions(scan.id);
+      if (!mounted) return;
+      _updateMind(() {
+        _newsScan = scan;
+        _newsScanCandidates = candidates;
+        _newsScanDecisions = decisions;
+        _newsScanRunning = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      _updateMind(() {
+        _newsScanRunning = false;
+        _newsScanError = 'Scan unavailable. Check approved news rights, analyzer settings, and candle coverage.';
+      });
+    }
   }
+
+  Widget _newsMindScanCard() {
+    final scan = _newsScan;
+    return MindPanel(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Row(children: [
+          Icon(Icons.psychology_alt_outlined, color: MindPalette.mint, size: 18),
+          SizedBox(width: 7),
+          Expanded(child: Text('News → Mind',
+              style: TextStyle(color: MindPalette.text, fontSize: 14, fontWeight: FontWeight.w800))),
+          MindTag('RESEARCH', color: MindPalette.blue),
+        ]),
+        const SizedBox(height: 4),
+        const Text('Find directional candidates from eligible news, even when no chart strategy fires.',
+            style: TextStyle(color: MindPalette.muted, fontSize: 11, height: 1.35)),
+        const SizedBox(height: 8),
+        Align(alignment: Alignment.centerLeft, child: FilledButton.icon(
+          key: const ValueKey('mind-news-driven-scan'),
+          onPressed: _newsScanRunning || _newsDemoMode ? null : _runNewsDrivenScan,
+          icon: _newsScanRunning
+              ? const SizedBox(width: 15, height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.auto_graph_rounded, size: 17),
+          label: Text(_newsScanRunning ? 'Scanning 20 instruments…' : 'Run news-driven scan'),
+          style: FilledButton.styleFrom(backgroundColor: MindPalette.mint,
+              foregroundColor: const Color(0xff07110c)),
+        )),
+        if (_newsDemoMode)
+          const Padding(padding: EdgeInsets.only(top: 6),
+            child: Text('Connect the customer news service to run this scan.',
+                style: TextStyle(color: MindPalette.yellow, fontSize: 10))),
+        if (_newsScanError != null)
+          Padding(padding: const EdgeInsets.only(top: 6), child: Text(_newsScanError!,
+              style: const TextStyle(color: MindPalette.yellow, fontSize: 10))),
+        if (scan != null) ...[
+          const SizedBox(height: 8),
+          Text('${scan.status} · ${scan.scannedCount} scanned · ${scan.candidateCount} candidates',
+              style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
+          if (_newsScanCandidates.isEmpty)
+            const Padding(padding: EdgeInsets.only(top: 5),
+              child: Text('No candidates passed the evidence and market-data gates.',
+                  style: TextStyle(color: MindPalette.muted, fontSize: 11))),
+          if (_newsScanDecisions.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(top: 8), child: Container(
+              decoration: BoxDecoration(color: MindPalette.card,
+                borderRadius: BorderRadius.circular(9), border: Border.all(color: MindPalette.border)),
+              child: ExpansionTile(
+                key: const ValueKey('mind-news-scan-decisions'),
+                tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                title: Text('Why each symbol passed or stopped · ${_newsScanDecisions.length}',
+                    style: const TextStyle(color: MindPalette.text, fontSize: 11, fontWeight: FontWeight.w700)),
+                subtitle: const Text('Recorded decision and market-data gate for every scanned symbol',
+                    style: TextStyle(color: MindPalette.muted, fontSize: 9)),
+                children: [for (final decision in _newsScanDecisions)
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: Row(children: [
+                      Expanded(child: Text(decision.symbol, style: const TextStyle(
+                          color: MindPalette.text, fontSize: 10, fontWeight: FontWeight.w700))),
+                      Text(decision.outcome.replaceAll('_', ' '), style: TextStyle(
+                          color: decision.outcome == 'CANDIDATE' ? MindPalette.mint :
+                              decision.outcome == 'NOT_EVALUATED' ? MindPalette.yellow : MindPalette.muted,
+                          fontSize: 9, fontWeight: FontWeight.w800)),
+                      const SizedBox(width: 7),
+                      Flexible(child: Text(decision.reasonCode.replaceAll('_', ' ').toLowerCase(),
+                          textAlign: TextAlign.right, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: MindPalette.muted, fontSize: 9))),
+                    ])),
+                ],
+              ),
+            )),
+          for (final candidate in _newsScanCandidates.take(5))
+            Padding(padding: const EdgeInsets.only(top: 7),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: MindPalette.card,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: MindPalette.border),
+                ),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                  childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                  title: Row(children: [
+                    Expanded(child: Text(candidate.symbol, style: const TextStyle(
+                        color: MindPalette.text, fontSize: 12, fontWeight: FontWeight.w800))),
+                    Text(candidate.direction == 'POSITIVE' ? 'Positive' : 'Negative',
+                        style: TextStyle(color: candidate.direction == 'POSITIVE'
+                            ? MindPalette.mint : MindPalette.red, fontSize: 10)),
+                    const SizedBox(width: 8),
+                    Text('dir ${candidate.score.toStringAsFixed(2)}',
+                        style: const TextStyle(color: MindPalette.text, fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ]),
+                  subtitle: Text(candidate.evidence.isEmpty
+                      ? 'No currently displayable supporting stories'
+                      : candidate.evidence.first.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
+                  children: [
+                    for (final story in candidate.evidence) Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(story.publisher.toUpperCase(),
+                            style: const TextStyle(color: MindPalette.mint, fontSize: 9,
+                                fontWeight: FontWeight.w800)),
+                        Text(story.title, style: const TextStyle(color: MindPalette.text,
+                            fontSize: 11, fontWeight: FontWeight.w700)),
+                        if (story.summary.isNotEmpty)
+                          Text(story.summary, style: const TextStyle(color: MindPalette.muted,
+                              fontSize: 10, height: 1.3)),
+                        Align(alignment: Alignment.centerLeft, child: TextButton(
+                          onPressed: () => _openMindNewsPublisher(story.url),
+                          child: const Text('Open source'),
+                        )),
+                      ]),
+                    ),
+                    if (candidate.evidence.isEmpty)
+                      const Align(alignment: Alignment.centerLeft,
+                        child: Text('Display rights or current analysis may no longer permit story details.',
+                          style: TextStyle(color: MindPalette.muted, fontSize: 10))),
+                  ],
+                ),
+              ),
+            ),
+        ],
+        if (_newsScanCandidates.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
+            onPressed: () => _go('trading-rooms'),
+            icon: const Icon(Icons.meeting_room_outlined, size: 16),
+            label: const Text('Open PAPER rooms'),
+            style: OutlinedButton.styleFrom(foregroundColor: MindPalette.mint),
+          )),
+        ],
+        const SizedBox(height: 4),
+        const Text('Direction strength is not an expected return. Supporting stories are rechecked for current display rights. PAPER rechecks live data and risk; LIVE requires the existing proposal and order confirmation.',
+            style: TextStyle(color: MindPalette.muted, fontSize: 10, height: 1.3)),
+      ]),
+    );
+  }
+
 
   Widget _newsUnavailable(String message) => MindPanel(child: Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,6 +450,8 @@ extension _MindNewsScreens on _MindWorkspaceState {
       const SizedBox(height: 8),
       _chips(['All news', 'Stock-linked', 'Analyzed', 'Pending / failed'], _newsFilter,
           (value) => _updateMind(() => _newsFilter = value)),
+      _newsMindScanCard(),
+      const SizedBox(height: 8),
       if (_newsSymbolFilter != null)
         Align(alignment: Alignment.centerLeft, child: InputChip(
           label: Text('Symbol: $_newsSymbolFilter'),
@@ -366,16 +531,26 @@ extension _MindNewsScreens on _MindWorkspaceState {
             _newsTab = 'Feed';
             _newsDetailOpen = true;
           }),
-          child: Container(padding:const EdgeInsets.symmetric(vertical:9),decoration:const BoxDecoration(border:Border(top:BorderSide(color:MindPalette.border))),child:Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: MindPalette.panel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: MindPalette.border)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
               const Icon(Icons.circle,size:7,color:MindPalette.mint),const SizedBox(width:6),
-              Expanded(child: Text(item.source.toUpperCase(),style:const TextStyle(color:MindPalette.muted,fontSize:9,fontWeight:FontWeight.w700))),
-              Text(item.time,style:const TextStyle(color:MindPalette.muted,fontSize:9)),
+              Expanded(child: Text(item.source.toUpperCase(),style:const TextStyle(color:MindPalette.muted,fontSize:10,fontWeight:FontWeight.w700))),
+              Text(item.time,style:const TextStyle(color:MindPalette.muted,fontSize:10)),
             ]),
             const SizedBox(height:5),
             Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: MindPalette.text,
-                    fontSize:12, fontWeight: FontWeight.w700)),
+                    fontSize:15, height: 1.28, fontWeight: FontWeight.w700)),
+            if (item.article?.stockImpact != null) ...[
+              const SizedBox(height: 6),
+              _newsOutcomeSummary(item.article!.stockImpact!, compact: true),
+            ],
             if(item.symbols.isNotEmpty||item.article?.stockImpact!=null)...[
               const SizedBox(height:6),
               Row(children:[
@@ -387,6 +562,90 @@ extension _MindNewsScreens on _MindWorkspaceState {
           ])),
       ),
   ]);
+
+  /// Makes the stored model result visible without presenting it as a forecast.
+  Widget _newsOutcomeSummary(MarketNewsImpact impact, {bool compact = false}) {
+    final tone = switch (impact.sentiment) {
+      'POSITIVE' => 'Positive tone',
+      'NEGATIVE' => 'Negative tone',
+      'NEUTRAL' => 'Neutral tone',
+      'MIXED' => 'Mixed tone',
+      _ => 'Unknown tone',
+    };
+    final uncertain = impact.sentiment == 'MIXED' ||
+        impact.ambiguity != false ||
+        impact.contradiction != false ||
+        impact.directionScore == null ||
+        impact.materiality == null ||
+        impact.confidence == null ||
+        impact.confidence! < 0.5;
+    final color = uncertain ? MindPalette.yellow
+        : impact.sentiment == 'NEGATIVE' ? MindPalette.red
+        : impact.sentiment == 'POSITIVE' ? MindPalette.mint
+        : MindPalette.muted;
+    final direction = impact.directionScore == null
+        ? 'direction not scored'
+        : 'direction ${impact.directionScore! >= 0 ? '+' : ''}${impact.directionScore!.toStringAsFixed(2)}';
+    final confidence = impact.confidence == null
+        ? 'model confidence unavailable'
+        : 'model confidence ${(impact.confidence! * 100).round()}%';
+    final materiality = impact.materiality == null
+        ? 'materiality unavailable'
+        : 'materiality ${(impact.materiality! * 100).round()}%';
+    final horizon = (impact.horizon == null || impact.horizon == 'UNKNOWN')
+        ? 'horizon unknown'
+        : impact.horizon!.replaceAll('_', ' ').toLowerCase();
+    final flag = impact.contradiction == true
+        ? 'Conflicting evidence · excluded from directional context'
+        : impact.ambiguity == true
+            ? 'Ambiguous evidence · excluded from directional context'
+            : impact.contradiction == null || impact.ambiguity == null
+                ? 'Uncertainty flags unavailable · withheld from directional context'
+                : impact.confidence == null || impact.confidence! < 0.5
+                    ? 'Below 50% policy confidence · excluded from directional context'
+                    : impact.directionScore == null || impact.materiality == null
+                        ? 'Required direction/materiality missing · excluded from directional context'
+                        : null;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 9 : 12),
+      decoration: BoxDecoration(
+        color: MindPalette.panel,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: MindPalette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(compact ? 'ARTICLE ANALYSIS' : 'ANALYSIS OUTCOME',
+            style: TextStyle(color: color, fontSize: compact ? 10 : 11,
+                fontWeight: FontWeight.w800, letterSpacing: .35)),
+          const SizedBox(height: 3),
+          Text('$tone · $direction',
+            style: TextStyle(color: color, fontSize: compact ? 12 : 14,
+                fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text('$confidence · $materiality · $horizon',
+            style: const TextStyle(color: MindPalette.muted,
+                fontSize: 10, height: 1.35)),
+          if (flag != null) ...[
+            const SizedBox(height: 3),
+            Text(flag, style: const TextStyle(color: MindPalette.yellow,
+                fontSize: 10, fontWeight: FontWeight.w700)),
+          ],
+          if (!compact) ...[
+            const SizedBox(height: 7),
+            Text(
+              'These are article-level evidence scores, not a price forecast. Eligible news can create a separate research candidate; PAPER and LIVE still require their own market, risk, and confirmation gates.',
+              style: const TextStyle(color: MindPalette.muted,
+                  fontSize: 10, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _newsArticleDetail(_MindNewsPreview item) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -416,6 +675,10 @@ extension _MindNewsScreens on _MindWorkspaceState {
           const SizedBox(height: 13),
           const MindSectionTitle(title: 'MintTick Mind analysis',
               icon: Icons.psychology_outlined),
+          if (item.article?.stockImpact != null) ...[
+            const SizedBox(height: 7),
+            _newsOutcomeSummary(item.article!.stockImpact!),
+          ],
           _newsDetailRow('Category', item.category),
           _newsDetailRow('Analysis provider', item.article?.stockImpact?.provider ?? 'Unavailable'),
           if (item.article?.stockImpact?.model != null)
@@ -468,6 +731,8 @@ extension _MindNewsScreens on _MindWorkspaceState {
         children: [
           const MindSectionTitle(title: 'Stock mapping',
               icon: Icons.candlestick_chart_outlined),
+          const Text('Symbols identified by the article model; instrument mapping is checked separately before Mind context use.',
+              style: TextStyle(color: MindPalette.muted, fontSize: 10, height: 1.35)),
           for (final symbol in item.symbols)
             _newsDetailRow(symbol, '${item.impact} advisory context'),
           if (item.symbols.isEmpty)
