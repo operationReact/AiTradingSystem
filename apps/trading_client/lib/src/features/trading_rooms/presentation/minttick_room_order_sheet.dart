@@ -68,10 +68,10 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     super.dispose();
   }
 
-  static String _key() {
+  String _key() {
     final random = Random.secure();
     final bytes = List.generate(16, (_) => random.nextInt(256));
-    return 'mt_${bytes.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
+    return '${widget.mode.toLowerCase()}_${bytes.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
   }
 
   void _invalidate() {
