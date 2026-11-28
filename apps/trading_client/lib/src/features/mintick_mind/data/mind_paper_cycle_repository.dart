@@ -170,6 +170,7 @@ abstract interface class MindLiveStrategyProposalRepository {
 class MindLiveStrategyProposal {
   const MindLiveStrategyProposal({
     required this.id,
+    required this.selectedBroker,
     required this.strategyCode,
     required this.tradingSymbol,
     required this.side,
@@ -182,6 +183,7 @@ class MindLiveStrategyProposal {
   });
 
   final String id;
+  final String selectedBroker;
   final String strategyCode;
   final String tradingSymbol;
   final String side;
@@ -195,6 +197,7 @@ class MindLiveStrategyProposal {
   static MindLiveStrategyProposal parse(Object? raw) {
     if (raw is! Map<String, dynamic> ||
         raw['id'] is! String ||
+        raw['selectedBroker'] is! String ||
         raw['strategyCode'] is! String ||
         raw['tradingSymbol'] is! String ||
         raw['side'] is! String ||
@@ -208,12 +211,14 @@ class MindLiveStrategyProposal {
     }
     final expiresAt = DateTime.tryParse(raw['expiresAt'] as String);
     if (expiresAt == null ||
+        !const ['ANGEL_ONE', 'UPSTOX'].contains(raw['selectedBroker']) ||
         !const ['BUY', 'SELL'].contains(raw['side']) ||
         !const ['PENDING', 'EXPIRED', 'SUBMITTED'].contains(raw['status'])) {
       throw const FormatException('Inconsistent LIVE strategy proposal');
     }
     return MindLiveStrategyProposal(
       id: raw['id'] as String,
+      selectedBroker: raw['selectedBroker'] as String,
       strategyCode: raw['strategyCode'] as String,
       tradingSymbol: raw['tradingSymbol'] as String,
       side: raw['side'] as String,
