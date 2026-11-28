@@ -1,9 +1,1 @@
-{
-  "operation": "read-only-market-runtime-diagnostics",
-  "application": "MintTick",
-  "environment": "paper",
-  "region": "ap-south-1",
-  "aws_account": "098859530205",
-  "instance_id": "i-09c01b470fb39b85a"
-}
-
+{"operation":"read-only-market-runtime-diagnostics","application":"MintTick","environment":"paper","region":"ap-south-1","aws_account":"098859530205","instance_id":"i-09c01b470fb39b85a"}
