@@ -66,10 +66,15 @@ class LiveEquityOrderCoordinatorTest {
     }
 
     private CustomerExecutionReadinessService.Preflight proposal(String broker, List<String> blockers) {
+        return proposal(broker, blockers, blockers.isEmpty());
+    }
+
+    private CustomerExecutionReadinessService.Preflight proposal(String broker, List<String> blockers,
+            boolean executable) {
         return new CustomerExecutionReadinessService.Preflight(room, "LIVE", 42L, broker,
             "SBIN-EQ", "NSE", "BUY", 10, "LIMIT", "DAY", PRICE, new BigDecimal("1000.00"),
             new BigDecimal("100000"), new BigDecimal("20000"), BigDecimal.ZERO,
-            true, true, BigDecimal.ZERO, Instant.now(), blockers.isEmpty(), blockers);
+            true, true, BigDecimal.ZERO, Instant.now(), executable, blockers);
     }
 
     private CustomerLiveEquityOrderService.Order order(String broker, String state) {
@@ -132,6 +137,17 @@ class LiveEquityOrderCoordinatorTest {
     void preflightRunsBeforeTheClaimAndBlockedProposalNeverClaims() {
         when(readiness.preflight(eq(owner), eq(room), eq(42L), eq("BUY"), eq(10), eq(PRICE)))
             .thenReturn(proposal("ANGEL_ONE", List.of("BROKER_POSITIONS_NOT_VERIFIED")));
+
+        assertThatThrownBy(() -> submit(coordinator(ENABLED)))
+            .isInstanceOf(ResponseStatusException.class);
+        verify(orders, never()).claimForSubmission(any(), any(), any(), any(), anyBoolean());
+        verifyNoInteractions(angelOne, upstox);
+    }
+
+    @Test
+    void nonExecutablePreflightFailsClosedEvenWhenBlockerListIsEmpty() {
+        when(readiness.preflight(eq(owner), eq(room), eq(42L), eq("BUY"), eq(10), eq(PRICE)))
+            .thenReturn(proposal("ANGEL_ONE", List.of(), false));
 
         assertThatThrownBy(() -> submit(coordinator(ENABLED)))
             .isInstanceOf(ResponseStatusException.class);
