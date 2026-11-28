@@ -39,7 +39,9 @@ enum _Basis { live, lastRecorded, snapshot, none }
 
 class _Priced {
   const _Priced(this.price, this.basis, this.at, this.changePct, this.changeAbs,
-      {this.status});
+      {this.status, this.refreshing = false});
+  /// A refresh is pending; [basis] is the prior tick, shown as non-live.
+  final bool refreshing;
   final num? price;
   final _Basis basis;
   final DateTime? at;
@@ -107,6 +109,9 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
   /// The most recent session-quote request threw (network/decode). A prior
   /// LIVE value is demoted to last-recorded; it is never kept labelled LIVE.
   bool _feedError = false;
+  /// A session-quote request is in flight. While true, a prior tick is never
+  /// labelled LIVE: it is shown as "Refreshing · last tick HH:MM".
+  bool _refreshing = false;
   bool? _watched;
   bool _watchBusy = false;
   int _generation = 0;
@@ -173,6 +178,7 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
   }
 
   Future<void> _loadSession(InstrumentRecord instrument, int request) async {
+    if (mounted) setState(() => _refreshing = true);
     try {
       final quote = await widget.market.liveQuote(instrument.id);
       if (!mounted || request != _generation) return;
@@ -183,6 +189,7 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
         setState(() {
           _quote = quote;
           _feedError = false;
+          _refreshing = false;
         });
       }
     } catch (_) {
@@ -193,6 +200,7 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
       setState(() {
         _quote = _quote?.asLastRecorded();
         _feedError = true;
+        _refreshing = false;
       });
     }
   }
@@ -262,6 +270,12 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
         prevClose != null && prevClose > 0 ? (price - prevClose) / prevClose * 100 : null;
     num? abs(num price) => prevClose != null ? price - prevClose : null;
     if (quote != null && quote.status == 'LIVE' && quote.ltp != null) {
+      if (_refreshing) {
+        // Pending refresh: the prior tick keeps its own timestamp but is not
+        // presented as live until the fresh response arrives.
+        return _Priced(quote.ltp, _Basis.lastRecorded, quote.exchangeAt,
+            pct(quote.ltp!), abs(quote.ltp!), refreshing: true);
+      }
       return _Priced(quote.ltp, _Basis.live, quote.exchangeAt,
           pct(quote.ltp!), abs(quote.ltp!));
     }
@@ -448,7 +462,9 @@ class _PriceHeader extends StatelessWidget {
         : up ? scheme.primary : scheme.error;
     final (String badge, bool liveBadge) = switch (priced.basis) {
       _Basis.live => ('LIVE · ${_clock(priced.at)}', true),
-      _Basis.lastRecorded => ('LAST RECORDED · ${_clock(priced.at)}', false),
+      _Basis.lastRecorded => (priced.refreshing
+          ? 'REFRESHING · last tick ${_clock(priced.at)}'
+          : 'LAST RECORDED · ${_clock(priced.at)}', false),
       _Basis.snapshot => ('SNAPSHOT · ${_clock(priced.at)}', false),
       _Basis.none => (_statusLabel(priced.status, loading), false),
     };
@@ -629,10 +645,13 @@ class _RangeBar extends StatelessWidget {
           Positioned(
             left: left,
             top: -1,
-            child: Container(width: 10, height: 10,
-              decoration: BoxDecoration(
-                color: scheme.primary, shape: BoxShape.circle,
-                border: Border.all(color: scheme.surface, width: 1.5)))),
+            child: Semantics(
+              // Exposes the marker's actual input so tests can verify its source.
+              label: 'Current price marker ₹${marker.toStringAsFixed(2)}',
+              child: Container(width: 10, height: 10,
+                decoration: BoxDecoration(
+                  color: scheme.primary, shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 1.5))))),
         ]));
       }),
       const SizedBox(height: 5),

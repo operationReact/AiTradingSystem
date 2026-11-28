@@ -281,6 +281,7 @@ class _MintTickRoomProductionWorkspaceState
         paper: widget.paper,
         execution: widget.execution,
         intents: widget.intents,
+        liveCapability: widget.liveEquityCapability,
         onChanged: _refresh,
         onInstrumentSelected: (item) {
           if (mounted) {

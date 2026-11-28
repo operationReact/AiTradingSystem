@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/data/instrument_repository.dart';
@@ -24,6 +26,8 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
   final num liveLtp;
   /// When true, liveQuote throws (simulating a failed refresh).
   bool quoteThrows = false;
+  /// When set, liveQuote waits on this gate so a refresh can be observed pending.
+  Completer<void>? quoteGate;
   List<CustomerWatchlistItem> watched = const [];
 
   @override
@@ -46,6 +50,7 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
 
   @override
   Future<CustomerLiveQuote> liveQuote(int instrumentId) async {
+    if (quoteGate != null) await quoteGate!.future;
     if (quoteThrows) throw StateError('live quote unavailable');
     final now = DateTime.now();
     return switch (quoteStatus) {
@@ -166,13 +171,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('range marker uses the live price, not the snapshot ltp',
+  testWidgets('range marker input is the live price, not the snapshot ltp',
       (tester) async {
-    // Live tick (251) differs from the day-detail ltp (250): the header — and
-    // therefore the range marker, which reads the same resolved price — use 251.
+    // Live tick (251) differs from the day-detail ltp (250). The marker's
+    // semantics expose its actual input, so this verifies the source itself.
     await _pump(tester, 'Intraday', market: _FakeMarket(liveLtp: 251.0));
-    expect(find.text('₹251.00'), findsOneWidget); // resolved/header + marker
+    expect(find.text('₹251.00'), findsOneWidget);
+    expect(find.bySemanticsLabel('Current price marker ₹251.00'), findsOneWidget);
+    expect(find.bySemanticsLabel('Current price marker ₹250.00'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('range marker falls back to the snapshot price when no tick exists',
+      (tester) async {
+    await _pump(tester, 'Intraday', market: _FakeMarket(quoteStatus: 'STALE'));
+    // No verified tick, so the header and the marker both use the snapshot.
+    expect(find.bySemanticsLabel('Current price marker ₹250.00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a pending refresh never labels the prior tick LIVE',
+      (tester) async {
+    final market = _FakeMarket(quoteStatus: 'LIVE', liveLtp: 250.0);
+    await _pump(tester, 'Intraday', market: market);
     expect(find.textContaining('LIVE ·'), findsOneWidget);
+    market.quoteGate = Completer<void>();
+    await tester.tap(find.byKey(const ValueKey('room-equity-refresh')));
+    await tester.pump();
+    // While the request is pending the prior tick is non-live, with its time.
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(find.textContaining('REFRESHING · last tick'), findsOneWidget);
+    market.quoteGate!.complete();
+    await tester.pumpAndSettle();
+    // The fresh response restores the honest LIVE label.
+    expect(find.textContaining('LIVE ·'), findsOneWidget);
+    expect(find.textContaining('REFRESHING'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

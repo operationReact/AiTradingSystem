@@ -1,6 +1,7 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../../data/authenticated_api_client.dart';
 import '../../../data/instrument_repository.dart';
 import '../data/customer_execution_repository.dart';
 import '../data/customer_market_repository.dart';
@@ -24,10 +25,16 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     this.paper,
     this.execution,
     this.intents,
+    this.liveCapability,
     this.initialProduct = 'DELIVERY',
     super.key,
   });
   final String roomId, mode, side;
+  /// Server capability for LIVE cash equities. Only when the server reports it
+  /// executable (deployment gate on, broker connected, zero blockers) does the
+  /// ticket use the server's submit route; otherwise it keeps the blocked-intent
+  /// path unchanged.
+  final LiveEquityCapability? liveCapability;
   /// Default LIVE product type ('DELIVERY' or 'INTRADAY'); an Intraday room
   /// pre-selects INTRADAY. PAPER cash-equity fills ignore this.
   final String initialProduct;
@@ -54,6 +61,9 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   bool _busy = false, _unknown = false, _awaitingConfirmation = false;
   late bool _paperEnabled;
   String? _error;
+  /// Server-reported outcome text for a LIVE submission. Never implies a fill
+  /// unless the server state is FILLED.
+  String? _outcome;
   String? _pendingKey;
 
   @override
@@ -263,9 +273,14 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           throw const FormatException('Unexpected Paper order receipt');
         }
       } else {
-        if (widget.execution == null || widget.intents == null) {
-          throw StateError('LIVE intent service unavailable');
+        if (widget.execution == null) {
+          throw StateError('LIVE execution service unavailable');
         }
+        final live = widget.liveCapability;
+        // Executable only when the server says so on BOTH surfaces. The client
+        // never infers executability from its own state.
+        final executable = live != null && live.executionEnabled &&
+            live.orderRouteImplemented && live.blockers.isEmpty;
         final preview = await widget.execution!.preflight(
           roomId: widget.roomId,
           instrumentId: stock.id,
@@ -273,14 +288,24 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           quantity: quantity,
           limitPrice: price,
         );
+        final previewBlockers =
+            preview is Map<String, dynamic> ? preview['blockers'] : null;
         if (preview is! Map<String, dynamic> ||
             preview['roomId'] != widget.roomId ||
             preview['mode'] != 'LIVE' ||
             preview['instrumentId'] != stock.id ||
-            preview['executable'] != false ||
-            preview['blockers'] is! List ||
-            (preview['blockers'] as List).isEmpty) {
+            previewBlockers is! List ||
+            (executable
+                ? preview['executable'] != true || previewBlockers.isNotEmpty
+                : preview['executable'] != false || previewBlockers.isEmpty)) {
           throw const FormatException('Unverified LIVE preflight');
+        }
+        if (executable) {
+          await _submitLiveEquity(stock, quantity, price, limitPrice);
+          return;
+        }
+        if (widget.intents == null) {
+          throw StateError('LIVE intent service unavailable');
         }
         if (!mounted) return;
         final approved = await _confirm(
@@ -329,6 +354,84 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Server-executable LIVE cash-equity submission. Requires explicit final
+  /// confirmation for this one order. One request, no retry. A transport error
+  /// or ambiguous reply is UNKNOWN and blocks further orders until reconciled.
+  /// A definite server 4xx means nothing was placed.
+  Future<void> _submitLiveEquity(InstrumentRecord stock, int quantity,
+      num price, String limitPrice) async {
+    final approved = await _confirm(
+      'LIVE ORDER · REAL MONEY · ${widget.liveCapability?.selectedBroker ?? 'broker'}\n'
+      '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice · intraday · limit · day.\n\n'
+      'This sends a real order to your broker after server checks. '
+      'MintTick cannot cancel it from this screen.',
+      'Submit LIVE order',
+    );
+    if (!approved || !mounted) return;
+    final key = _pendingKey ??= HttpCustomerTradeIntentRepository.newKey();
+    var requestSent = false;
+    setState(() { _busy = true; _error = null; _outcome = null; });
+    try {
+      requestSent = true;
+      final order = await widget.execution!.submitLiveEquityOrder(
+        roomId: widget.roomId,
+        idempotencyKey: key,
+        instrumentId: stock.id,
+        side: _side,
+        quantity: quantity,
+        limitPrice: price,
+      );
+      if (order.roomId != widget.roomId || order.instrumentId != stock.id ||
+          order.side != _side) {
+        throw const FormatException('Unexpected LIVE order receipt');
+      }
+      if (!mounted) return;
+      setState(() {
+        _outcome = _statusText(order);
+        if (order.status.needsReconciliation) {
+          _unknown = true;
+          _error = 'Order outcome UNKNOWN. Reconcile room order history before '
+              'placing another order. Automatic resubmission is disabled.';
+        } else {
+          _pendingKey = null;
+        }
+      });
+      await widget.onChanged();
+    } catch (error) {
+      if (!mounted) return;
+      final definiteRejection = error is ApiHttpFailure &&
+          error.statusCode != null &&
+          error.statusCode! >= 400 && error.statusCode! < 500;
+      setState(() {
+        if (definiteRejection) {
+          _pendingKey = null;
+          _error = 'Order rejected by the server. Nothing was placed.';
+        } else {
+          _unknown = requestSent;
+          _error = requestSent
+              ? 'Order outcome UNKNOWN. Reconcile room order history before '
+                  'placing another order. Automatic resubmission is disabled.'
+              : 'Order could not be submitted. Check stock, quote and price.';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Wording derived only from the server's own order state.
+  static String _statusText(LiveEquityOrder order) => switch (order.status) {
+        LiveEquityOrderStatus.acknowledged =>
+          'Accepted by broker · not yet filled.',
+        LiveEquityOrderStatus.partiallyFilled =>
+          'Partially filled · ${order.filledQuantity} of ${order.quantity}.',
+        LiveEquityOrderStatus.filled =>
+          'Filled · ${order.filledQuantity} of ${order.quantity}.',
+        LiveEquityOrderStatus.rejected => 'Rejected by broker.',
+        LiveEquityOrderStatus.cancelled => 'Cancelled.',
+        _ => 'Outcome unknown · reconciliation required.',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -461,6 +564,9 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
               ],
               if (_busy && !_awaitingConfirmation)
                 const LinearProgressIndicator(minHeight: 2),
+              if (_outcome != null) Padding(padding: const EdgeInsets.only(top: 7),
+                child: Text(_outcome!, key: const ValueKey('room-order-outcome'),
+                  style: type.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 7),
                 child: Text(_error!, style: type.bodySmall?.copyWith(
                   color: colors.error))),
