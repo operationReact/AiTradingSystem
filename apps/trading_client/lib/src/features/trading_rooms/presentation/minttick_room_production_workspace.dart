@@ -78,18 +78,7 @@ class _MintTickRoomProductionWorkspaceState
     _ => 'NSE/BSE equities',
   };
   List<String> get _equityRouteBlockers =>
-      (widget.liveEquityCapability?.blockers ?? const <String>[])
-          .where((blocker) => blocker ==
-                  'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED' ||
-              blocker == 'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER' ||
-              blocker == 'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED' ||
-              blocker == 'ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED' ||
-              blocker == 'BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED' ||
-              blocker ==
-                  'BROKER_ORDER_DISPATCH_AND_RECONCILIATION_NOT_IMPLEMENTED' ||
-              blocker == 'ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED' ||
-              blocker == 'UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED')
-          .toList(growable: false);
+      widget.liveEquityCapability?.blockers ?? const <String>[];
   InstrumentRecord? _selected;
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
