@@ -102,6 +102,12 @@ class AccountProxyTest(unittest.TestCase):
         self.assertFalse(proxy.allowed("DELETE", "/api/customer/watchlist/items/abc"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"))
         self.assertTrue(proxy.allowed("PUT","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/name"))
+        thesis = "/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/thesis"
+        self.assertTrue(proxy.allowed("GET", thesis))
+        self.assertTrue(proxy.allowed("PUT", thesis))
+        self.assertFalse(proxy.allowed("POST", thesis))
+        self.assertFalse(proxy.allowed("DELETE", thesis))
+        self.assertFalse(proxy.allowed("PUT", "/api/customer/trading-rooms/non-uuid/thesis"))
         for method, path in [
             ("GET","/api/admin/users"),
             ("GET","/api/risk/approvals"),
@@ -384,6 +390,43 @@ class AccountProxyTest(unittest.TestCase):
                          "Bearer public-test-token")
         self.assertEqual(request.get_header("Content-type"), "application/json")
         self.assertEqual(json.loads(request.data), {"name": "Swing Trade Updated"})
+
+    def test_room_thesis_put_validates_and_forwards_only_owner_scoped_notes(self):
+        room = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012"
+        endpoint = room + "/thesis"
+        self.assertTrue(proxy.allowed("GET", endpoint))
+        self.assertTrue(proxy.allowed("PUT", endpoint))
+        self.assertFalse(proxy.allowed("POST", endpoint))
+
+        invalid_payloads = (
+            "", "{}", "[]", "null", "broken-json",
+            '{"content":null,"expectedRevision":0}',
+            '{"content":"draft","expectedRevision":-1}',
+            '{"content":"draft","expectedRevision":true}',
+            '{"content":"draft","expectedRevision":0,"extra":1}',
+            '{"content":"bad\\u0001text","expectedRevision":0}',
+            json.dumps({"content": "x" * 5001, "expectedRevision": 0}),
+        )
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload[:40]):
+                with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                    response = proxy.handler(event("PUT", endpoint, body=payload), None)
+                self.assertEqual(response["statusCode"], 400)
+                send.assert_not_called()
+
+        valid = {"content": "Entry after retest.\nInvalidate below support.",
+                 "expectedRevision": 2}
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               return_value=Reply()) as send:
+            response = proxy.handler(event("PUT", endpoint,
+                body=json.dumps(valid)), None)
+        self.assertEqual(response["statusCode"], 200)
+        request = send.call_args.args[0]
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertEqual(request.full_url, proxy.BACKEND + endpoint)
+        self.assertEqual(request.get_header("Authorization"),
+                         "Bearer public-test-token")
+        self.assertEqual(json.loads(request.data), valid)
 
     def test_rename_backend_404_is_preserved_only_after_forwarding_to_owner_api(self):
         endpoint = ("/api/customer/trading-rooms/"
