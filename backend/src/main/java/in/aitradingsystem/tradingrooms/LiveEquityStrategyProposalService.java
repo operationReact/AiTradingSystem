@@ -110,7 +110,6 @@ public class LiveEquityStrategyProposalService {
      * order ticket. Every submission needs the existing per-order consent phrase.
      * The deterministic coordinator key makes retries safe and non-dispatching.
      */
-    @Transactional
     public Submission submit(UUID owner, UUID liveRoomId, UUID proposalId, String confirmation) {
         Proposal proposal = byId(owner, liveRoomId, proposalId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
