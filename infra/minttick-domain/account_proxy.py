@@ -94,6 +94,7 @@ WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
 ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
+ROOM_THESIS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/thesis$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
 PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(capability|orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
 LIVE_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|orders|market|expiries)$")
@@ -148,6 +149,7 @@ def allowed(method, path):
             or (method == "GET" and path == UPSTOX_CALLBACK)
             or (method == "GET" and ROOM.fullmatch(path))
             or (method == "PUT" and ROOM_RENAME.fullmatch(path))
+            or (method in {"GET", "PUT"} and ROOM_THESIS.fullmatch(path))
             or (method == "GET" and READINESS.fullmatch(path))
             or (method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path))
             or (method == "GET" and MIND_PROGRESS_ITEM.fullmatch(path) and len(path) <= 160)
@@ -293,6 +295,24 @@ def handler(event, context):
             valid = False
         if not valid:
             return reply(400, {"error": "INVALID_ROOM_NAME"})
+    if method == "PUT" and ROOM_THESIS.fullmatch(path):
+        # Notes are private planning text. Validate the exact request contract
+        # at the public edge before forwarding to the owner-scoped Java API.
+        try:
+            thesis = json.loads(body)
+            content = thesis.get("content") if type(thesis) is dict else None
+            revision = thesis.get("expectedRevision") if type(thesis) is dict else None
+            valid = (type(thesis) is dict
+                     and set(thesis) == {"content", "expectedRevision"}
+                     and isinstance(content, str)
+                     and len(content) <= 5000
+                     and not any((ord(ch) < 32 and ch not in "\n\t") or ord(ch) == 127
+                                 for ch in content)
+                     and type(revision) is int and revision >= 0)
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_ROOM_THESIS"})
     if method == "POST" and path in {
         "/api/auth/cognito/provision",
         "/api/customer/brokers/angel-one/connect-configured",
