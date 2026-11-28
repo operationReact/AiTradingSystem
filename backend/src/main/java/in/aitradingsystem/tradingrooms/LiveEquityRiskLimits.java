@@ -33,6 +33,10 @@ public final class LiveEquityRiskLimits {
             : null;
     }
 
+    public static LiveEquityRiskLimits disabled() {
+        return new LiveEquityRiskLimits(0, 0, 0, 0);
+    }
+
     public Optional<LiveEquityRiskPolicy> configuredPolicy() {
         return Optional.ofNullable(policy);
     }
