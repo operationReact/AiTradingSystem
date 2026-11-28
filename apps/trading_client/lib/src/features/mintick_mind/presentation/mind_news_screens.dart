@@ -376,6 +376,10 @@ extension _MindNewsScreens on _MindWorkspaceState {
             Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: MindPalette.text,
                     fontSize:12, fontWeight: FontWeight.w700)),
+            if (item.article?.stockImpact != null) ...[
+              const SizedBox(height: 6),
+              _newsOutcomeSummary(item.article!.stockImpact!, compact: true),
+            ],
             if(item.symbols.isNotEmpty||item.article?.stockImpact!=null)...[
               const SizedBox(height:6),
               Row(children:[
@@ -387,6 +391,77 @@ extension _MindNewsScreens on _MindWorkspaceState {
           ])),
       ),
   ]);
+
+  /// Makes the stored model result visible without presenting it as a forecast.
+  Widget _newsOutcomeSummary(MarketNewsImpact impact, {bool compact = false}) {
+    final tone = switch (impact.sentiment) {
+      'POSITIVE' => 'Positive tone',
+      'NEGATIVE' => 'Negative tone',
+      'NEUTRAL' => 'Neutral tone',
+      'MIXED' => 'Mixed tone',
+      _ => 'Unknown tone',
+    };
+    final uncertain = impact.ambiguity == true ||
+        impact.contradiction == true ||
+        impact.directionScore == null;
+    final color = uncertain ? MindPalette.yellow : MindPalette.mint;
+    final direction = impact.directionScore == null
+        ? 'direction not scored'
+        : 'direction ${impact.directionScore! >= 0 ? '+' : ''}${impact.directionScore!.toStringAsFixed(2)}';
+    final confidence = impact.confidence == null
+        ? 'model confidence unavailable'
+        : 'model confidence ${(impact.confidence! * 100).round()}%';
+    final materiality = impact.materiality == null
+        ? 'materiality unavailable'
+        : 'materiality ${(impact.materiality! * 100).round()}%';
+    final horizon = (impact.horizon == null || impact.horizon == 'UNKNOWN')
+        ? 'horizon unknown'
+        : impact.horizon!.replaceAll('_', ' ').toLowerCase();
+    final flag = impact.contradiction == true
+        ? 'Conflicting evidence flagged'
+        : impact.ambiguity == true
+            ? 'Ambiguous evidence flagged'
+            : null;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 7 : 10),
+      decoration: BoxDecoration(
+        color: MindPalette.panel,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: MindPalette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(compact ? 'ARTICLE ANALYSIS' : 'ANALYSIS OUTCOME',
+            style: TextStyle(color: color, fontSize: 9,
+                fontWeight: FontWeight.w800, letterSpacing: .35)),
+          const SizedBox(height: 3),
+          Text('$tone · $direction',
+            style: TextStyle(color: color, fontSize: compact ? 10 : 12,
+                fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text('$confidence · $materiality · $horizon',
+            style: const TextStyle(color: MindPalette.muted,
+                fontSize: 9, height: 1.35)),
+          if (flag != null) ...[
+            const SizedBox(height: 3),
+            Text(flag, style: const TextStyle(color: MindPalette.yellow,
+                fontSize: 9, fontWeight: FontWeight.w700)),
+          ],
+          if (!compact) ...[
+            const SizedBox(height: 7),
+            Text(
+              'This is an article-level evidence classification, not an expected price move or buy/sell call. Eligible evidence may be attached to a research candidate for Mind history when the news-context feature is enabled. It does not currently change strategy scoring, replay/backtest results, risk, sizing, or orders.',
+              style: const TextStyle(color: MindPalette.muted,
+                  fontSize: 10, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _newsArticleDetail(_MindNewsPreview item) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -416,6 +491,10 @@ extension _MindNewsScreens on _MindWorkspaceState {
           const SizedBox(height: 13),
           const MindSectionTitle(title: 'MintTick Mind analysis',
               icon: Icons.psychology_outlined),
+          if (item.article?.stockImpact != null) ...[
+            const SizedBox(height: 7),
+            _newsOutcomeSummary(item.article!.stockImpact!),
+          ],
           _newsDetailRow('Category', item.category),
           _newsDetailRow('Analysis provider', item.article?.stockImpact?.provider ?? 'Unavailable'),
           if (item.article?.stockImpact?.model != null)
