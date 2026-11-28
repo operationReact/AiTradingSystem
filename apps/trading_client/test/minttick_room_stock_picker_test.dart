@@ -261,7 +261,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-ticket-review')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('LIVE dispatch blocked'), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-order-error')), findsOneWidget);
     expect(execution.submits, 0);
     expect(find.byKey(const ValueKey('room-order-final-confirm')), findsNothing);
   });
