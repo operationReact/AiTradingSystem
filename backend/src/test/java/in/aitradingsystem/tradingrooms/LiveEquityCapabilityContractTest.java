@@ -20,13 +20,12 @@ class LiveEquityCapabilityContractTest {
     }
 
     @Test
-    void gateOffIsNotImplementedAndNotExecutable() {
+    void gateOffReportsImplementedRouteButNotExecutable() {
         var c = CustomerExecutionReadinessController.capability(ROOM, readiness(false,
             List.of("EXECUTION_DISABLED")), false);
-        assertThat(c.orderRouteImplemented()).isFalse();
+        assertThat(c.orderRouteImplemented()).isTrue();
         assertThat(c.executionEnabled()).isFalse();
-        assertThat(c.blockers()).contains("EXECUTION_DISABLED",
-            "LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
+        assertThat(c.blockers()).containsExactly("EXECUTION_DISABLED");
     }
 
     @Test

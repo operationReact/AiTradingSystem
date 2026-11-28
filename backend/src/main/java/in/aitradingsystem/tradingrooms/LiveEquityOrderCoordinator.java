@@ -102,7 +102,7 @@ public class LiveEquityOrderCoordinator {
         // Broker-backed reads happen here, with no database transaction open.
         CustomerExecutionReadinessService.Preflight proposal =
             readiness.preflight(owner, roomId, instrumentId, side, quantity, limitPrice);
-        if (!proposal.blockers().isEmpty()) {
+        if (!proposal.executable() || !proposal.blockers().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "LIVE intraday equity preflight is not executable");
         }
