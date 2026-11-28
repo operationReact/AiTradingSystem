@@ -60,7 +60,23 @@ element count. No account ids, symbols, quantities, prices, balances or tokens.
 
 ## 3. Per-customer account risk policy
 
-There are no default limits; a customer without a policy cannot claim an order. The
+Risk limits can be configured in the host-local `runtime.env` and changed without code edits:
+
+```text
+MINTTICK_LIVE_EQUITY_RISK_MAX_ACCOUNT_INTRADAY_BUY_INR=...
+MINTTICK_LIVE_EQUITY_RISK_MAX_ORDER_VALUE_INR=...
+MINTTICK_LIVE_EQUITY_RISK_MAX_ORDER_QUANTITY=...
+MINTTICK_LIVE_EQUITY_RISK_DAILY_REALIZED_LOSS_LIMIT_INR=...
+```
+
+These deployment values are a fallback when the customer has no database policy row. An explicit
+per-customer risk policy set through the operator API below takes precedence. Missing, zero-valued
+required caps, or out-of-range values leave the deployment fallback unconfigured and LIVE claims
+fail closed. The compose defaults are all `0`; no trading limits are invented. After changing
+`runtime.env`, recreate/restart the backend for the new values to take effect.
+
+There are no active default limits; a customer without either a valid configured fallback or a
+per-customer policy cannot claim an order. The
 `customerId` is the customer's `app_user.id` (UUID). There is no lookup API, so an operator gets
 it from the production database or admin tooling.
 
