@@ -14,7 +14,7 @@ import 'minttick_customer_widgets.dart';
 import '../data/customer_upstox_fno_live_repository.dart';
 import 'minttick_upstox_fno_live_panel.dart';
 import 'minttick_paper_fno_panel.dart';
-import 'minttick_room_candlestick_desk.dart';
+import 'minttick_room_equity_desk.dart';
 import 'minttick_room_order_sheet.dart';
 
 /// Exact structural counterpart of MintTick_Rooms_Production_Parity_Prototype.
@@ -77,8 +77,32 @@ class _MintTickRoomProductionWorkspaceState
     'ALL' => 'Equity + F&O',
     _ => 'NSE/BSE equities',
   };
+
+  /// User-facing horizon. For F&O the server stores positional rooms as the
+  /// 'Swing' focus; surface that distinctly as 'Positional'.
+  String get _focusLabel => widget.room.marketScope == 'FNO' &&
+          widget.room.focus == 'Swing'
+      ? 'Positional'
+      : widget.room.focus;
+
+  /// Header subtitle that distinguishes each supported room strategy rather
+  /// than showing one shared label for every F&O or equity room.
+  String get _roomSubtitle => widget.room.marketScope == 'FNO'
+      ? '$_focusLabel options · NIFTY · MY ROOM'
+      : '${widget.room.focus} · $_roomScopeLabel · MY ROOM';
   List<String> get _equityRouteBlockers =>
-      widget.liveEquityCapability?.blockers ?? const <String>[];
+      (widget.liveEquityCapability?.blockers ?? const <String>[])
+          .where((blocker) => blocker ==
+                  'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED' ||
+              blocker == 'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER' ||
+              blocker == 'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED' ||
+              blocker == 'ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED' ||
+              blocker == 'BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED' ||
+              blocker ==
+                  'BROKER_ORDER_DISPATCH_AND_RECONCILIATION_NOT_IMPLEMENTED' ||
+              blocker == 'ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED' ||
+              blocker == 'UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED')
+          .toList(growable: false);
   InstrumentRecord? _selected;
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
@@ -88,7 +112,11 @@ class _MintTickRoomProductionWorkspaceState
   Map<int, CustomerLiveQuote> _positionQuotes = const {};
   int _historyGeneration = 0;
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
-  List<LiveEquityOrder> _liveOrders = const [];
+  /// Server-recorded LIVE equity orders (owner-scoped history). Empty and
+  /// unverified until a read succeeds, which keeps "no orders" distinct from
+  /// "could not be verified".
+  List<LiveEquityOrder> _liveEquityOrders = const [];
+  bool _liveEquityOrdersVerified = false;
   bool _historyLoading = false;
   String? _historyError;
 
@@ -147,6 +175,9 @@ class _MintTickRoomProductionWorkspaceState
 
   Future<void> _loadHistory() async {
     final request = ++_historyGeneration;
+    if (widget.room.mode == 'LIVE' && widget.room.marketScope != 'FNO') {
+      _loadLiveEquityOrders();
+    }
     // F&O has a separate owner-scoped positions ledger. Never count cash
     // equities in the option KPI ribbon, and never present failed reads as 0.
     if (widget.room.marketScope == 'FNO' &&
@@ -205,33 +236,20 @@ class _MintTickRoomProductionWorkspaceState
           setState(() => _historyLoading = false);
         }
       }
-    } else if (widget.room.mode == 'LIVE') {
+    } else if (widget.room.mode == 'LIVE' && widget.intents != null) {
       setState(() { _historyLoading = true; _historyError = null; });
       try {
-        final rows = await Future.wait<Object>([
-          widget.intents?.list(widget.room.id) ??
-              Future.value(<CustomerBlockedOrderIntent>[]),
-          widget.execution?.liveOrders(widget.room.id) ??
-              Future.value(<LiveEquityOrder>[]),
-        ]);
-        if (mounted && request == _historyGeneration) {
-          setState(() {
-            _liveIntents = (rows[0] as List<CustomerBlockedOrderIntent>)
-                .where((item) => item.mode == 'LIVE' && item.state == 'PRECHECK_BLOCKED')
-                .toList(growable: false);
-            _liveOrders = rows[1] as List<LiveEquityOrder>;
-          });
-        }
+        final intents = await widget.intents!.list(widget.room.id);
+        if (mounted) { setState(() => _liveIntents = intents.where(
+          (item) => item.mode == 'LIVE' && item.state == 'PRECHECK_BLOCKED')
+          .toList()); }
       } catch (_) {
-        if (mounted && request == _historyGeneration) { setState(() {
+        if (mounted) { setState(() {
           _liveIntents = const [];
-          _liveOrders = const [];
-          _historyError = 'LIVE order history could not be verified.';
+          _historyError = 'LIVE intent history could not be verified.';
         }); }
       } finally {
-        if (mounted && request == _historyGeneration) {
-          setState(() => _historyLoading = false);
-        }
+        if (mounted) setState(() => _historyLoading = false);
       }
     }
   }
@@ -239,23 +257,6 @@ class _MintTickRoomProductionWorkspaceState
   Future<void> _refresh() async {
     await widget.onRefresh();
     if (mounted) await _loadHistory();
-  }
-
-  Future<void> _reconcileLiveOrder(LiveEquityOrder order) async {
-    final execution = widget.execution;
-    if (execution == null || _historyLoading) return;
-    setState(() { _historyLoading = true; _historyError = null; });
-    try {
-      await execution.reconcileLiveOrder(roomId: widget.room.id, orderId: order.id);
-      if (mounted) await _loadHistory();
-    } catch (_) {
-      if (mounted) {
-        setState(() =>
-            _historyError = 'Broker reconciliation is inconclusive. Do not resubmit.');
-      }
-    } finally {
-      if (mounted) setState(() => _historyLoading = false);
-    }
   }
 
   Future<void> _order(String side) async {
@@ -281,12 +282,14 @@ class _MintTickRoomProductionWorkspaceState
         roomId: widget.room.id,
         mode: widget.room.mode,
         side: side,
+        initialProduct: widget.room.focus == 'Intraday' ? 'INTRADAY' : 'DELIVERY',
         initialInstrument: _selected,
         market: widget.market!,
         wallet: widget.wallet,
         paper: widget.paper,
         execution: widget.execution,
-        liveEquityCapability: widget.liveEquityCapability,
+        intents: widget.intents,
+        liveCapability: widget.liveEquityCapability,
         onChanged: _refresh,
         onInstrumentSelected: (item) {
           if (mounted) {
@@ -324,14 +327,11 @@ class _MintTickRoomProductionWorkspaceState
         (sum, p) => sum + (p.quantity > 0 ? p.costBasisPaise : 0));
     final fnoReturn = fnoPnl != null && fnoBasis > 0
         ? fnoPnl * 100 / fnoBasis : null;
-    final liveReady = widget.liveEquityCapability?.executionEnabled == true;
     final readyNote = isPaper
       ? widget.room.marketScope == 'FNO'
           ? 'PAPER · No real-money orders · server-verified execution only'
           : 'PAPER · Virtual cash · manual simulated orders only'
-      : liveReady
-          ? 'LIVE · Per-order server preflight and owner confirmation required'
-          : 'LIVE · Order dispatch blocked · check Mind readiness';
+      : 'LIVE · Broker authorization required · order execution locked';
 
     return Scaffold(
       body: SafeArea(child: Center(child: ConstrainedBox(
@@ -404,9 +404,7 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      widget.room.marketScope == 'FNO'
-                          ? 'Options · NIFTY · MY ROOM'
-                          : '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
+                      _roomSubtitle,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
@@ -574,25 +572,70 @@ class _MintTickRoomProductionWorkspaceState
         return const Center(child: Text(
           'Authenticated LIVE F&O connection is unavailable.'));
       }
-      return MintTickUpstoxFnoLivePanel(
-        key: ValueKey('room-live-fno-${widget.room.id}'),
-        roomId: widget.room.id,
-        repository: CustomerUpstoxFnoLiveRepository(widget.execution!.api),
-      );
+      return Column(children: [
+        _fnoStrategyNote(context),
+        const SizedBox(height: 8),
+        Expanded(child: MintTickUpstoxFnoLivePanel(
+          key: ValueKey('room-live-fno-${widget.room.id}'),
+          roomId: widget.room.id,
+          horizon: widget.room.focus == 'Intraday' ? 'INTRADAY' : 'POSITIONAL',
+          repository: CustomerUpstoxFnoLiveRepository(widget.execution!.api),
+        )),
+      ]);
     }
     if (widget.room.mode != 'PAPER' || widget.fno == null) {
       return const Center(child: Text('F&O PAPER account unavailable.'));
     }
+    // The PAPER options desk carries its own richer horizon strip (with
+    // days-to-expiry and nearest-expiry auto-select), so no separate room
+    // note is needed here.
     return SingleChildScrollView(
       child: MintTickPaperFnoPanel(
         key: ValueKey('room-fno-trade-${widget.room.id}'),
         roomId: widget.room.id,
         repository: widget.fno!,
+        horizon: widget.room.focus == 'Intraday' ? 'INTRADAY' : 'POSITIONAL',
         onFilled: () async {
           await _loadHistory();
           await widget.onRefresh();
         },
       ),
+    );
+  }
+
+  /// Compact, focus-appropriate framing for an F&O room. The PAPER/LIVE option
+  /// desks share the same verified contract APIs, but the room's horizon is
+  /// made explicit so an Intraday room is not indistinguishable from a
+  /// Positional one. This is framing only and asserts no extra market data.
+  Widget _fnoStrategyNote(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    final intraday = widget.room.focus == 'Intraday';
+    final positional = widget.room.focus == 'Swing';
+    final label = intraday ? 'INTRADAY' : positional ? 'POSITIONAL' : 'OPTIONS';
+    final note = intraday
+        ? 'Intraday options · favour same-session square-off'
+        : positional
+            ? 'Positional options · overnight & multi-day holds'
+            : '$_focusLabel options';
+    return Container(
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: colors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.22))),
+      child: Row(children: [
+        Icon(intraday ? Icons.bolt_rounded : Icons.timeline_rounded,
+          size: 14, color: colors.primary),
+        const SizedBox(width: 6),
+        Text(label, style: type.labelSmall?.copyWith(
+          color: colors.primary, fontWeight: FontWeight.w800, fontSize: 10)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(note, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant, fontSize: 10))),
+      ]),
     );
   }
 
@@ -602,11 +645,21 @@ class _MintTickRoomProductionWorkspaceState
     final count = _positions.where((p) => p.quantity > 0).length;
     return Column(children: [
       if (widget.market != null)
-        Expanded(child: MintTickRoomCandlestickDesk(
-          key: ValueKey('room-chart-$_chartVersion'),
+        Expanded(child: MintTickRoomEquityDesk(
+          key: ValueKey('room-equity-$_chartVersion'),
           market: widget.market!,
+          focus: widget.room.focus,
           initialInstrument: _selected,
-          onInstrument: (selected) => _selected = selected))
+          onInstrument: (selected) => _selected = selected,
+          holdingFor: (instrumentId) {
+            for (final position in _positions) {
+              if (position.instrumentId == instrumentId &&
+                  position.quantity > 0) {
+                return position.quantity;
+              }
+            }
+            return 0;
+          }))
       else
         Expanded(child: Center(child: Text('Market data unavailable.',
           style: styles.bodySmall))),
@@ -801,7 +854,10 @@ class _MintTickRoomProductionWorkspaceState
       ));
     }
     final isPaper = widget.room.mode == 'PAPER';
-    final rows = isPaper ? _paperOrders.length : _liveOrders.length + _liveIntents.length;
+    if (!isPaper && widget.execution != null) {
+      return _liveEquityOrdersView(context);
+    }
+    final rows = isPaper ? _paperOrders.length : _liveIntents.length;
     return Column(children: [
       _PageTitle('Order history', trailing: '$rows', onRefresh: _loadHistory),
       const _RowColumns(),
@@ -810,7 +866,7 @@ class _MintTickRoomProductionWorkspaceState
         ? Center(child: Text(_historyError!))
         : rows == 0
           ? Center(child: Text(isPaper
-            ? 'No confirmed Paper fills.' : 'No LIVE orders or saved intents.'))
+            ? 'No confirmed Paper fills.' : 'No blocked Live intents.'))
           : ListView.builder(itemCount: rows, itemBuilder: (context, index) {
             if (isPaper) {
               final order = _paperOrders[index];
@@ -820,32 +876,84 @@ class _MintTickRoomProductionWorkspaceState
                 middle: order.side,
                 right: 'PAPER FILL');
             }
-            if (index < _liveOrders.length) {
-              final order = _liveOrders[index];
-              return Column(children: [
-                _DataLine(
-                  primary: order.tradingSymbol,
-                  secondary: '${order.quantity} × ₹${order.limitPrice} · '
-                      '${order.filledQuantity} filled',
-                  middle: order.side,
-                  right: order.state),
-                if (order.requiresReconciliation)
-                  Align(alignment: Alignment.centerRight, child: TextButton(
-                    onPressed: _historyLoading
-                      ? null : () => _reconcileLiveOrder(order),
-                    child: const Text('Reconcile with broker'))),
-              ]);
-            }
-            final intent = _liveIntents[index - _liveOrders.length];
+            final intent = _liveIntents[index];
             return _DataLine(
               primary: intent.tradingSymbol,
               secondary: '${intent.quantity} × ₹${intent.limitPrice}',
               middle: intent.side,
-              right: 'DRAFT');
+              right: 'BLOCKED');
           })),
-      _FlatNotice(isPaper
-        ? 'PAPER rows are virtual fills.'
-        : 'LIVE rows show broker order state and non-executing saved drafts.'),
+      const _FlatNotice(
+        'PAPER rows are virtual fills. LIVE rows are blocked intents, '
+        'not real-money executions.'),
+      _actions(),
+    ]);
+  }
+
+  /// Reads the owner-scoped LIVE equity history from the server. A failed read
+  /// leaves history unverified rather than presenting it as empty.
+  Future<void> _loadLiveEquityOrders() async {
+    final repo = widget.execution;
+    if (repo == null || widget.room.mode != 'LIVE' ||
+        widget.room.marketScope == 'FNO') {
+      return;
+    }
+    try {
+      final orders = await repo.listLiveEquityOrders(widget.room.id);
+      if (!mounted) return;
+      setState(() {
+        _liveEquityOrders = orders;
+        _liveEquityOrdersVerified = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _liveEquityOrdersVerified = false);
+    }
+  }
+
+  /// Server-confirmed state only. ACCEPTED is never shown as FILLED, and a
+  /// partial fill shows the server's own filled quantity.
+  static String _liveOrderStateLabel(LiveEquityOrder order) => switch (order.status) {
+        LiveEquityOrderStatus.acknowledged => 'ACCEPTED',
+        LiveEquityOrderStatus.partiallyFilled =>
+          'PARTIAL ${order.filledQuantity}/${order.quantity}',
+        LiveEquityOrderStatus.filled => 'FILLED',
+        LiveEquityOrderStatus.rejected => 'REJECTED',
+        LiveEquityOrderStatus.cancelled => 'CANCELLED',
+        LiveEquityOrderStatus.submitting ||
+        LiveEquityOrderStatus.unknown => 'UNKNOWN · RECONCILE',
+      };
+
+  Widget _liveEquityOrdersView(BuildContext context) {
+    final type = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final rows = _liveEquityOrders;
+    return Column(children: [
+      _PageTitle('Order history',
+        trailing: _liveEquityOrdersVerified ? '${rows.length}' : 'UNVERIFIED',
+        onRefresh: _loadLiveEquityOrders),
+      const _RowColumns(),
+      if (_historyLoading) const LinearProgressIndicator(minHeight: 2),
+      Expanded(child: !_liveEquityOrdersVerified
+        ? Center(child: Text('LIVE order history could not be verified.',
+            key: const ValueKey('room-live-orders-unverified'),
+            style: type.bodySmall?.copyWith(color: scheme.error)))
+        : rows.isEmpty
+          ? Center(child: Text('No LIVE equity orders recorded.',
+              style: type.bodySmall))
+          : ListView.builder(
+              itemCount: rows.length,
+              itemBuilder: (context, index) {
+                final order = rows[index];
+                return _DataLine(
+                  primary: order.tradingSymbol,
+                  secondary: '${order.quantity} × ₹${order.limitPrice}',
+                  middle: order.side,
+                  right: _liveOrderStateLabel(order));
+              })),
+      const _FlatNotice(
+        'LIVE rows are server-recorded broker orders. A state is shown only '
+        'when the broker or reconciliation confirms it.'),
       _actions(),
     ]);
   }

@@ -1,15 +1,17 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../../data/authenticated_api_client.dart';
 import '../../../data/instrument_repository.dart';
 import '../data/customer_execution_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_room_repository.dart';
+import '../data/customer_trade_intent_repository.dart';
 import 'minttick_room_stock_picker.dart';
 
 /// The Buy/Sell bottom sheet matches the interactive MintTick HTML blueprint.
-/// PAPER submits virtual fills. LIVE submits only after server readiness, fresh preflight and owner confirmation.
+/// PAPER submits only virtual fills. LIVE stores PRECHECK_BLOCKED intents only.
 class MintTickRoomOrderSheet extends StatefulWidget {
   const MintTickRoomOrderSheet({
     required this.roomId,
@@ -22,16 +24,29 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     this.wallet,
     this.paper,
     this.execution,
+    this.intents,
+    this.liveCapability,
     this.liveEquityCapability,
+    this.initialProduct = 'DELIVERY',
     super.key,
   });
   final String roomId, mode, side;
+  /// Server capability for LIVE cash equities. Only when the server reports it
+  /// executable (deployment gate on, broker connected, zero blockers) does the
+  /// ticket use the server's submit route; otherwise it keeps the blocked-intent
+  /// path unchanged.
+  final LiveEquityCapability? liveCapability;
+  /// Alias retained for workspace callers using the explicit capability name.
+  final LiveEquityCapability? liveEquityCapability;
+  /// Default LIVE product type ('DELIVERY' or 'INTRADAY'); an Intraday room
+  /// pre-selects INTRADAY. PAPER cash-equity fills ignore this.
+  final String initialProduct;
   final InstrumentRecord? initialInstrument;
   final HttpCustomerMarketRepository market;
   final CustomerPaperWallet? wallet;
   final HttpCustomerPaperTradingRepository? paper;
   final HttpCustomerExecutionRepository? execution;
-  final LiveEquityCapability? liveEquityCapability;
+  final HttpCustomerTradeIntentRepository? intents;
   final Future<void> Function() onChanged;
   final ValueChanged<InstrumentRecord>? onInstrumentSelected;
 
@@ -40,7 +55,10 @@ class MintTickRoomOrderSheet extends StatefulWidget {
 }
 
 class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
+  LiveEquityCapability? get _capability =>
+      widget.liveCapability ?? widget.liveEquityCapability;
   late String _side;
+  late String _product;
   late InstrumentRecord? _stock;
   final _qty = TextEditingController(text: '1');
   final _limit = TextEditingController();
@@ -48,16 +66,99 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   bool _busy = false, _unknown = false, _awaitingConfirmation = false;
   late bool _paperEnabled;
   String? _error;
+  /// Server-reported outcome text for a LIVE submission. Never implies a fill
+  /// unless the server state is FILLED.
+  String? _outcome;
   String? _pendingKey;
+
+  /// Server-owned LIVE order history, reloaded on every open so unresolved
+  /// state survives closing and reopening the ticket.
+  List<LiveEquityOrder> _liveOrders = const [];
+  bool _liveOrdersVerified = false;
+  bool _reconciling = false;
+  String? _reconcileMessage;
+
+  bool get _liveExecutable {
+    final live = _capability;
+    return live != null && live.executionEnabled &&
+        live.orderRouteImplemented && live.blockers.isEmpty;
+  }
+
+  /// Orders the server has not yet proven against the broker order book.
+  List<LiveEquityOrder> get _unresolved => [
+        for (final order in _liveOrders)
+          if (order.status.needsReconciliation) order,
+      ];
+
+  /// While LIVE dispatch is executable, a new order is allowed only with
+  /// verified history that contains no unresolved order. Unverified history
+  /// blocks too: an unknown history is never treated as an empty one.
+  bool get _liveGateBlocked => widget.mode == 'LIVE' && _liveExecutable &&
+      (!_liveOrdersVerified || _unresolved.isNotEmpty);
 
   @override
   void initState() {
     super.initState();
     _side = widget.side;
+    _product = widget.initialProduct == 'INTRADAY' ? 'INTRADAY' : 'DELIVERY';
     _stock = widget.initialInstrument;
     _paperEnabled = widget.wallet?.halted == false;
     if (_stock != null) {
       _verifyQuote();
+    }
+    if (widget.mode == 'LIVE') {
+      _loadLiveOrders();
+    }
+  }
+
+  /// Reads the owner-scoped server history. A failure leaves history
+  /// unverified, which blocks new LIVE orders until a later read succeeds.
+  Future<void> _loadLiveOrders() async {
+    final repo = widget.execution;
+    if (widget.mode != 'LIVE' || repo == null) return;
+    try {
+      final orders = await repo.listLiveEquityOrders(widget.roomId);
+      if (!mounted) return;
+      setState(() {
+        _liveOrders = orders;
+        _liveOrdersVerified = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _liveOrdersVerified = false);
+    }
+  }
+
+  /// Asks the server to reconcile one order with the broker's order book.
+  /// The result is accepted only as the server reports it. Unresolved stays
+  /// unresolved, and nothing here can place an order.
+  Future<void> _reconcile(LiveEquityOrder order) async {
+    final repo = widget.execution;
+    if (_reconciling || repo == null) return;
+    setState(() { _reconciling = true; _reconcileMessage = null; });
+    try {
+      final updated =
+          await repo.reconcileLiveEquityOrder(widget.roomId, order.id);
+      if (updated.id != order.id) {
+        throw const FormatException('Unexpected reconcile response');
+      }
+      if (!mounted) return;
+      setState(() {
+        _liveOrders = [
+          for (final o in _liveOrders) o.id == updated.id ? updated : o,
+        ];
+        _reconcileMessage = updated.status.needsReconciliation
+            ? 'Still unresolved. The broker has not confirmed this order yet.'
+            : _statusText(updated);
+        if (_unresolved.isEmpty) _pendingKey = null;
+      });
+      await widget.onChanged();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _reconcileMessage =
+          'Reconciliation could not be verified. Orders stay blocked.');
+    } finally {
+      if (mounted) setState(() => _reconciling = false);
     }
   }
 
@@ -68,10 +169,10 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     super.dispose();
   }
 
-  String _key() {
+  static String _key() {
     final random = Random.secure();
     final bytes = List.generate(16, (_) => random.nextInt(256));
-    return '${widget.mode.toLowerCase()}_${bytes.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
+    return 'paper_${bytes.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
   }
 
   void _invalidate() {
@@ -206,6 +307,11 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   }
 
   Future<void> _place() async {
+    if (_liveGateBlocked) {
+      setState(() => _error = 'Reconcile unresolved LIVE orders, and wait for the '
+          'order history to verify, before placing another order.');
+      return;
+    }
     if (_busy || _unknown || !_valid()) {
       setState(() => _error = 'Select a verified stock, quantity and limit price.');
       return;
@@ -216,7 +322,6 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     final price = num.parse(limitPrice);
     setState(() { _busy = true; _error = null; });
     var requestSent = false;
-    String? liveOrderState;
     try {
       if (widget.mode == 'PAPER') {
         if (!_paperEnabled || widget.paper == null || widget.wallet == null) {
@@ -257,62 +362,62 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           throw const FormatException('Unexpected Paper order receipt');
         }
       } else {
-        final capability = widget.liveEquityCapability;
-        final liveBlockers = capability?.blockers ?? const <String>['READINESS_UNVERIFIED'];
-        if (capability?.executionEnabled != true) {
-          setState(() => _error = liveBlockers.isEmpty
-            ? 'LIVE dispatch is disabled or readiness could not be verified.'
-            : 'LIVE dispatch blocked: ${liveBlockers.map((item) => item.replaceAll('_', ' ')).join(' · ')}');
-          return;
-        }
-        final execution = widget.execution;
-        if (execution == null) {
+        if (widget.execution == null) {
           throw StateError('LIVE execution service unavailable');
         }
-        final preview = await execution.preflight(
+        final live = _capability;
+        // Executable only when the server says so on BOTH surfaces. The client
+        // never infers executability from its own state.
+        final executable = live != null && live.executionEnabled &&
+            live.orderRouteImplemented && live.blockers.isEmpty;
+        final preview = await widget.execution!.preflight(
           roomId: widget.roomId,
           instrumentId: stock.id,
           side: _side,
           quantity: quantity,
           limitPrice: price,
         );
+        final previewBlockers =
+            preview is Map<String, dynamic> ? preview['blockers'] : null;
         if (preview is! Map<String, dynamic> ||
             preview['roomId'] != widget.roomId ||
             preview['mode'] != 'LIVE' ||
             preview['instrumentId'] != stock.id ||
-            preview['executable'] != true ||
-            preview['blockers'] is! List ||
-            (preview['blockers'] as List).any((item) => item is! String)) {
+            previewBlockers is! List ||
+            (executable
+                ? preview['executable'] != true || previewBlockers.isNotEmpty
+                : preview['executable'] != false || previewBlockers.isEmpty)) {
           throw const FormatException('Unverified LIVE preflight');
         }
-        final blockers = (preview['blockers'] as List).cast<String>();
-        if (blockers.isNotEmpty) {
-          setState(() => _error =
-            'Server preflight blocked: ${blockers.map((item) => item.replaceAll('_', ' ')).join(' · ')}');
+        if (executable) {
+          await _submitLiveEquity(stock, quantity, price, limitPrice);
           return;
+        }
+        if (widget.intents == null) {
+          throw StateError('LIVE intent service unavailable');
         }
         if (!mounted) return;
         final approved = await _confirm(
-          'Broker: ${capability?.selectedBroker ?? 'unverified'}\n'
-          '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice · INTRADAY LIMIT DAY.\n\n'
-          'This sends one real-money order to your selected broker if the server rechecks pass. '
-          'No stop-loss or target order is attached. Review the order state in LIVE Orders; '
-          'do not resubmit if the result is unknown.',
-          'Submit LIVE order',
+          '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice.\n\n'
+          'This saves a PRECHECK_BLOCKED intent only. It does NOT place '
+          'an order with Angel One, Upstox or the exchange.',
+          'Save blocked intent',
         );
         if (!approved) return;
-        final key = _pendingKey ??= _key();
+        final key = _pendingKey ??=
+            HttpCustomerTradeIntentRepository.newKey();
         requestSent = true;
-        final order = await execution.submitLiveOrder(
+        final saved = await widget.intents!.create(
           roomId: widget.roomId, idempotencyKey: key,
           instrumentId: stock.id, side: _side,
-          quantity: quantity, limitPrice: price,
+          quantity: quantity, productType: _product,
+          limitPrice: limitPrice,
         );
-        if (order.roomId != widget.roomId || order.instrumentId != stock.id ||
-            order.side != _side || order.quantity != quantity) {
-          throw const FormatException('Unexpected LIVE order receipt');
+        if (saved.roomId != widget.roomId || saved.mode != 'LIVE' ||
+            saved.state != 'PRECHECK_BLOCKED' ||
+            saved.instrumentId != stock.id) {
+          throw const FormatException('Unexpected LIVE intent receipt');
         }
-        liveOrderState = order.state;
       }
       if (!mounted) return;
       _pendingKey = null;
@@ -321,7 +426,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(widget.mode == 'PAPER'
           ? 'Virtual Paper fill confirmed. No brokerage order placed.'
-          : 'LIVE order recorded: ${liveOrderState ?? 'state unavailable'}.'),
+          : 'LIVE intent saved as blocked. No brokerage order placed.'),
       ));
       Navigator.of(context).pop();
     } catch (_) {
@@ -339,13 +444,96 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     }
   }
 
+  /// Server-executable LIVE cash-equity submission. Requires explicit final
+  /// confirmation for this one order. One request, no retry. A transport error
+  /// or ambiguous reply is UNKNOWN and blocks further orders until reconciled.
+  /// A definite server 4xx means nothing was placed.
+  Future<void> _submitLiveEquity(InstrumentRecord stock, int quantity,
+      num price, String limitPrice) async {
+    final approved = await _confirm(
+      'LIVE ORDER · REAL MONEY · ${_capability?.selectedBroker ?? 'broker'}\n'
+      '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice · intraday · limit · day.\n\n'
+      'This sends a real order to your broker after server checks. '
+      'MintTick cannot cancel it from this screen.',
+      'Submit LIVE order',
+    );
+    if (!approved || !mounted) return;
+    final key = _pendingKey ??= HttpCustomerTradeIntentRepository.newKey();
+    var requestSent = false;
+    setState(() { _busy = true; _error = null; _outcome = null; });
+    try {
+      requestSent = true;
+      final order = await widget.execution!.submitLiveEquityOrder(
+        roomId: widget.roomId,
+        idempotencyKey: key,
+        instrumentId: stock.id,
+        side: _side,
+        quantity: quantity,
+        limitPrice: price,
+      );
+      if (order.roomId != widget.roomId || order.instrumentId != stock.id ||
+          order.side != _side) {
+        throw const FormatException('Unexpected LIVE order receipt');
+      }
+      if (!mounted) return;
+      setState(() {
+        _outcome = _statusText(order);
+        _liveOrders = [
+          order,
+          for (final o in _liveOrders) if (o.id != order.id) o,
+        ];
+        if (order.status.needsReconciliation) {
+          _reconcileMessage = 'Unresolved. Reconcile before placing another order.';
+        } else {
+          _pendingKey = null;
+        }
+      });
+      await widget.onChanged();
+    } catch (error) {
+      if (!mounted) return;
+      final definiteRejection = error is ApiHttpFailure &&
+          error.statusCode != null &&
+          error.statusCode! >= 400 && error.statusCode! < 500;
+      setState(() {
+        if (definiteRejection) {
+          _pendingKey = null;
+          _error = 'Order rejected by the server. Nothing was placed.';
+        } else {
+          _error = requestSent
+              ? 'Order outcome UNKNOWN. The server is checking its record. '
+                  'Reconcile before placing another order.'
+              : 'Order could not be submitted. Check stock, quote and price.';
+        }
+      });
+      // After a dispatch attempt, the server's own record decides whether an
+      // order is pending. Re-read it rather than trusting the local outcome.
+      if (requestSent && !definiteRejection) {
+        await _loadLiveOrders();
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Wording derived only from the server's own order state.
+  static String _statusText(LiveEquityOrder order) => switch (order.status) {
+        LiveEquityOrderStatus.acknowledged =>
+          'Accepted by broker · not yet filled.',
+        LiveEquityOrderStatus.partiallyFilled =>
+          'Partially filled · ${order.filledQuantity} of ${order.quantity}.',
+        LiveEquityOrderStatus.filled =>
+          'Filled · ${order.filledQuantity} of ${order.quantity}.',
+        LiveEquityOrderStatus.rejected => 'Rejected by broker.',
+        LiveEquityOrderStatus.cancelled => 'Cancelled.',
+        _ => 'Outcome unknown · reconciliation required.',
+      };
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     final isPaper = widget.mode == 'PAPER';
-    final liveReady = widget.liveEquityCapability?.executionEnabled == true;
-    final liveBlockers = widget.liveEquityCapability?.blockers ?? const <String>[];
+    final isLiveTicket = widget.mode == 'LIVE';
     return SafeArea(
       top: false,
       child: Padding(
@@ -356,7 +544,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min, children: [
-              Text(isPaper ? 'Paper order ticket' : 'Live intraday order ticket',
+              Text(isPaper ? 'Paper order ticket' : 'Live order preparation',
                 style: type.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 13),
               Row(children: [
@@ -409,12 +597,21 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                           child: Text('Cash equity'),
                         ),
                       )
-                    : const SizedBox(
-                        height: 48,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('Intraday · Day limit'),
-                        ),
+                    : DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: _product,
+                        items: const [
+                          DropdownMenuItem(value: 'DELIVERY', child: Text('Delivery')),
+                          DropdownMenuItem(value: 'INTRADAY', child: Text('Intraday')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _product = value;
+                              _invalidate();
+                            });
+                          }
+                        },
                       ),
                 )),
               ]),
@@ -436,6 +633,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                     onChanged: (_) => setState(_invalidate)),
                 )),
               ]),
+              const _TicketValue('Order type', 'Limit'),
               _TicketValue('Price source', _quote == null
                 ? 'Unavailable' : _quote!.status == 'LIVE'
                   ? 'LIVE · ₹${_quote!.ltp}'
@@ -449,12 +647,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 child: Text(isPaper
                   ? 'Virtual orders only. The server independently checks a fresh '
                     'broker tick, exchange hours and available cash.'
-                  : liveReady
-                    ? 'Server preflight and one owner confirmation are required. '
-                      'Stop/target exits are not attached.'
-                    : liveBlockers.isEmpty
-                      ? 'LIVE dispatch is disabled or readiness could not be verified.'
-                      : 'LIVE dispatch blocked: ${liveBlockers.map((item) => item.replaceAll('_', ' ')).join(' · ')}',
+                  : 'No real-money execution. The server can save only a blocked '
+                    'LIVE intent until separate authorization gates are active.',
                   style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
               ),
               if (isPaper && !_paperEnabled) ...[
@@ -466,9 +660,33 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
               ],
               if (_busy && !_awaitingConfirmation)
                 const LinearProgressIndicator(minHeight: 2),
+              if (isLiveTicket && _unresolved.isNotEmpty)
+                _UnresolvedOrders(
+                  orders: _unresolved,
+                  reconciling: _reconciling,
+                  message: _reconcileMessage,
+                  onReconcile: _reconcile,
+                ),
+              // The server's result of a reconcile stays visible after the banner
+              // clears, so the user sees that the order was resolved.
+              if (isLiveTicket && _unresolved.isEmpty && _reconcileMessage != null)
+                Padding(padding: const EdgeInsets.only(top: 9),
+                  child: Text(_reconcileMessage!,
+                    key: const ValueKey('room-live-reconcile-message'),
+                    style: type.bodySmall)),
+              if (isLiveTicket && _liveExecutable && !_liveOrdersVerified)
+                Padding(padding: const EdgeInsets.only(top: 9),
+                  child: Text('LIVE order history could not be verified. '
+                      'New orders are blocked until it loads.',
+                    key: const ValueKey('room-live-history-unverified'),
+                    style: type.bodySmall?.copyWith(color: colors.error))),
+              if (_outcome != null) Padding(padding: const EdgeInsets.only(top: 7),
+                child: Text(_outcome!, key: const ValueKey('room-order-outcome'),
+                  style: type.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 7),
                 child: Text(_error!, key: const ValueKey('room-order-error'),
-                  style: type.bodySmall?.copyWith(color: colors.error))),
+                  style: type.bodySmall?.copyWith(
+                  color: colors.error))),
               const SizedBox(height: 13),
               Row(children: [
                 Expanded(child: OutlinedButton(
@@ -477,9 +695,9 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 const SizedBox(width: 9),
                 Expanded(child: FilledButton(
                   key: const ValueKey('room-ticket-review'),
-                  onPressed: _busy || _unknown || !_valid() ||
+                  onPressed: _busy || _unknown || _liveGateBlocked || !_valid() ||
                     (isPaper && !_paperEnabled) ? null : _place,
-                  child: Text(isPaper ? 'Review Paper order' : 'Review LIVE order'))),
+                  child: Text(isPaper ? 'Review Paper order' : 'Validate intent'))),
               ]),
             ]),
           ),
@@ -527,6 +745,57 @@ class _SideButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       child: Text(side, style: const TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Server-recorded LIVE orders the broker has not yet confirmed. Shown on every
+/// open of the ticket until the server reports each one resolved.
+class _UnresolvedOrders extends StatelessWidget {
+  const _UnresolvedOrders({required this.orders, required this.reconciling,
+    required this.message, required this.onReconcile});
+  final List<LiveEquityOrder> orders;
+  final bool reconciling;
+  final String? message;
+  final ValueChanged<LiveEquityOrder> onReconcile;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    return Container(
+      key: const ValueKey('room-live-unresolved'),
+      margin: const EdgeInsets.only(top: 9),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.errorContainer.withValues(alpha: 0.35),
+        border: Border.all(color: colors.error),
+        borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('UNRESOLVED LIVE ORDER · RECONCILE FIRST',
+          style: type.labelMedium?.copyWith(
+            color: colors.error, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text('The broker has not confirmed these orders. New LIVE orders stay '
+            'blocked until the server confirms each one.',
+          style: type.bodySmall),
+        for (final order in orders) ...[
+          const SizedBox(height: 6),
+          Row(children: [
+            Expanded(child: Text(
+              '${order.side} ${order.quantity} ${order.tradingSymbol} · '
+              '${order.status.name.toUpperCase()}',
+              style: type.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
+            TextButton(
+              key: ValueKey('room-live-reconcile-${order.id}'),
+              onPressed: reconciling ? null : () => onReconcile(order),
+              child: const Text('Reconcile')),
+          ]),
+        ],
+        if (message != null) Text(message!,
+          key: const ValueKey('room-live-reconcile-message'),
+          style: type.bodySmall),
+      ]),
     );
   }
 }
