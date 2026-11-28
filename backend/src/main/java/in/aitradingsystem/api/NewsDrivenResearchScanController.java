@@ -23,6 +23,12 @@ public class NewsDrivenResearchScanController {
         this.service = service;
     }
 
+    @GetMapping("/{id}/decisions")
+    public ResponseEntity<List<NewsDrivenResearchScanService.NewsDrivenDecisionView>> decisions(
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(service.decisions(id));
+    }
+
     @GetMapping("/{id}/candidates")
     public ResponseEntity<List<NewsDrivenResearchScanService.NewsDrivenCandidateView>> candidates(
             @PathVariable UUID id) {

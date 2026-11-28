@@ -264,11 +264,39 @@ class NewsDrivenMindCandidate {
   }
 }
 
+class NewsDrivenMindDecision {
+  const NewsDrivenMindDecision({required this.instrumentId, required this.symbol,
+    required this.outcome, required this.reasonCode, required this.dataCutoffAt});
+  final int instrumentId;
+  final String symbol, outcome, reasonCode;
+  final DateTime? dataCutoffAt;
+
+  factory NewsDrivenMindDecision.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['instrumentId'] is! int ||
+        raw['tradingSymbol'] is! String || raw['outcome'] is! String ||
+        raw['reasonCode'] is! String) {
+      throw const FormatException('Invalid news scan decision');
+    }
+    final cutoffRaw = raw['dataCutoffAt'];
+    final cutoff = cutoffRaw == null ? null : DateTime.tryParse(cutoffRaw.toString());
+    if (cutoffRaw != null && cutoff == null) {
+      throw const FormatException('Invalid news scan decision cutoff');
+    }
+    if (!const {'CANDIDATE', 'NO_SIGNAL', 'NOT_EVALUATED'}.contains(raw['outcome'])) {
+      throw const FormatException('Invalid news scan decision outcome');
+    }
+    return NewsDrivenMindDecision(instrumentId: raw['instrumentId'] as int,
+      symbol: raw['tradingSymbol'] as String, outcome: raw['outcome'] as String,
+      reasonCode: raw['reasonCode'] as String, dataCutoffAt: cutoff?.toUtc());
+  }
+}
+
 abstract interface class MarketNewsRepository {
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol});
   Future<List<MarketNewsSource>> sources();
   Future<NewsDrivenMindScan> runNewsDrivenScan({String interval = 'FIVE_MINUTE', int limit = 100});
   Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId);
+  Future<List<NewsDrivenMindDecision>> newsDrivenDecisions(String runId);
 }
 
 class MarketNewsSource {
@@ -340,6 +368,26 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
         query: {'interval': interval, 'limit': '$limit'},
         timeout: const Duration(seconds: 90));
     return NewsDrivenMindScan.fromJson(response);
+  }
+
+  @override
+  Future<List<NewsDrivenMindDecision>> newsDrivenDecisions(String runId) async {
+    if (runId.length != 36 || !RegExp(r'^[0-9a-fA-F-]{36}
+    if (runId.length != 36 ||
+        !RegExp(r'^[0-9a-fA-F-]{36}').hasMatch(runId)) {
+      throw ArgumentError('Invalid news scan id');
+    }
+    final response = await api.getJson('/api/research/news-driven-scans/$runId/candidates');
+    if (response is! List) throw const FormatException('Invalid news-driven candidate list');
+    return List.unmodifiable(response.map(NewsDrivenMindCandidate.fromJson));
+  }
+}
+).hasMatch(runId)) {
+      throw ArgumentError('Invalid news scan id');
+    }
+    final response = await api.getJson('/api/research/news-driven-scans/$runId/decisions');
+    if (response is! List) throw const FormatException('Invalid news-driven decision list');
+    return List.unmodifiable(response.map(NewsDrivenMindDecision.fromJson));
   }
 
   @override

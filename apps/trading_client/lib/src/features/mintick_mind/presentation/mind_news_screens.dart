@@ -209,14 +209,17 @@ extension _MindNewsScreens on _MindWorkspaceState {
       _newsScanError = null;
       _newsScan = null;
       _newsScanCandidates = const [];
+      _newsScanDecisions = const [];
     });
     try {
       final scan = await repository.runNewsDrivenScan(limit: 20);
       final candidates = await repository.newsDrivenCandidates(scan.id);
+      final decisions = await repository.newsDrivenDecisions(scan.id);
       if (!mounted) return;
       _updateMind(() {
         _newsScan = scan;
         _newsScanCandidates = candidates;
+        _newsScanDecisions = decisions;
         _newsScanRunning = false;
       });
     } catch (_) {
@@ -269,6 +272,34 @@ extension _MindNewsScreens on _MindWorkspaceState {
             const Padding(padding: EdgeInsets.only(top: 5),
               child: Text('No candidates passed the evidence and market-data gates.',
                   style: TextStyle(color: MindPalette.muted, fontSize: 11))),
+          if (_newsScanDecisions.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(top: 8), child: Container(
+              decoration: BoxDecoration(color: MindPalette.card,
+                borderRadius: BorderRadius.circular(9), border: Border.all(color: MindPalette.border)),
+              child: ExpansionTile(
+                key: const ValueKey('mind-news-scan-decisions'),
+                tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                title: Text('Why each symbol passed or stopped · ${_newsScanDecisions.length}',
+                    style: const TextStyle(color: MindPalette.text, fontSize: 11, fontWeight: FontWeight.w700)),
+                subtitle: const Text('Recorded decision and market-data gate for every scanned symbol',
+                    style: TextStyle(color: MindPalette.muted, fontSize: 9)),
+                children: [for (final decision in _newsScanDecisions)
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: Row(children: [
+                      Expanded(child: Text(decision.symbol, style: const TextStyle(
+                          color: MindPalette.text, fontSize: 10, fontWeight: FontWeight.w700))),
+                      Text(decision.outcome.replaceAll('_', ' '), style: TextStyle(
+                          color: decision.outcome == 'CANDIDATE' ? MindPalette.mint :
+                              decision.outcome == 'NOT_EVALUATED' ? MindPalette.yellow : MindPalette.muted,
+                          fontSize: 9, fontWeight: FontWeight.w800)),
+                      const SizedBox(width: 7),
+                      Flexible(child: Text(decision.reasonCode.replaceAll('_', ' ').toLowerCase(),
+                          textAlign: TextAlign.right, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: MindPalette.muted, fontSize: 9))),
+                    ])),
+                ],
+              ),
+            )),
           for (final candidate in _newsScanCandidates.take(5))
             Padding(padding: const EdgeInsets.only(top: 7),
               child: Container(

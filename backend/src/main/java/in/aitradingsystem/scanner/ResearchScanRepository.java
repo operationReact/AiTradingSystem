@@ -283,6 +283,28 @@ public class ResearchScanRepository {
                 instant(rs.getObject("data_cutoff_at", OffsetDateTime.class)), rs.getLong("id")), runId, limit);
     }
 
+    /** Bounded, per-instrument decision trail for a completed news-originated scan. */
+    public List<NewsDrivenScanDecision> newsDrivenDecisions(UUID runId, int limit) {
+        requireRun(runId);
+        if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be 1..100");
+        return jdbc.query("""
+                SELECT o.instrument_id, COALESCE(i.trading_symbol, 'INSTRUMENT-' || o.instrument_id) AS trading_symbol,
+                       o.outcome, o.reason_code, o.data_cutoff_at
+                  FROM research_scan_outcome o
+                  LEFT JOIN instrument_master i ON i.instrument_id = o.instrument_id AND i.active = TRUE
+                 WHERE o.scan_run_id = ? AND o.strategy = ?
+                 ORDER BY CASE o.outcome WHEN 'CANDIDATE' THEN 0 WHEN 'NO_SIGNAL' THEN 1 ELSE 2 END,
+                          COALESCE(i.trading_symbol, 'INSTRUMENT-' || o.instrument_id)
+                 LIMIT ?
+                """, (rs, row) -> new NewsDrivenScanDecision(
+                    rs.getLong("instrument_id"), rs.getString("trading_symbol"), rs.getString("outcome"),
+                    rs.getString("reason_code"), instant(rs.getObject("data_cutoff_at", OffsetDateTime.class))),
+                runId, NewsDrivenResearchScanService.STRATEGY, limit);
+    }
+
+    public record NewsDrivenScanDecision(long instrumentId, String tradingSymbol, String outcome,
+                                         String reasonCode, Instant dataCutoffAt) {}
+
     /**
      * Records one strategy outcome for one instrument in one run. Idempotent for a repeated
      * key; the table is append-only, so an existing outcome is never rewritten.

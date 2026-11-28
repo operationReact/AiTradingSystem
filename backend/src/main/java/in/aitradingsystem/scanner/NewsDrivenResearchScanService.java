@@ -111,6 +111,8 @@ public class NewsDrivenResearchScanService {
                     diagnostics++;
                     scans.saveDiagnostic(runId, instrument.id(), STRATEGY, "ERROR", "NEWS_SCAN_FAILED",
                         "News-driven scan failed for this instrument; remaining instruments continued");
+                    scans.saveOutcome(runId, instrument.id(), STRATEGY, "NOT_EVALUATED",
+                        "NEWS_SCAN_FAILED", null);
                     scanned++;
                 }
             }

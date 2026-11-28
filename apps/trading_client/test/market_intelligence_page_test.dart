@@ -23,6 +23,9 @@ class _FixtureNews implements MarketNewsRepository {
   Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId) async => const [];
 
   @override
+  Future<List<NewsDrivenMindDecision>> newsDrivenDecisions(String runId) async => const [];
+
+  @override
   Future<MarketNewsPage> articles({required int page, int size = 20, String? symbol}) async {
     calls++;
     lastSymbol = symbol;
