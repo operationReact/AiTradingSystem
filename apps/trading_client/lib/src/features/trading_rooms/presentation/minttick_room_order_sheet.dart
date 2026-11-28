@@ -279,6 +279,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
             preview['roomId'] != widget.roomId ||
             preview['mode'] != 'LIVE' ||
             preview['instrumentId'] != stock.id ||
+            preview['executable'] != true ||
             preview['blockers'] is! List ||
             (preview['blockers'] as List).any((item) => item is! String)) {
           throw const FormatException('Unverified LIVE preflight');
