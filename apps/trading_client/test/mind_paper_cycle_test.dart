@@ -73,6 +73,7 @@ void main() {
   test('LIVE proposal decoder requires the exact strategy order and expiry contract', () {
     final proposal = MindLiveStrategyProposal.parse({
       'id': _room,
+      'selectedBroker': 'ANGEL_ONE',
       'strategyCode': 'OPENING_RANGE_BREAKOUT_V1',
       'tradingSymbol': 'MINDA-EQ',
       'side': 'BUY',
@@ -86,7 +87,8 @@ void main() {
     expect(proposal.strategyCode, 'OPENING_RANGE_BREAKOUT_V1');
     expect(proposal.quantity, 37);
     expect(() => MindLiveStrategyProposal.parse({
-      'id': _room, 'strategyCode': 'OPENING_RANGE_BREAKOUT_V1',
+      'id': _room, 'selectedBroker': 'ANGEL_ONE',
+      'strategyCode': 'OPENING_RANGE_BREAKOUT_V1',
       'tradingSymbol': 'MINDA-EQ', 'side': 'SELL', 'quantity': 37,
       'limitPrice': 105.85, 'stopPrice': 105.27, 'targetPrice': 106.86,
       'expiresAt': 'not-a-date', 'status': 'PENDING',
