@@ -364,7 +364,7 @@ public class CustomerExecutionReadinessService {
                 instrument.tradingSymbol(), instrument.exchange(), side,
                 quantity, "LIMIT", "DAY", limitPrice, notional, availableFunds, budget,
                 todayRoomBuyNotional, cashBalanceVerified, roomExposureVerified,
-                todayRealisedLoss, evaluatedAt, false, List.copyOf(blockers));
+                todayRealisedLoss, evaluatedAt, blockers.isEmpty(), List.copyOf(blockers));
     }
 
     /**
