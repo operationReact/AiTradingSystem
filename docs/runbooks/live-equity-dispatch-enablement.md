@@ -13,7 +13,7 @@ Purpose: confirm the broker field names used by the parsers in
 Requirements: a broker session for an account the operator is authorized to use.
 Do not paste credentials into chat or commit them.
 
-1. Sign in to the Mintick customer app with the authorized account and connect the broker.
+1. Sign in to the MintTick customer app with the authorized account and connect the broker.
 2. Call the existing read-only customer endpoints (no order endpoint is involved):
    - `GET /api/customer/brokers/angel-one/positions` and `GET /api/customer/brokers/angel-one/orders`
    - Upstox positions and order-history reads through the existing Upstox customer endpoints.
