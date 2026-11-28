@@ -69,6 +69,10 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
 class _FakeExecution extends Fake implements HttpCustomerExecutionRepository {
   int submits = 0;
   @override
+  Future<List<LiveEquityOrder>> listLiveEquityOrders(String roomId) async =>
+      const [];
+
+  @override
   Future<Object?> preflight({
     required String roomId,
     required int instrumentId,
@@ -233,12 +237,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-ticket-review')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('real-money order'), findsOneWidget);
+    expect(find.textContaining('LIVE ORDER · REAL MONEY'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('room-order-final-confirm')));
     await tester.pumpAndSettle();
     expect(execution.submits, 1);
     expect(refreshCalls, 1);
-    expect(find.textContaining('LIVE order recorded: ACKNOWLEDGED'), findsOneWidget);
+    expect(find.text('Accepted by broker · not yet filled.'), findsOneWidget);
   });
 
   testWidgets('blocked LIVE capability shows blocker and never submits',

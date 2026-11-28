@@ -684,7 +684,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 child: Text(_outcome!, key: const ValueKey('room-order-outcome'),
                   style: type.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 7),
-                child: Text(_error!, style: type.bodySmall?.copyWith(
+                child: Text(_error!, key: const ValueKey('room-order-error'),
+                  style: type.bodySmall?.copyWith(
                   color: colors.error))),
               const SizedBox(height: 13),
               Row(children: [
