@@ -17,6 +17,17 @@ The stored article result includes article-level sentiment, direction score, mod
 
 This is shadow research context. The strategy's candidate, score, risk, position size, replay result, and order path do not consume it. Current walk-forward/replay evaluators do not compare news-enabled and no-news variants. No strategy should be described as news-driven until that evaluation exists and passes out-of-time checks.
 
+## Product target: two independent signal paths
+
+MintTick Mind must support both paths:
+
+1. **Strategy-originated:** a technical/fundamental strategy produces a candidate, then Mind adds eligible point-in-time news as confirmation, caution, or context.
+2. **News-originated:** a material news event independently creates a directional research candidate, even when no existing technical strategy emitted one. That candidate can then be checked by the relevant strategies, market/liquidity rules, and risk controls.
+
+A news-originated candidate needs an explicit event thesis: verified affected issuer or instrument, event type, whether the information is new or already priced in, direction hypothesis, expected horizon, materiality, confidence, freshness, supporting evidence, and invalidation/uncertainty reasons. Positive wording alone must not imply a bullish candidate; results versus expectations, event scope, contradictory details, prior price reaction, and market context can reverse or neutralize the apparent tone.
+
+**Current gap:** the repository implements the strategy-originated annotation path only. `ResearchScanService` attaches news after a strategy has already emitted a candidate. There is no news-first candidate generator, and no strategy currently consumes news as a directional input. The second path is a product requirement and remains unimplemented; it must be built and validated as a separate research capability before it can affect paper or live orders.
+
 ## UI outcome contract
 
 The analyzer should show these separately:
