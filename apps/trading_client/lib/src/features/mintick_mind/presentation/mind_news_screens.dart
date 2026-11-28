@@ -401,9 +401,12 @@ extension _MindNewsScreens on _MindWorkspaceState {
       'MIXED' => 'Mixed tone',
       _ => 'Unknown tone',
     };
-    final uncertain = impact.ambiguity == true ||
-        impact.contradiction == true ||
-        impact.directionScore == null;
+    final uncertain = impact.ambiguity != false ||
+        impact.contradiction != false ||
+        impact.directionScore == null ||
+        impact.materiality == null ||
+        impact.confidence == null ||
+        impact.confidence! < 0.5;
     final color = uncertain ? MindPalette.yellow : MindPalette.mint;
     final direction = impact.directionScore == null
         ? 'direction not scored'
@@ -418,10 +421,16 @@ extension _MindNewsScreens on _MindWorkspaceState {
         ? 'horizon unknown'
         : impact.horizon!.replaceAll('_', ' ').toLowerCase();
     final flag = impact.contradiction == true
-        ? 'Conflicting evidence flagged'
+        ? 'Conflicting evidence · excluded from directional context'
         : impact.ambiguity == true
-            ? 'Ambiguous evidence flagged'
-            : null;
+            ? 'Ambiguous evidence · excluded from directional context'
+            : impact.contradiction == null || impact.ambiguity == null
+                ? 'Uncertainty flags unavailable · withheld from directional context'
+                : impact.confidence == null || impact.confidence! < 0.5
+                    ? 'Below 50% policy confidence · excluded from directional context'
+                    : impact.directionScore == null || impact.materiality == null
+                        ? 'Required direction/materiality missing · excluded from directional context'
+                        : null;
 
     return Container(
       width: double.infinity,
@@ -547,6 +556,8 @@ extension _MindNewsScreens on _MindWorkspaceState {
         children: [
           const MindSectionTitle(title: 'Stock mapping',
               icon: Icons.candlestick_chart_outlined),
+          const Text('Symbols identified by the article model; instrument mapping is checked separately before Mind context use.',
+              style: TextStyle(color: MindPalette.muted, fontSize: 10, height: 1.35)),
           for (final symbol in item.symbols)
             _newsDetailRow(symbol, '${item.impact} advisory context'),
           if (item.symbols.isEmpty)
