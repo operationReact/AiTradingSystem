@@ -211,17 +211,17 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
               ]),
               const SizedBox(height: 4),
               Text('$_strategyCode on stored broker candles → verified live quote → automatic risk '
-                  'sizing → existing PAPER engine. No broker order is ever placed.',
+                  'sizing → existing PAPER engine. LIVE submission is a separate owner-confirmed action with server-side gates.',
                   style: TextStyle(color: MindPalette.muted, fontSize: 11)),
               if (_strategyCode == 'OPENING_RANGE_BREAKOUT_V1') ...[
                 const SizedBox(height: 4),
-                const Text('Research candidate only. This cycle uses virtual funds and cannot enable LIVE orders.',
+                const Text('Research candidate only. A PAPER result can create a short-lived LIVE proposal but never authorizes or sends an order by itself.',
                     key: ValueKey('mind-orb-paper-only'),
                     style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
               ],
               if (_strategyCode == 'RSI_REVERSAL_V1') ...[
                 const SizedBox(height: 4),
-                const Text('Research candidate only; no strategy performance certification or LIVE order authority.',
+                const Text('Research candidate only; no strategy performance certification. Any LIVE proposal still needs explicit order confirmation and server approval.',
                     key: ValueKey('mind-rsi-paper-only'),
                     style: TextStyle(color: MindPalette.yellow, fontSize: 10.5)),
               ],
