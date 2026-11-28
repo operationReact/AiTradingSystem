@@ -26,6 +26,7 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     this.execution,
     this.intents,
     this.liveCapability,
+    this.liveEquityCapability,
     this.initialProduct = 'DELIVERY',
     super.key,
   });
@@ -35,6 +36,8 @@ class MintTickRoomOrderSheet extends StatefulWidget {
   /// ticket use the server's submit route; otherwise it keeps the blocked-intent
   /// path unchanged.
   final LiveEquityCapability? liveCapability;
+  /// Alias retained for workspace callers using the explicit capability name.
+  final LiveEquityCapability? liveEquityCapability;
   /// Default LIVE product type ('DELIVERY' or 'INTRADAY'); an Intraday room
   /// pre-selects INTRADAY. PAPER cash-equity fills ignore this.
   final String initialProduct;
@@ -52,6 +55,8 @@ class MintTickRoomOrderSheet extends StatefulWidget {
 }
 
 class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
+  LiveEquityCapability? get _capability =>
+      widget.liveCapability ?? widget.liveEquityCapability;
   late String _side;
   late String _product;
   late InstrumentRecord? _stock;
@@ -74,7 +79,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   String? _reconcileMessage;
 
   bool get _liveExecutable {
-    final live = widget.liveCapability;
+    final live = _capability;
     return live != null && live.executionEnabled &&
         live.orderRouteImplemented && live.blockers.isEmpty;
   }
@@ -360,7 +365,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
         if (widget.execution == null) {
           throw StateError('LIVE execution service unavailable');
         }
-        final live = widget.liveCapability;
+        final live = _capability;
         // Executable only when the server says so on BOTH surfaces. The client
         // never infers executability from its own state.
         final executable = live != null && live.executionEnabled &&
@@ -446,7 +451,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   Future<void> _submitLiveEquity(InstrumentRecord stock, int quantity,
       num price, String limitPrice) async {
     final approved = await _confirm(
-      'LIVE ORDER · REAL MONEY · ${widget.liveCapability?.selectedBroker ?? 'broker'}\n'
+      'LIVE ORDER · REAL MONEY · ${_capability?.selectedBroker ?? 'broker'}\n'
       '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice · intraday · limit · day.\n\n'
       'This sends a real order to your broker after server checks. '
       'MintTick cannot cancel it from this screen.',

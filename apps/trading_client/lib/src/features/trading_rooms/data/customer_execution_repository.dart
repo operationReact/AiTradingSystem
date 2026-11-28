@@ -129,6 +129,23 @@ class HttpCustomerExecutionRepository {
     return LiveEquityOrder.decode(raw);
   }
 
+  /// Compatibility name used by the LIVE order ticket and room history.
+  Future<LiveEquityOrder> submitLiveOrder({
+    required String roomId,
+    required String idempotencyKey,
+    required int instrumentId,
+    required String side,
+    required int quantity,
+    required num limitPrice,
+  }) => submitLiveEquityOrder(
+    roomId: roomId,
+    idempotencyKey: idempotencyKey,
+    instrumentId: instrumentId,
+    side: side,
+    quantity: quantity,
+    limitPrice: limitPrice,
+  );
+
   /// Reconciles one reserved order against the customer's own broker order
   /// book. Read-only with respect to trading: it never submits or retries.
   Future<LiveEquityOrder> reconcileLiveEquityOrder(
@@ -137,6 +154,11 @@ class HttpCustomerExecutionRepository {
       '/api/customer/trading-rooms/$roomId/live/equity/orders/$orderId/reconcile',
     ));
   }
+
+  Future<LiveEquityOrder> reconcileLiveOrder({
+    required String roomId,
+    required String orderId,
+  }) => reconcileLiveEquityOrder(roomId, orderId);
 
   /// The owner-scoped LIVE equity order history, as the server records it.
   /// Every element is decoded strictly; a single invalid row fails the whole
@@ -150,6 +172,9 @@ class HttpCustomerExecutionRepository {
     }
     return List.unmodifiable(raw.map(LiveEquityOrder.decode));
   }
+
+  Future<List<LiveEquityOrder>> liveOrders(String roomId) =>
+      listLiveEquityOrders(roomId);
 }
 
 /// Exact per-order consent phrase the server requires. Must match the backend
@@ -190,11 +215,14 @@ class LiveEquityOrder {
     required this.side,
     required this.quantity,
     required this.limitPrice,
-    required this.status,
+    LiveEquityOrderStatus? status,
+    String? state,
+    this.broker,
     required this.filledQuantity,
     this.brokerOrderId,
     this.outcomeCode,
-  });
+  }) : _providedStatus = status,
+       _serverState = state;
 
   final String id;
   final String roomId;
@@ -203,10 +231,27 @@ class LiveEquityOrder {
   final String side;
   final int quantity;
   final num limitPrice;
-  final LiveEquityOrderStatus status;
+  final LiveEquityOrderStatus? _providedStatus;
+  final String? _serverState;
+  final String? broker;
+  LiveEquityOrderStatus get status =>
+      _providedStatus ?? LiveEquityOrderStatus.parse(_serverState) ??
+          LiveEquityOrderStatus.unknown;
+  String get state => _serverState ?? switch (status) {
+        LiveEquityOrderStatus.submitting => 'SUBMITTING',
+        LiveEquityOrderStatus.unknown => 'UNKNOWN',
+        LiveEquityOrderStatus.acknowledged => 'ACKNOWLEDGED',
+        LiveEquityOrderStatus.partiallyFilled => 'PARTIALLY_FILLED',
+        LiveEquityOrderStatus.filled => 'FILLED',
+        LiveEquityOrderStatus.rejected => 'REJECTED',
+        LiveEquityOrderStatus.cancelled => 'CANCELLED',
+      };
   final int filledQuantity;
   final String? brokerOrderId;
   final String? outcomeCode;
+  bool get requiresReconciliation => status.needsReconciliation ||
+      status == LiveEquityOrderStatus.acknowledged ||
+      status == LiveEquityOrderStatus.partiallyFilled;
 
   factory LiveEquityOrder.decode(Object? raw) {
     if (raw is! Map<String, dynamic>) {
@@ -237,6 +282,7 @@ class LiveEquityOrder {
       id: id, roomId: roomId, instrumentId: instrumentId,
       tradingSymbol: symbol, side: side as String, quantity: quantity,
       limitPrice: limitPrice, status: status, filledQuantity: filled,
+      broker: raw['broker'] is String ? raw['broker'] as String : null,
       brokerOrderId: broker is String && broker.isNotEmpty ? broker : null,
       outcomeCode: code is String ? code : null,
     );

@@ -64,7 +64,7 @@ public class CustomerExecutionReadinessController {
     public record LiveBrokerSelectionRequest(
         @NotNull @Pattern(regexp = "ANGEL_ONE|UPSTOX") String broker) {}
 
-    /** Stock intraday LIVE route capability; informational and always fail-closed in this release. */
+    /** Stock intraday LIVE route exists; dispatch is separately gated by deployment and readiness. */
     public record LiveEquityCapability(UUID roomId, String selectedBroker,
             boolean brokerConnected, boolean orderRouteImplemented,
             boolean executionEnabled, List<String> blockers) {}
@@ -105,12 +105,9 @@ public class CustomerExecutionReadinessController {
     static LiveEquityCapability capability(UUID roomId,
             CustomerExecutionReadinessService.Readiness readiness, boolean dispatchEnabled) {
         var blockers = new java.util.ArrayList<>(readiness.blockers());
-        if (!dispatchEnabled) {
-            blockers.add("LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
-        }
         boolean executable = dispatchEnabled && readiness.executionEnabled() && blockers.isEmpty();
         return new LiveEquityCapability(roomId, readiness.selectedBroker(),
-            readiness.brokerConnected(), dispatchEnabled, executable, List.copyOf(blockers));
+            readiness.brokerConnected(), true, executable, List.copyOf(blockers));
     }
 
     /**
