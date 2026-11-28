@@ -284,7 +284,6 @@ class _MintTickRoomProductionWorkspaceState
         wallet: widget.wallet,
         paper: widget.paper,
         execution: widget.execution,
-        intents: widget.intents,
         liveEquityCapability: widget.liveEquityCapability,
         onChanged: _refresh,
         onInstrumentSelected: (item) {
