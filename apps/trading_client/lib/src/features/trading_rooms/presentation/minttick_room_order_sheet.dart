@@ -6,11 +6,10 @@ import '../data/customer_execution_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_room_repository.dart';
-import '../data/customer_trade_intent_repository.dart';
 import 'minttick_room_stock_picker.dart';
 
 /// The Buy/Sell bottom sheet matches the interactive MintTick HTML blueprint.
-/// PAPER submits only virtual fills. LIVE stores PRECHECK_BLOCKED intents only.
+/// PAPER submits virtual fills. LIVE submits only after server readiness, fresh preflight and owner confirmation.
 class MintTickRoomOrderSheet extends StatefulWidget {
   const MintTickRoomOrderSheet({
     required this.roomId,
@@ -23,7 +22,7 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     this.wallet,
     this.paper,
     this.execution,
-    this.intents,
+    this.liveEquityCapability,
     super.key,
   });
   final String roomId, mode, side;
@@ -32,7 +31,7 @@ class MintTickRoomOrderSheet extends StatefulWidget {
   final CustomerPaperWallet? wallet;
   final HttpCustomerPaperTradingRepository? paper;
   final HttpCustomerExecutionRepository? execution;
-  final HttpCustomerTradeIntentRepository? intents;
+  final LiveEquityCapability? liveEquityCapability;
   final Future<void> Function() onChanged;
   final ValueChanged<InstrumentRecord>? onInstrumentSelected;
 
@@ -42,7 +41,6 @@ class MintTickRoomOrderSheet extends StatefulWidget {
 
 class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   late String _side;
-  String _product = 'DELIVERY';
   late InstrumentRecord? _stock;
   final _qty = TextEditingController(text: '1');
   final _limit = TextEditingController();
@@ -70,10 +68,10 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     super.dispose();
   }
 
-  static String _key() {
+  String _key() {
     final random = Random.secure();
     final bytes = List.generate(16, (_) => random.nextInt(256));
-    return 'paper_${bytes.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
+    return '${widget.mode.toLowerCase()}_${bytes.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
   }
 
   void _invalidate() {
@@ -218,6 +216,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     final price = num.parse(limitPrice);
     setState(() { _busy = true; _error = null; });
     var requestSent = false;
+    String? liveOrderState;
     try {
       if (widget.mode == 'PAPER') {
         if (!_paperEnabled || widget.paper == null || widget.wallet == null) {
@@ -258,10 +257,19 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           throw const FormatException('Unexpected Paper order receipt');
         }
       } else {
-        if (widget.execution == null || widget.intents == null) {
-          throw StateError('LIVE intent service unavailable');
+        final capability = widget.liveEquityCapability;
+        final liveBlockers = capability?.blockers ?? const <String>['READINESS_UNVERIFIED'];
+        if (capability?.executionEnabled != true) {
+          setState(() => _error = liveBlockers.isEmpty
+            ? 'LIVE dispatch is disabled or readiness could not be verified.'
+            : 'LIVE dispatch blocked: ${liveBlockers.map((item) => item.replaceAll('_', ' ')).join(' · ')}');
+          return;
         }
-        final preview = await widget.execution!.preflight(
+        final execution = widget.execution;
+        if (execution == null) {
+          throw StateError('LIVE execution service unavailable');
+        }
+        final preview = await execution.preflight(
           roomId: widget.roomId,
           instrumentId: stock.id,
           side: _side,
@@ -272,33 +280,39 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
             preview['roomId'] != widget.roomId ||
             preview['mode'] != 'LIVE' ||
             preview['instrumentId'] != stock.id ||
-            preview['executable'] != false ||
+            preview['executable'] != true ||
             preview['blockers'] is! List ||
-            (preview['blockers'] as List).isEmpty) {
+            (preview['blockers'] as List).any((item) => item is! String)) {
           throw const FormatException('Unverified LIVE preflight');
+        }
+        final blockers = (preview['blockers'] as List).cast<String>();
+        if (blockers.isNotEmpty) {
+          setState(() => _error =
+            'Server preflight blocked: ${blockers.map((item) => item.replaceAll('_', ' ')).join(' · ')}');
+          return;
         }
         if (!mounted) return;
         final approved = await _confirm(
-          '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice.\n\n'
-          'This saves a PRECHECK_BLOCKED intent only. It does NOT place '
-          'an order with Angel One, Upstox or the exchange.',
-          'Save blocked intent',
+          'Broker: ${capability?.selectedBroker ?? 'unverified'}\n'
+          '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice · INTRADAY LIMIT DAY.\n\n'
+          'This sends one real-money order to your selected broker if the server rechecks pass. '
+          'No stop-loss or target order is attached. Review the order state in LIVE Orders; '
+          'do not resubmit if the result is unknown.',
+          'Submit LIVE order',
         );
         if (!approved) return;
-        final key = _pendingKey ??=
-            HttpCustomerTradeIntentRepository.newKey();
+        final key = _pendingKey ??= _key();
         requestSent = true;
-        final saved = await widget.intents!.create(
+        final order = await execution.submitLiveOrder(
           roomId: widget.roomId, idempotencyKey: key,
           instrumentId: stock.id, side: _side,
-          quantity: quantity, productType: _product,
-          limitPrice: limitPrice,
+          quantity: quantity, limitPrice: price,
         );
-        if (saved.roomId != widget.roomId || saved.mode != 'LIVE' ||
-            saved.state != 'PRECHECK_BLOCKED' ||
-            saved.instrumentId != stock.id) {
-          throw const FormatException('Unexpected LIVE intent receipt');
+        if (order.roomId != widget.roomId || order.instrumentId != stock.id ||
+            order.side != _side || order.quantity != quantity) {
+          throw const FormatException('Unexpected LIVE order receipt');
         }
+        liveOrderState = order.state;
       }
       if (!mounted) return;
       _pendingKey = null;
@@ -307,7 +321,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(widget.mode == 'PAPER'
           ? 'Virtual Paper fill confirmed. No brokerage order placed.'
-          : 'LIVE intent saved as blocked. No brokerage order placed.'),
+          : 'LIVE order recorded: ${liveOrderState ?? 'state unavailable'}.'),
       ));
       Navigator.of(context).pop();
     } catch (_) {
@@ -330,6 +344,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     final colors = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     final isPaper = widget.mode == 'PAPER';
+    final liveReady = widget.liveEquityCapability?.executionEnabled == true;
+    final liveBlockers = widget.liveEquityCapability?.blockers ?? const <String>[];
     return SafeArea(
       top: false,
       child: Padding(
@@ -340,7 +356,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min, children: [
-              Text(isPaper ? 'Paper order ticket' : 'Live order preparation',
+              Text(isPaper ? 'Paper order ticket' : 'Live intraday order ticket',
                 style: type.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 13),
               Row(children: [
@@ -393,21 +409,12 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                           child: Text('Cash equity'),
                         ),
                       )
-                    : DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        initialValue: _product,
-                        items: const [
-                          DropdownMenuItem(value: 'DELIVERY', child: Text('Delivery')),
-                          DropdownMenuItem(value: 'INTRADAY', child: Text('Intraday')),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              _product = value;
-                              _invalidate();
-                            });
-                          }
-                        },
+                    : const SizedBox(
+                        height: 48,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Intraday · Day limit'),
+                        ),
                       ),
                 )),
               ]),
@@ -442,8 +449,12 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 child: Text(isPaper
                   ? 'Virtual orders only. The server independently checks a fresh '
                     'broker tick, exchange hours and available cash.'
-                  : 'No real-money execution. The server can save only a blocked '
-                    'LIVE intent until separate authorization gates are active.',
+                  : liveReady
+                    ? 'Server preflight and one owner confirmation are required. '
+                      'Stop/target exits are not attached.'
+                    : liveBlockers.isEmpty
+                      ? 'LIVE dispatch is disabled or readiness could not be verified.'
+                      : 'LIVE dispatch blocked: ${liveBlockers.map((item) => item.replaceAll('_', ' ')).join(' · ')}',
                   style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
               ),
               if (isPaper && !_paperEnabled) ...[
@@ -456,8 +467,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
               if (_busy && !_awaitingConfirmation)
                 const LinearProgressIndicator(minHeight: 2),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 7),
-                child: Text(_error!, style: type.bodySmall?.copyWith(
-                  color: colors.error))),
+                child: Text(_error!, key: const ValueKey('room-order-error'),
+                  style: type.bodySmall?.copyWith(color: colors.error))),
               const SizedBox(height: 13),
               Row(children: [
                 Expanded(child: OutlinedButton(
@@ -468,7 +479,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                   key: const ValueKey('room-ticket-review'),
                   onPressed: _busy || _unknown || !_valid() ||
                     (isPaper && !_paperEnabled) ? null : _place,
-                  child: Text(isPaper ? 'Review Paper order' : 'Validate intent'))),
+                  child: Text(isPaper ? 'Review Paper order' : 'Review LIVE order'))),
               ]),
             ]),
           ),
