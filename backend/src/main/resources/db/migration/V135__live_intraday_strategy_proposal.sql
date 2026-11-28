@@ -6,6 +6,7 @@ CREATE TABLE customer_live_equity_strategy_proposal (
     user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE RESTRICT,
     live_room_id UUID NOT NULL,
     live_mode VARCHAR(8) NOT NULL DEFAULT 'LIVE' CHECK (live_mode = 'LIVE'),
+    selected_broker VARCHAR(12) NOT NULL CHECK (selected_broker IN ('ANGEL_ONE','UPSTOX')),
     source_paper_room_id UUID NOT NULL,
     source_cycle_id UUID NOT NULL REFERENCES mind_paper_cycle(id) ON DELETE RESTRICT,
     strategy_code VARCHAR(64) NOT NULL CHECK (strategy_code IN (
