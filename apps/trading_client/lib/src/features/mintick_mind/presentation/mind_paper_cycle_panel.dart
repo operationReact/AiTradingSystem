@@ -98,9 +98,10 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
       setState(() => _liveMessage = 'This PAPER cycle is not eligible for a LIVE proposal.');
       return;
     }
+    final liveRepository = repository as MindLiveStrategyProposalRepository;
     setState(() { _liveActionBusy = true; _liveMessage = null; });
     try {
-      final liveRooms = await repository.liveIntradayRooms();
+      final liveRooms = await liveRepository.liveIntradayRooms();
       if (!mounted) return;
       if (liveRooms.isEmpty) {
         setState(() => _liveMessage = 'Create an intraday LIVE equity room first.');
@@ -108,7 +109,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
       }
       final liveRoom = await _chooseLiveRoom(liveRooms);
       if (!mounted || liveRoom == null) return;
-      final proposal = await repository.createLiveProposal(
+      final proposal = await liveRepository.createLiveProposal(
         liveRoomId: liveRoom.id,
         sourcePaperRoomId: _roomId!,
         sourceCycleId: cycle.id,
@@ -120,7 +121,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
       }
       final confirmed = await _confirmLiveProposal(proposal, liveRoom.name);
       if (!mounted || confirmed != true) return;
-      final response = await repository.submitLiveProposal(
+      final response = await liveRepository.submitLiveProposal(
         liveRoomId: liveRoom.id, proposalId: proposal.id);
       if (!mounted) return;
       final order = response is Map<String, dynamic> ? response['order'] : null;
