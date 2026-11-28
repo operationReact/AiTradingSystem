@@ -43,6 +43,7 @@ public class CustomerExecutionReadinessService {
     private final InstrumentMasterService instruments;
     private final IndianCashMarketCalendar cashCalendar;
     private final LiveEquityExecutionPolicy policy;
+    private final LiveEquityRiskLimits configuredRiskLimits;
 
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
@@ -65,12 +66,21 @@ public class CustomerExecutionReadinessService {
             LiveEquityExecutionPolicy.DISABLED);
     }
 
-    @Autowired
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
             CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
             TradingExecutionAuthority authority, IndianCashMarketCalendar cashCalendar,
             LiveEquityExecutionPolicy policy) {
+        this(jdbc, broker, upstox, instruments, authority, cashCalendar, policy,
+            LiveEquityRiskLimits.disabled());
+    }
+
+    @Autowired
+    public CustomerExecutionReadinessService(
+            JdbcClient jdbc, CustomerAngelOneSessionService broker,
+            CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
+            TradingExecutionAuthority authority, IndianCashMarketCalendar cashCalendar,
+            LiveEquityExecutionPolicy policy, LiveEquityRiskLimits configuredRiskLimits) {
         this.authority = authority;
         this.jdbc = jdbc;
         this.broker = broker;
@@ -78,6 +88,8 @@ public class CustomerExecutionReadinessService {
         this.instruments = instruments;
         this.cashCalendar = cashCalendar;
         this.policy = policy == null ? LiveEquityExecutionPolicy.DISABLED : policy;
+        this.configuredRiskLimits = configuredRiskLimits == null
+            ? LiveEquityRiskLimits.disabled() : configuredRiskLimits;
     }
 
     public record Readiness(UUID roomId, String mode, String roomStatus,
@@ -261,10 +273,11 @@ public class CustomerExecutionReadinessService {
 
     private boolean accountRiskPolicyConfigured(UUID owner) {
         try {
-            return jdbc.sql("""
+            boolean storedPolicy = jdbc.sql("""
                     SELECT EXISTS (SELECT 1 FROM customer_live_equity_risk_policy WHERE user_id=:owner)
                     """)
                 .param("owner", owner).query(Boolean.class).single();
+            return storedPolicy || configuredRiskLimits.configuredPolicy().isPresent();
         } catch (RuntimeException unavailable) {
             return false;
         }
