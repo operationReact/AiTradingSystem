@@ -116,8 +116,9 @@ public class CustomerExecutionReadinessController {
     /**
      * Stock intraday LIVE order route. Every gate is enforced server-side by
      * {@code LiveEquityOrderCoordinator}: deployment dispatch gate, per-order
-     * consent, durable claim with recomputed preflight, account-wide risk, and
-     * exactly one broker request with no retry. The response carries only the
+     * consent, fresh broker-backed preflight, database-owned risk rechecks
+     * inside the durable claim, and exactly one broker request with no retry.
+     * The response carries only the
      * order's own state; broker responses and credentials never leave the server.
      */
     @PostMapping("/live/equity/orders")
