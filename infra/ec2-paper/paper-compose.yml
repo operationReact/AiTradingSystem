@@ -38,6 +38,11 @@ services:
       # Separate deployment gate for cash-equity intraday LIVE order dispatch.
       # Off by default; broker hosting, account risk and per-order owner checks remain required.
       MINTTICK_LIVE_EQUITY_DISPATCH_ENABLED: ${MINTTICK_LIVE_EQUITY_DISPATCH_ENABLED:-false}
+      # Deployment-configured account-wide fallback caps; zero defaults leave policy absent and claims fail closed.
+      MINTTICK_LIVE_EQUITY_RISK_MAX_ACCOUNT_INTRADAY_BUY_INR: ${MINTTICK_LIVE_EQUITY_RISK_MAX_ACCOUNT_INTRADAY_BUY_INR:-0}
+      MINTTICK_LIVE_EQUITY_RISK_MAX_ORDER_VALUE_INR: ${MINTTICK_LIVE_EQUITY_RISK_MAX_ORDER_VALUE_INR:-0}
+      MINTTICK_LIVE_EQUITY_RISK_MAX_ORDER_QUANTITY: ${MINTTICK_LIVE_EQUITY_RISK_MAX_ORDER_QUANTITY:-0}
+      MINTTICK_LIVE_EQUITY_RISK_DAILY_REALIZED_LOSS_LIMIT_INR: ${MINTTICK_LIVE_EQUITY_RISK_DAILY_REALIZED_LOSS_LIMIT_INR:-0}
       # Exact deployed commit; Mind progress evidence is only RUNTIME_VERIFIED on a known revision.
       APP_BUILD_REVISION: ${RELEASE_SHA:?required}
       # Preserve legacy owner Lambda reads, but authenticate live streams on
