@@ -104,6 +104,9 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
   CustomerLiveQuote? _quote;
   bool _detailLoading = false;
   bool _detailFailed = false;
+  /// The most recent session-quote request threw (network/decode). A prior
+  /// LIVE value is demoted to last-recorded; it is never kept labelled LIVE.
+  bool _feedError = false;
   bool? _watched;
   bool _watchBusy = false;
   int _generation = 0;
@@ -135,6 +138,7 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
       _detail = null;
       _quote = null;
       _detailFailed = false;
+      _feedError = false;
       _watched = null;
     });
     _loadContext(selected);
@@ -173,11 +177,39 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
       final quote = await widget.market.liveQuote(instrument.id);
       if (!mounted || request != _generation) return;
       if (quote.instrumentId == instrument.id) {
-        setState(() => _quote = quote);
+        // A fresh response — of any status — always replaces the prior quote,
+        // so a previous LIVE tick can never survive a refresh that now returns
+        // STALE / MARKET_CLOSED / UNAVAILABLE.
+        setState(() {
+          _quote = quote;
+          _feedError = false;
+        });
       }
     } catch (_) {
-      // A missing session quote leaves the price/basis in its unavailable state.
+      if (!mounted || request != _generation) return;
+      // The refresh failed. Never keep a prior LIVE value labelled LIVE: demote
+      // it to its original last-recorded timestamp and non-live status, or drop
+      // it entirely if it cannot be demoted.
+      setState(() {
+        _quote = _quote?.asLastRecorded();
+        _feedError = true;
+      });
     }
+  }
+
+  /// A human-readable live-feed condition to surface alongside a non-live price
+  /// (e.g. a snapshot). Null when the feed is healthy LIVE or not yet loaded.
+  String? _feedLabel() {
+    if (_feedError) return 'Live feed unavailable · showing last known';
+    return switch (_quote?.status) {
+      'MARKET_CLOSED' => 'Market closed · live ticks paused',
+      'STALE' => 'Live feed stale',
+      'CONNECTING' => 'Live feed connecting…',
+      'RECONNECTING' => 'Live feed reconnecting…',
+      'BROKER_CONNECTION_REQUIRED' => 'Broker feed offline',
+      'UNAVAILABLE' => 'Live feed unavailable',
+      _ => null,
+    };
   }
 
   Future<void> _loadWatchState(InstrumentRecord instrument, int request) async {
@@ -275,7 +307,8 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
     return _StatsCard(child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _PriceHeader(priced: priced, loading: _detailLoading, onRefresh: _refresh),
+      _PriceHeader(priced: priced, feedLabel: _feedLabel(),
+        loading: _detailLoading, onRefresh: _refresh),
       const SizedBox(height: 8),
       if (_detailFailed)
         _UnavailableNote('Day statistics are unavailable for this instrument.')
@@ -297,10 +330,14 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
             label: 'VOLUME', value: _compactInt(detail.volume))),
         ]),
         const SizedBox(height: 10),
+        // Marker follows the price header's resolved price (live / last-recorded
+        // where valid); the open/high/low/volume bounds are the day snapshot.
         _RangeBar(
-          label: 'DAY RANGE', low: detail.low, high: detail.high, marker: detail.ltp),
+          label: 'DAY RANGE', low: detail.low, high: detail.high,
+          marker: priced.price ?? detail.ltp),
         const SizedBox(height: 6),
-        Text('Day stats are a snapshot · observed ${_clock(detail.exchangeAt)}',
+        Text('Open / high / low / volume are a snapshot · observed '
+            '${_clock(detail.exchangeAt)}',
           style: type.labelSmall?.copyWith(
             fontSize: 9, color: scheme.onSurfaceVariant)),
       ],
@@ -319,7 +356,8 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
     return _StatsCard(child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _PriceHeader(priced: priced, loading: _detailLoading, onRefresh: _refresh),
+      _PriceHeader(priced: priced, feedLabel: _feedLabel(),
+        loading: _detailLoading, onRefresh: _refresh),
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: _StatCell(
@@ -345,10 +383,16 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
           : 'Select an instrument to see its holding-horizon context.')
       else if (detail.week52Low == null || detail.week52High == null)
         _UnavailableNote('52-week range not published for this instrument.')
-      else
+      else ...[
         _RangeBar(
           label: '52-WEEK RANGE',
-          low: detail.week52Low!, high: detail.week52High!, marker: detail.ltp),
+          low: detail.week52Low!, high: detail.week52High!,
+          marker: priced.price ?? detail.ltp),
+        const SizedBox(height: 6),
+        Text('52-week bounds are a snapshot · observed ${_clock(detail.exchangeAt)}',
+          style: type.labelSmall?.copyWith(
+            fontSize: 9, color: scheme.onSurfaceVariant)),
+      ],
       const SizedBox(height: 8),
       Row(children: [
         Icon(Icons.sticky_note_2_outlined, size: 14, color: scheme.onSurfaceVariant),
@@ -383,8 +427,14 @@ String _clock(DateTime? value) {
 /// a price, and never a LIVE badge.
 class _PriceHeader extends StatelessWidget {
   const _PriceHeader(
-      {required this.priced, required this.loading, required this.onRefresh});
+      {required this.priced, required this.feedLabel,
+       required this.loading, required this.onRefresh});
   final _Priced priced;
+
+  /// Live-feed condition surfaced beside a non-live price (snapshot / last
+  /// recorded) so a stale, closed, disconnected or unavailable feed stays
+  /// visible even when a price is shown. Null when the feed is healthy LIVE.
+  final String? feedLabel;
   final bool loading;
   final Future<void> Function() onRefresh;
 
@@ -418,6 +468,11 @@ class _PriceHeader extends StatelessWidget {
             maxLines: 1, overflow: TextOverflow.ellipsis,
             style: type.labelSmall?.copyWith(
               color: changeColor, fontWeight: FontWeight.w700, fontSize: 10)),
+        if (priced.basis != _Basis.none && feedLabel != null)
+          Text(feedLabel!, key: const ValueKey('room-equity-feed'),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: type.labelSmall?.copyWith(
+              color: scheme.error, fontWeight: FontWeight.w700, fontSize: 10)),
       ])),
       const SizedBox(width: 8),
       ConstrainedBox(

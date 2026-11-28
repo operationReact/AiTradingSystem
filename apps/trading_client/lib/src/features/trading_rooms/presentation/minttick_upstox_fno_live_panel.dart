@@ -8,11 +8,21 @@ import '../data/customer_upstox_fno_live_repository.dart';
 /// confirmation per request. All authorization and sizing are server-side.
 class MintTickUpstoxFnoLivePanel extends StatefulWidget {
   const MintTickUpstoxFnoLivePanel({
-    required this.roomId, required this.repository, super.key,
+    required this.roomId, required this.repository,
+    this.horizon = 'POSITIONAL', super.key,
   });
 
   final String roomId;
   final CustomerUpstoxFnoLiveRepository repository;
+
+  /// Room horizon: 'INTRADAY' or 'POSITIONAL'. Intraday auto-selects the
+  /// nearest verified listed expiry; positional requires an explicit choice.
+  /// Both use the identical verified contract and blocked-intent APIs; the
+  /// backend exposes no per-order product field, so this is selection workflow
+  /// only and implies no broker execution.
+  final String horizon;
+
+  bool get intradayHorizon => horizon == 'INTRADAY';
 
   @override
   State<MintTickUpstoxFnoLivePanel> createState() =>
@@ -80,6 +90,14 @@ class _MintTickUpstoxFnoLivePanelState
       }
     } finally {
       if (mounted && request == _generation) setState(() => _busy = false);
+    }
+    // Intraday rooms open on the nearest verified listed expiry (sorted
+    // ascending). Done after readiness load so _loadMarket is not short-
+    // circuited by the in-flight _busy guard; positional rooms wait for an
+    // explicit choice.
+    if (widget.intradayHorizon && mounted && request == _generation &&
+        _expiry == null && _expiries.isNotEmpty) {
+      _loadMarket(_expiries.first);
     }
   }
 

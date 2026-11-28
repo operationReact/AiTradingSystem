@@ -15,11 +15,15 @@ const _reliance = InstrumentRecord(
 /// Serves verified-shaped market data. Fields mirror what the real HTTP
 /// repository decodes; the desk never estimates anything from them.
 class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
-  _FakeMarket({this.quoteStatus = 'LIVE', this.detailFails = false});
+  _FakeMarket({this.quoteStatus = 'LIVE', this.detailFails = false,
+    this.liveLtp = 250.0});
 
   /// 'LIVE', 'LAST_CLOSE', or a no-price status like 'STALE'/'MARKET_CLOSED'.
   final String quoteStatus;
   final bool detailFails;
+  final num liveLtp;
+  /// When true, liveQuote throws (simulating a failed refresh).
+  bool quoteThrows = false;
   List<CustomerWatchlistItem> watched = const [];
 
   @override
@@ -42,11 +46,12 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
 
   @override
   Future<CustomerLiveQuote> liveQuote(int instrumentId) async {
+    if (quoteThrows) throw StateError('live quote unavailable');
     final now = DateTime.now();
     return switch (quoteStatus) {
       'LIVE' => CustomerLiveQuote(
           instrumentId: instrumentId, exchange: 'NSE',
-          tradingSymbol: 'RELIANCE-EQ', status: 'LIVE', ltp: 250.0,
+          tradingSymbol: 'RELIANCE-EQ', status: 'LIVE', ltp: liveLtp,
           exchangeAt: now, source: 'ANGEL_ONE_SMARTAPI_WS_V2'),
       'LAST_CLOSE' => CustomerLiveQuote(
           instrumentId: instrumentId, exchange: 'NSE',
@@ -114,19 +119,60 @@ void main() {
   testWidgets('last-recorded quote is labelled, not shown as LIVE',
       (tester) async {
     await _pump(tester, 'Intraday', market: _FakeMarket(quoteStatus: 'LAST_CLOSE'));
-    expect(find.text('₹244.00'), findsOneWidget);
+    // The last-recorded tick (240), not the day-detail OPEN (244), is the price.
+    expect(find.text('₹240.00'), findsOneWidget);
     expect(find.textContaining('LAST RECORDED ·'), findsOneWidget);
     expect(find.textContaining('LIVE ·'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('no verified tick falls back to the day snapshot, never LIVE',
+  testWidgets('stale feed falls back to the labelled snapshot and stays visible',
       (tester) async {
     await _pump(tester, 'Intraday', market: _FakeMarket(quoteStatus: 'STALE'));
     // Price comes from the verified day snapshot (250) and is labelled SNAPSHOT.
     expect(find.text('₹250.00'), findsOneWidget);
     expect(find.textContaining('SNAPSHOT ·'), findsOneWidget);
     expect(find.textContaining('LIVE ·'), findsNothing);
+    // The degraded live-feed state stays visible even with a snapshot shown.
+    expect(find.byKey(const ValueKey('room-equity-feed')), findsOneWidget);
+    expect(find.text('Live feed stale'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('market-closed feed is visible beside the snapshot', (tester) async {
+    await _pump(tester, 'Intraday',
+        market: _FakeMarket(quoteStatus: 'MARKET_CLOSED'));
+    expect(find.textContaining('SNAPSHOT ·'), findsOneWidget);
+    expect(find.text('Market closed · live ticks paused'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failed refresh never keeps a prior LIVE labelled LIVE',
+      (tester) async {
+    final market = _FakeMarket(quoteStatus: 'LIVE');
+    await _pump(tester, 'Intraday', market: market);
+    expect(find.textContaining('LIVE ·'), findsOneWidget);
+    // The next quote request fails; refresh and settle.
+    market.quoteThrows = true;
+    await tester.tap(find.byKey(const ValueKey('room-equity-refresh')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    // The prior value is preserved only as last-recorded with its own stamp,
+    // and the feed is clearly flagged unavailable.
+    expect(find.textContaining('LAST RECORDED ·'), findsOneWidget);
+    expect(find.text('₹250.00'), findsOneWidget);
+    expect(find.textContaining('Live feed unavailable'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('range marker uses the live price, not the snapshot ltp',
+      (tester) async {
+    // Live tick (251) differs from the day-detail ltp (250): the header — and
+    // therefore the range marker, which reads the same resolved price — use 251.
+    await _pump(tester, 'Intraday', market: _FakeMarket(liveLtp: 251.0));
+    expect(find.text('₹251.00'), findsOneWidget); // resolved/header + marker
+    expect(find.textContaining('LIVE ·'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

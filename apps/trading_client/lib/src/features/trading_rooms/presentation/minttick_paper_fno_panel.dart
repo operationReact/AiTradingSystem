@@ -20,6 +20,7 @@ class MintTickPaperFnoPanel extends StatefulWidget {
     required this.repository,
     this.initialExpiry,
     this.view = 'trade',
+    this.horizon = 'POSITIONAL',
     this.onFilled,
     this.clock = DateTime.now,
     super.key,
@@ -34,7 +35,17 @@ class MintTickPaperFnoPanel extends StatefulWidget {
   final CustomerPaperFnoRepository repository;
   /// Optional starting expiry. Never inferred: the user enters the verified one.
   final DateTime? initialExpiry;
+
+  /// Room horizon: 'INTRADAY' or 'POSITIONAL'. Intraday rooms auto-select the
+  /// nearest *verified listed* expiry (the de-facto intraday contract, still a
+  /// real listed date the user can change); positional rooms require an
+  /// explicit expiry choice. Both reuse the identical verified contract and
+  /// order APIs — the backend exposes no per-order product/segment field, so
+  /// this is a selection-workflow difference, not a different order type.
+  final String horizon;
   final Future<void> Function()? onFilled;
+
+  bool get intradayHorizon => horizon == 'INTRADAY';
 
   @override
   State<MintTickPaperFnoPanel> createState() => _MintTickPaperFnoPanelState();
@@ -193,6 +204,13 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
           _price.text = '';
         }
       });
+      // Intraday rooms open on the nearest verified expiry so the fast
+      // workflow needs no manual pick. Positional rooms keep an explicit
+      // choice. The date is a real listed one (expiries are sorted ascending),
+      // never inferred, and the user can still change it in the dropdown.
+      if (widget.intradayHorizon && _expiry == null && _expiries.isNotEmpty) {
+        _selectExpiry(_expiries.first);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -389,6 +407,52 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
       return 'The server response failed validation, so nothing is shown.';
     }
     return 'F&O data is unavailable. Check your connection and try again.';
+  }
+
+  /// Whole days from today (local) to the selected verified expiry. Derived
+  /// only from the verified listed date; null when no expiry is selected.
+  int? _daysToExpiry() {
+    final expiry = _expiry;
+    if (expiry == null) return null;
+    final now = widget.clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(expiry.year, expiry.month, expiry.day);
+    return day.difference(today).inDays;
+  }
+
+  /// Horizon-specific workflow framing. Intraday opens on the nearest expiry
+  /// and favours same-session square-off; positional asks the user to choose a
+  /// holding expiry. Days-to-expiry is shown from the verified date; nothing
+  /// here asserts margin, Greeks or any value the backend does not provide.
+  Widget _horizonStrip(ColorScheme colors, TextTheme type) {
+    final intraday = widget.intradayHorizon;
+    final days = _daysToExpiry();
+    final lead = intraday
+        ? 'Intraday · nearest expiry · square off same session'
+        : 'Positional · choose a holding expiry · overnight holds';
+    return Container(
+      key: const ValueKey('paper-fno-horizon'),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.22))),
+      child: Row(children: [
+        Icon(intraday ? Icons.bolt_rounded : Icons.timeline_rounded,
+          size: 14, color: colors.primary),
+        const SizedBox(width: 6),
+        Expanded(child: Text(lead, maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant, fontSize: 10))),
+        if (days != null) ...[
+          const SizedBox(width: 6),
+          Text(days <= 0 ? 'Expiry today' : '${days}d to expiry',
+            key: const ValueKey('paper-fno-days-to-expiry'),
+            style: type.labelSmall?.copyWith(
+              color: colors.primary, fontWeight: FontWeight.w800, fontSize: 10)),
+        ],
+      ]),
+    );
   }
 
   /// True only while the quotes were received within the client ceiling.
@@ -624,6 +688,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
             Text('PAPER · NO LIVE ORDERS',
               style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
           ]),
+          const SizedBox(height: 4),
+          _horizonStrip(colors, type),
           if (_capability?.paperConfigured == false) ...[
             const SizedBox(height: 6),
             Text(_capabilityStatusLabel(_capability!.status),

@@ -195,7 +195,7 @@ class _FakeRepo implements CustomerPaperFnoRepository {
 
 Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
     {bool withExpiry = true, DateTime Function()? clock,
-     String view = 'trade'}) async {
+     String view = 'trade', String horizon = 'POSITIONAL'}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(900, 2400);
   addTearDown(tester.view.resetPhysicalSize);
@@ -204,6 +204,7 @@ Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
     child: MintTickPaperFnoPanel(roomId: 'room', repository: repo,
       initialExpiry: withExpiry ? DateTime(2026, 11, 20) : null,
       view: view,
+      horizon: horizon,
       clock: clock ?? DateTime.now)))));
   await tester.pumpAndSettle();
 }
@@ -684,6 +685,30 @@ void main() {
     await tester.tap(find.text('Fri, 20 Nov 2026').last);
     await tester.pumpAndSettle();
     expect(find.text('Fresh quotes'), findsOneWidget);
+  });
+
+  testWidgets('intraday F&O room auto-selects the nearest verified expiry',
+      (tester) async {
+    final repo = _FakeRepo(marketResult: market(),
+        expiriesResult: verifiedExpiries(['2026-11-20', '2026-11-27']));
+    await pump(tester, repo, withExpiry: false, horizon: 'INTRADAY',
+        clock: () => DateTime(2026, 11, 1));
+    // No manual tap: the nearest verified expiry loaded its market itself.
+    expect(find.text('Fresh quotes'), findsOneWidget);
+    expect(find.text('Select a verified expiry to see strikes.'), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-horizon')), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-days-to-expiry')), findsOneWidget);
+  });
+
+  testWidgets('positional F&O room waits for an explicit expiry choice',
+      (tester) async {
+    final repo = _FakeRepo(marketResult: market(),
+        expiriesResult: verifiedExpiries(['2026-11-20', '2026-11-27']));
+    await pump(tester, repo, withExpiry: false, horizon: 'POSITIONAL',
+        clock: () => DateTime(2026, 11, 1));
+    expect(find.text('Select a verified expiry to see strikes.'), findsOneWidget);
+    expect(find.text('Fresh quotes'), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-horizon')), findsOneWidget);
   });
 
   testWidgets('SELL to close is unavailable when no virtual position is held', (tester) async {

@@ -569,6 +569,7 @@ class _MintTickRoomProductionWorkspaceState
         Expanded(child: MintTickUpstoxFnoLivePanel(
           key: ValueKey('room-live-fno-${widget.room.id}'),
           roomId: widget.room.id,
+          horizon: widget.room.focus == 'Intraday' ? 'INTRADAY' : 'POSITIONAL',
           repository: CustomerUpstoxFnoLiveRepository(widget.execution!.api),
         )),
       ]);
@@ -576,20 +577,20 @@ class _MintTickRoomProductionWorkspaceState
     if (widget.room.mode != 'PAPER' || widget.fno == null) {
       return const Center(child: Text('F&O PAPER account unavailable.'));
     }
+    // The PAPER options desk carries its own richer horizon strip (with
+    // days-to-expiry and nearest-expiry auto-select), so no separate room
+    // note is needed here.
     return SingleChildScrollView(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _fnoStrategyNote(context),
-        const SizedBox(height: 8),
-        MintTickPaperFnoPanel(
-          key: ValueKey('room-fno-trade-${widget.room.id}'),
-          roomId: widget.room.id,
-          repository: widget.fno!,
-          onFilled: () async {
-            await _loadHistory();
-            await widget.onRefresh();
-          },
-        ),
-      ]),
+      child: MintTickPaperFnoPanel(
+        key: ValueKey('room-fno-trade-${widget.room.id}'),
+        roomId: widget.room.id,
+        repository: widget.fno!,
+        horizon: widget.room.focus == 'Intraday' ? 'INTRADAY' : 'POSITIONAL',
+        onFilled: () async {
+          await _loadHistory();
+          await widget.onRefresh();
+        },
+      ),
     );
   }
 
