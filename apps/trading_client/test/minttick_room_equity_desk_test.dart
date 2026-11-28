@@ -12,10 +12,14 @@ const _reliance = InstrumentRecord(
   expiry: null, strike: null, lotSize: 1, tickSize: .05,
 );
 
-/// Serves verified-shaped market data. Every field mirrors what the real
-/// HTTP repository would decode; nothing here is estimated by the UI.
+/// Serves verified-shaped market data. Fields mirror what the real HTTP
+/// repository decodes; the desk never estimates anything from them.
 class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
-  bool detailFails = false;
+  _FakeMarket({this.quoteStatus = 'LIVE', this.detailFails = false});
+
+  /// 'LIVE', 'LAST_CLOSE', or a no-price status like 'STALE'/'MARKET_CLOSED'.
+  final String quoteStatus;
+  final bool detailFails;
   List<CustomerWatchlistItem> watched = const [];
 
   @override
@@ -31,18 +35,28 @@ class _FakeMarket extends Fake implements HttpCustomerMarketRepository {
           CustomerCandle(
             candleTime: now.subtract(Duration(days: 4 - i)),
             open: 240 + i, high: 245 + i, low: 238 + i, close: 242 + i,
-            volume: 1000 * (i + 1), source: 'STORED_TEST',
-            fetchedAt: now),
+            volume: 1000 * (i + 1), source: 'STORED_TEST', fetchedAt: now),
       ],
     );
   }
 
   @override
-  Future<CustomerLiveQuote> liveQuote(int instrumentId) async =>
-      CustomerLiveQuote(
-        instrumentId: instrumentId, exchange: 'NSE',
-        tradingSymbol: 'RELIANCE-EQ', status: 'LIVE', ltp: 250.0,
-        exchangeAt: DateTime.now(), source: 'ANGEL_ONE_SMARTAPI_WS_V2');
+  Future<CustomerLiveQuote> liveQuote(int instrumentId) async {
+    final now = DateTime.now();
+    return switch (quoteStatus) {
+      'LIVE' => CustomerLiveQuote(
+          instrumentId: instrumentId, exchange: 'NSE',
+          tradingSymbol: 'RELIANCE-EQ', status: 'LIVE', ltp: 250.0,
+          exchangeAt: now, source: 'ANGEL_ONE_SMARTAPI_WS_V2'),
+      'LAST_CLOSE' => CustomerLiveQuote(
+          instrumentId: instrumentId, exchange: 'NSE',
+          tradingSymbol: 'RELIANCE-EQ', status: 'LAST_CLOSE', ltp: 240.0,
+          exchangeAt: now, source: 'STORED_LAST_DETAIL', changePercent: -0.8),
+      _ => CustomerLiveQuote(
+          instrumentId: instrumentId, exchange: 'NSE',
+          tradingSymbol: 'RELIANCE-EQ', status: quoteStatus),
+    };
+  }
 
   @override
   Future<CustomerDayDetail> dayDetail(int instrumentId) async {
@@ -81,40 +95,90 @@ Future<void> _pump(WidgetTester tester, String focus,
 }
 
 void main() {
-  testWidgets('intraday room surfaces session, day range and live change',
+  testWidgets('intraday LIVE shows the live tick as the price with day context',
       (tester) async {
     await _pump(tester, 'Intraday');
     expect(find.text('INTRADAY'), findsOneWidget);
-    expect(find.text('DAY RANGE'), findsOneWidget);
-    expect(find.text('LAST'), findsOneWidget);
-    // Live session + freshness is shown, never a fabricated "live" when absent.
+    // Price is the verified LIVE tick (250), not the day-detail snapshot field.
+    expect(find.text('₹250.00'), findsOneWidget);
     expect(find.textContaining('LIVE ·'), findsOneWidget);
+    expect(find.text('DAY RANGE'), findsOneWidget);
+    expect(find.text('VOLUME'), findsOneWidget);
+    expect(find.textContaining('snapshot'), findsOneWidget); // day stats labelled
     // Swing-only affordances must not appear in an intraday room.
     expect(find.text('52-WEEK RANGE'), findsNothing);
     expect(find.byKey(const ValueKey('room-equity-watch-toggle')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('last-recorded quote is labelled, not shown as LIVE',
+      (tester) async {
+    await _pump(tester, 'Intraday', market: _FakeMarket(quoteStatus: 'LAST_CLOSE'));
+    expect(find.text('₹244.00'), findsOneWidget);
+    expect(find.textContaining('LAST RECORDED ·'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no verified tick falls back to the day snapshot, never LIVE',
+      (tester) async {
+    await _pump(tester, 'Intraday', market: _FakeMarket(quoteStatus: 'STALE'));
+    // Price comes from the verified day snapshot (250) and is labelled SNAPSHOT.
+    expect(find.text('₹250.00'), findsOneWidget);
+    expect(find.textContaining('SNAPSHOT ·'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('swing room surfaces 52-week position, holding and watch toggle',
       (tester) async {
-    await _pump(tester, 'Swing');
+    await _pump(tester, 'Swing', market: _FakeMarket(quoteStatus: 'LAST_CLOSE'));
     expect(find.text('SWING'), findsOneWidget);
     expect(find.text('52-WEEK RANGE'), findsOneWidget);
     expect(find.text('PREV CLOSE'), findsOneWidget);
-    expect(find.text('3 sh'), findsOneWidget); // holding surfaced
+    expect(find.text('3 sh'), findsOneWidget);
     expect(find.byKey(const ValueKey('room-equity-watch-toggle')), findsOneWidget);
     expect(find.textContaining('Thesis & notes are not yet available'),
         findsOneWidget);
-    // Intraday-only day range is not the swing primary.
+    expect(find.text('DAY RANGE'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('long-term room is not relabelled as swing', (tester) async {
+    await _pump(tester, 'Long-term');
+    expect(find.text('LONG-TERM'), findsOneWidget);
+    expect(find.text('SWING'), findsNothing);
+    expect(find.text('52-WEEK RANGE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unknown/deferred focus falls back to a neutral equity view',
+      (tester) async {
+    await _pump(tester, 'Help me choose');
+    expect(find.text('EQUITY'), findsOneWidget);
+    expect(find.text('SWING'), findsNothing);
+    // Positional-family layout (52-week context), never an intraday day range.
+    expect(find.text('52-WEEK RANGE'), findsOneWidget);
     expect(find.text('DAY RANGE'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('day-detail failure shows a clear unavailable state, no fake data',
       (tester) async {
-    await _pump(tester, 'Intraday', market: _FakeMarket()..detailFails = true);
+    await _pump(tester, 'Intraday', market: _FakeMarket(detailFails: true));
     expect(find.textContaining('Day statistics are unavailable'), findsOneWidget);
     expect(find.text('DAY RANGE'), findsNothing);
+    // The LIVE tick price can still show even when day stats failed.
+    expect(find.text('₹250.00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no price anywhere shows an honest unavailable status', (tester) async {
+    await _pump(tester, 'Intraday',
+        market: _FakeMarket(quoteStatus: 'MARKET_CLOSED', detailFails: true));
+    expect(find.text('—'), findsWidgets);
+    expect(find.text('MARKET CLOSED'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

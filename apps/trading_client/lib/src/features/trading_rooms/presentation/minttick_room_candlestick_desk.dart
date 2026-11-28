@@ -13,6 +13,7 @@ class MintTickRoomCandlestickDesk extends StatefulWidget {
     required this.onInstrument,
     this.initialInstrument,
     this.initialFrame = 2,
+    this.showQuote = true,
     super.key,
   });
   final HttpCustomerMarketRepository market;
@@ -22,6 +23,12 @@ class MintTickRoomCandlestickDesk extends StatefulWidget {
   /// Default timeframe index into [_frames] (0 = 5m, 1 = 1H, 2 = 1D). Intraday
   /// rooms open on the 5-minute frame; swing/positional rooms open on 1D.
   final int initialFrame;
+
+  /// When false, the desk shows only the symbol picker, timeframe and chart and
+  /// does not fetch or render a price. The embedding workspace then owns a
+  /// single authoritative price/session display, so two independently fetched
+  /// quotes can never show different prices for the same instrument.
+  final bool showQuote;
 
   @override
   State<MintTickRoomCandlestickDesk> createState() =>
@@ -115,7 +122,8 @@ class _MintTickRoomCandlestickDeskState
     });
     // Quote and candles load independently: historical backfill must not
     // prevent a valid last-recorded / live price from appearing promptly.
-    _loadQuote(instrument, generation);
+    // When the embedding workspace owns the price display, skip this entirely.
+    if (widget.showQuote) _loadQuote(instrument, generation);
     try {
       final page = await widget.market.candles(
         instrumentId: instrument.id,
@@ -201,16 +209,18 @@ class _MintTickRoomCandlestickDeskState
               style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
           ]),
         )),
-        const SizedBox(width: 8),
-        Column(mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(_quote?.ltp == null ? '—' : '₹${_quote!.ltp!.toStringAsFixed(2)}',
-              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            Text(_quote == null ? 'PRICE UNAVAILABLE' :
-              _quote!.status == 'LIVE' ? 'VERIFIED LIVE' : 'LAST RECORDED',
-              style: text.labelSmall?.copyWith(color: _quote?.status == 'LIVE'
-                ? scheme.primary : scheme.onSurfaceVariant)),
-          ]),
+        if (widget.showQuote) ...[
+          const SizedBox(width: 8),
+          Column(mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(_quote?.ltp == null ? '—' : '₹${_quote!.ltp!.toStringAsFixed(2)}',
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text(_quote == null ? 'PRICE UNAVAILABLE' :
+                _quote!.status == 'LIVE' ? 'VERIFIED LIVE' : 'LAST RECORDED',
+                style: text.labelSmall?.copyWith(color: _quote?.status == 'LIVE'
+                  ? scheme.primary : scheme.onSurfaceVariant)),
+            ]),
+        ],
       ])),
       SizedBox(height: 34, child: Row(children: [
         for (var i = 0; i < _frames.length; i++)

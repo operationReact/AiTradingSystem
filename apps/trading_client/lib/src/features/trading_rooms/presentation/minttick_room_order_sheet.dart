@@ -24,9 +24,13 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     this.paper,
     this.execution,
     this.intents,
+    this.initialProduct = 'DELIVERY',
     super.key,
   });
   final String roomId, mode, side;
+  /// Default LIVE product type ('DELIVERY' or 'INTRADAY'); an Intraday room
+  /// pre-selects INTRADAY. PAPER cash-equity fills ignore this.
+  final String initialProduct;
   final InstrumentRecord? initialInstrument;
   final HttpCustomerMarketRepository market;
   final CustomerPaperWallet? wallet;
@@ -42,7 +46,7 @@ class MintTickRoomOrderSheet extends StatefulWidget {
 
 class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   late String _side;
-  String _product = 'DELIVERY';
+  late String _product;
   late InstrumentRecord? _stock;
   final _qty = TextEditingController(text: '1');
   final _limit = TextEditingController();
@@ -56,6 +60,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   void initState() {
     super.initState();
     _side = widget.side;
+    _product = widget.initialProduct == 'INTRADAY' ? 'INTRADAY' : 'DELIVERY';
     _stock = widget.initialInstrument;
     _paperEnabled = widget.wallet?.halted == false;
     if (_stock != null) {
@@ -429,6 +434,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                     onChanged: (_) => setState(_invalidate)),
                 )),
               ]),
+              const _TicketValue('Order type', 'Limit'),
               _TicketValue('Price source', _quote == null
                 ? 'Unavailable' : _quote!.status == 'LIVE'
                   ? 'LIVE · ₹${_quote!.ltp}'

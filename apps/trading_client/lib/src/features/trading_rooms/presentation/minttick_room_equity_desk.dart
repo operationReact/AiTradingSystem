@@ -4,6 +4,52 @@ import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_room_candlestick_desk.dart';
 
+/// Strategy family that drives the equity Trade layout and chart default.
+enum _Family { intraday, positional }
+
+/// Resolved strategy framing for a room's `focus`. Every supported focus gets
+/// its own title, summary, chart interval and layout family; unknown or
+/// deferred values ('Help me choose') fall back to a neutral daily view and are
+/// never silently relabelled as Swing.
+class _Strategy {
+  const _Strategy(this.title, this.note, this.family, this.frame);
+  final String title;
+  final String note;
+  final _Family family;
+  final int frame; // index into the candlestick desk frames: 0=5m,1=1H,2=1D
+
+  bool get isIntraday => family == _Family.intraday;
+}
+
+_Strategy _strategyFor(String focus) => switch (focus) {
+  'Intraday' => const _Strategy('INTRADAY',
+      'Session speed · live price, day range & volume', _Family.intraday, 0),
+  'Swing' => const _Strategy('SWING',
+      'Swing horizon · 52-week position, watch & holdings', _Family.positional, 2),
+  'Long-term' => const _Strategy('LONG-TERM',
+      'Investing horizon · 52-week position, watch & holdings', _Family.positional, 2),
+  _ => const _Strategy('EQUITY',
+      'Set a room focus to tune this view · daily context shown',
+      _Family.positional, 2),
+};
+
+/// How the displayed price was sourced. The UI shows exactly one, with its own
+/// timestamp, and never presents a LIVE badge beside a price from another read.
+enum _Basis { live, lastRecorded, snapshot, none }
+
+class _Priced {
+  const _Priced(this.price, this.basis, this.at, this.changePct, this.changeAbs,
+      {this.status});
+  final num? price;
+  final _Basis basis;
+  final DateTime? at;
+  final num? changePct;
+  final num? changeAbs;
+
+  /// The raw quote status when no price is available (MARKET_CLOSED, STALE, …).
+  final String? status;
+}
+
 /// Strategy-aware equity trading desk for a Trading Room's Trade tab.
 ///
 /// The same verified market APIs drive two deliberately different workspaces:
@@ -15,9 +61,14 @@ import 'minttick_room_candlestick_desk.dart';
 ///   live price and change, the day's open/high/low range, traded volume, and
 ///   an explicit session / data-freshness indicator.
 ///
-/// Every value shown here is server-sourced. When the backend cannot supply a
-/// field (missing day detail, no 52-week range, unavailable session) the desk
-/// renders a clear unavailable state and never fabricates a number.
+/// This desk is the single price authority for the Trade tab: it fetches one
+/// quote and one day-detail snapshot and shows them with their own timestamps.
+/// The embedded chart renders with `showQuote: false` so two independently
+/// fetched quotes can never display different prices for the same instrument.
+/// Every value is server-sourced; a missing field renders a clear unavailable
+/// state and never a fabricated number. There is no streaming feed on this
+/// path, so prices are labelled LIVE / LAST RECORDED / SNAPSHOT with the time
+/// they were observed and refreshed only on demand — never silently polled.
 class MintTickRoomEquityDesk extends StatefulWidget {
   const MintTickRoomEquityDesk({
     required this.market,
@@ -30,7 +81,8 @@ class MintTickRoomEquityDesk extends StatefulWidget {
 
   final HttpCustomerMarketRepository market;
 
-  /// Room horizon: 'Intraday', 'Swing' or 'Long-term'.
+  /// Room horizon: 'Intraday', 'Swing', 'Long-term', 'Help me choose' or a
+  /// legacy value. Resolved through [_strategyFor]; unknown values fall back.
   final String focus;
 
   final InstrumentRecord? initialInstrument;
@@ -41,8 +93,6 @@ class MintTickRoomEquityDesk extends StatefulWidget {
   /// Open quantity currently held for an instrument (0 when none). Lets the
   /// swing desk surface position/watch context without a second positions read.
   final int Function(int instrumentId) holdingFor;
-
-  bool get _isIntraday => focus == 'Intraday';
 
   @override
   State<MintTickRoomEquityDesk> createState() => _MintTickRoomEquityDeskState();
@@ -57,6 +107,8 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
   bool? _watched;
   bool _watchBusy = false;
   int _generation = 0;
+
+  _Strategy get _strategy => _strategyFor(widget.focus);
 
   @override
   void initState() {
@@ -94,10 +146,10 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
       _detailLoading = true;
       _detailFailed = false;
     });
-    // Day detail and the session quote load independently: one failing must
-    // never blank the other. Unknown fields stay unavailable, never estimated.
+    // The session quote and the day snapshot load independently: one failing
+    // must never blank the other, and neither is ever estimated from the other.
     _loadSession(instrument, request);
-    if (!widget._isIntraday) _loadWatchState(instrument, request);
+    if (!_strategy.isIntraday) _loadWatchState(instrument, request);
     try {
       final detail = await widget.market.dayDetail(instrument.id);
       if (!mounted || request != _generation) return;
@@ -124,7 +176,7 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
         setState(() => _quote = quote);
       }
     } catch (_) {
-      // A missing session quote leaves the badge in its unavailable state.
+      // A missing session quote leaves the price/basis in its unavailable state.
     }
   }
 
@@ -139,6 +191,11 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
         setState(() => _watched = null);
       }
     }
+  }
+
+  Future<void> _refresh() async {
+    final instrument = _instrument;
+    if (instrument != null) await _loadContext(instrument);
   }
 
   Future<void> _toggleWatch() async {
@@ -163,19 +220,48 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
     }
   }
 
+  /// Resolves the one price to display from a single coherent source, with the
+  /// change measured only against the verified previous close.
+  _Priced _resolvePrice() {
+    final quote = _quote;
+    final detail = _detail;
+    final prevClose = detail?.previousClose;
+    num? pct(num price) =>
+        prevClose != null && prevClose > 0 ? (price - prevClose) / prevClose * 100 : null;
+    num? abs(num price) => prevClose != null ? price - prevClose : null;
+    if (quote != null && quote.status == 'LIVE' && quote.ltp != null) {
+      return _Priced(quote.ltp, _Basis.live, quote.exchangeAt,
+          pct(quote.ltp!), abs(quote.ltp!));
+    }
+    if (quote != null && quote.status == 'LAST_CLOSE' && quote.ltp != null) {
+      // The provider's own change-vs-last-close is preferred when supplied.
+      return _Priced(quote.ltp, _Basis.lastRecorded, quote.exchangeAt,
+          quote.changePercent ?? pct(quote.ltp!), abs(quote.ltp!));
+    }
+    if (detail != null) {
+      // A rights-gated FULL quote snapshot: a verified price, but a one-time
+      // fetch, never presented as live.
+      return _Priced(detail.ltp, _Basis.snapshot, detail.exchangeAt,
+          pct(detail.ltp), abs(detail.ltp));
+    }
+    return _Priced(null, _Basis.none, null, null, null, status: quote?.status);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final strategy = _strategy;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _StrategyBanner(intraday: widget._isIntraday),
+      _StrategyBanner(title: strategy.title, note: strategy.note),
       const SizedBox(height: 8),
       Expanded(child: MintTickRoomCandlestickDesk(
         market: widget.market,
         initialInstrument: widget.initialInstrument,
-        initialFrame: widget._isIntraday ? 0 : 2,
+        initialFrame: strategy.frame,
+        showQuote: false,
         onInstrument: _onInstrument,
       )),
       const SizedBox(height: 8),
-      widget._isIntraday ? _intradayStats(context) : _swingStats(context),
+      strategy.isIntraday ? _intradayStats(context) : _positionalStats(context),
     ]);
   }
 
@@ -183,21 +269,13 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
 
   Widget _intradayStats(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
     final detail = _detail;
-    final changePct = detail == null || detail.previousClose <= 0
-        ? null
-        : (detail.ltp - detail.previousClose) / detail.previousClose * 100;
+    final priced = _resolvePrice();
     return _StatsCard(child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(child: _SessionBadge(quote: _quote, loading: _detailLoading)),
-        if (detail != null)
-          Text('Vol ${_compactInt(detail.volume)}',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontFeatures: const [FontFeature.tabularFigures()])),
-      ]),
+      _PriceHeader(priced: priced, loading: _detailLoading, onRefresh: _refresh),
       const SizedBox(height: 8),
       if (_detailFailed)
         _UnavailableNote('Day statistics are unavailable for this instrument.')
@@ -207,51 +285,46 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
           : 'Select an instrument to see live day statistics.')
       else ...[
         Row(children: [
-          Expanded(flex: 10, child: _StatCell(
-            label: 'LAST', value: '₹${detail.ltp.toStringAsFixed(2)}',
-            accent: changePct != null && changePct >= 0,
-            down: changePct != null && changePct < 0,
-            secondary: changePct == null ? null
-              : '${changePct >= 0 ? '+' : ''}${changePct.toStringAsFixed(2)}% · ₹${(detail.ltp - detail.previousClose).toStringAsFixed(2)}')),
-          _CellDivider(color: scheme.outlineVariant),
-          Expanded(flex: 7, child: _StatCell(
+          Expanded(flex: 8, child: _StatCell(
             label: 'OPEN', value: '₹${detail.open.toStringAsFixed(2)}')),
           _CellDivider(color: scheme.outlineVariant),
           Expanded(flex: 8, child: _StatCell(
             label: 'AVG',
             value: detail.averagePrice == null ? '—'
               : '₹${detail.averagePrice!.toStringAsFixed(2)}')),
+          _CellDivider(color: scheme.outlineVariant),
+          Expanded(flex: 9, child: _StatCell(
+            label: 'VOLUME', value: _compactInt(detail.volume))),
         ]),
         const SizedBox(height: 10),
         _RangeBar(
-          label: "DAY RANGE",
-          low: detail.low, high: detail.high, marker: detail.ltp),
+          label: 'DAY RANGE', low: detail.low, high: detail.high, marker: detail.ltp),
+        const SizedBox(height: 6),
+        Text('Day stats are a snapshot · observed ${_clock(detail.exchangeAt)}',
+          style: type.labelSmall?.copyWith(
+            fontSize: 9, color: scheme.onSurfaceVariant)),
       ],
     ]));
   }
 
-  // ---- Swing: 52-week position, prev close, watch + holding, notes ---------
+  // ---- Swing / Long-term: 52-week position, prev close, watch, notes -------
 
-  Widget _swingStats(BuildContext context) {
+  Widget _positionalStats(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     final detail = _detail;
     final instrument = _instrument;
     final held = instrument == null ? 0 : widget.holdingFor(instrument.id);
-    final changePct = detail == null || detail.previousClose <= 0
-        ? null
-        : (detail.ltp - detail.previousClose) / detail.previousClose * 100;
+    final priced = _resolvePrice();
     return _StatsCard(child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _PriceHeader(priced: priced, loading: _detailLoading, onRefresh: _refresh),
+      const SizedBox(height: 10),
       Row(children: [
         Expanded(child: _StatCell(
           label: 'PREV CLOSE',
-          value: detail == null ? '—' : '₹${detail.previousClose.toStringAsFixed(2)}',
-          accent: changePct != null && changePct >= 0,
-          down: changePct != null && changePct < 0,
-          secondary: changePct == null ? null
-            : '${changePct >= 0 ? '+' : ''}${changePct.toStringAsFixed(2)}% vs last close')),
+          value: detail == null ? '—' : '₹${detail.previousClose.toStringAsFixed(2)}')),
         _CellDivider(color: scheme.outlineVariant),
         Expanded(child: _StatCell(
           label: 'HOLDING',
@@ -296,18 +369,105 @@ String _compactInt(int value) {
   return '$value';
 }
 
-class _StrategyBanner extends StatelessWidget {
-  const _StrategyBanner({required this.intraday});
-  final bool intraday;
+String _clock(DateTime? value) {
+  if (value == null) return '—';
+  final local = value.toLocal();
+  final h = local.hour.toString().padLeft(2, '0');
+  final m = local.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
+/// The single authoritative price display: value, change versus previous close,
+/// and a source badge (LIVE / LAST RECORDED / SNAPSHOT) with its own timestamp.
+/// When no verified price exists it shows the honest session status instead of
+/// a price, and never a LIVE badge.
+class _PriceHeader extends StatelessWidget {
+  const _PriceHeader(
+      {required this.priced, required this.loading, required this.onRefresh});
+  final _Priced priced;
+  final bool loading;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
-    final title = intraday ? 'INTRADAY' : 'SWING';
-    final note = intraday
-        ? 'Session speed · live price, day range & volume'
-        : 'Hold horizon · 52-week position, watch & holdings';
+    final up = priced.changePct != null && priced.changePct! >= 0;
+    final changeColor = priced.changePct == null
+        ? scheme.onSurfaceVariant
+        : up ? scheme.primary : scheme.error;
+    final (String badge, bool liveBadge) = switch (priced.basis) {
+      _Basis.live => ('LIVE · ${_clock(priced.at)}', true),
+      _Basis.lastRecorded => ('LAST RECORDED · ${_clock(priced.at)}', false),
+      _Basis.snapshot => ('SNAPSHOT · ${_clock(priced.at)}', false),
+      _Basis.none => (_statusLabel(priced.status, loading), false),
+    };
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, children: [
+        Text(priced.price == null ? '—' : '₹${priced.price!.toStringAsFixed(2)}',
+          key: const ValueKey('room-equity-price'),
+          style: type.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            fontFeatures: const [FontFeature.tabularFigures()])),
+        if (priced.changePct != null)
+          Text(
+            '${up ? '+' : ''}${priced.changePct!.toStringAsFixed(2)}%'
+            '${priced.changeAbs == null ? '' : ' · ${priced.changeAbs! >= 0 ? '+' : ''}₹${priced.changeAbs!.toStringAsFixed(2)}'}'
+            ' vs prev close',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: type.labelSmall?.copyWith(
+              color: changeColor, fontWeight: FontWeight.w700, fontSize: 10)),
+      ])),
+      const SizedBox(width: 8),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 160),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min, children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 7, height: 7, decoration: BoxDecoration(
+            color: liveBadge ? scheme.primary : scheme.onSurfaceVariant,
+            shape: BoxShape.circle)),
+          const SizedBox(width: 5),
+          Flexible(child: Text(badge, maxLines: 1, overflow: TextOverflow.ellipsis,
+            key: const ValueKey('room-equity-basis'),
+            style: type.labelSmall?.copyWith(
+              color: liveBadge ? scheme.primary : scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700, fontSize: 10))),
+        ]),
+        SizedBox(height: 24, child: IconButton(
+          key: const ValueKey('room-equity-refresh'),
+          tooltip: 'Refresh price & statistics',
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 32, height: 24),
+          onPressed: loading ? null : () => onRefresh(),
+          icon: const Icon(Icons.refresh_rounded, size: 16))),
+      ])),
+    ]);
+  }
+
+  static String _statusLabel(String? status, bool loading) => switch (status) {
+    'MARKET_CLOSED' => 'MARKET CLOSED',
+    'STALE' => 'STALE · NO PRICE',
+    'CONNECTING' => 'CONNECTING…',
+    'RECONNECTING' => 'RECONNECTING…',
+    'BROKER_CONNECTION_REQUIRED' => 'BROKER OFFLINE',
+    'UNAVAILABLE' => 'PRICE UNAVAILABLE',
+    _ => loading ? 'CHECKING…' : 'PRICE UNAVAILABLE',
+  };
+}
+
+class _StrategyBanner extends StatelessWidget {
+  const _StrategyBanner({required this.title, required this.note});
+  final String title;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    final intraday = title == 'INTRADAY';
     return Container(
       height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -349,17 +509,14 @@ class _StatsCard extends StatelessWidget {
 }
 
 class _StatCell extends StatelessWidget {
-  const _StatCell({required this.label, required this.value,
-    this.secondary, this.accent = false, this.down = false});
+  const _StatCell({required this.label, required this.value, this.accent = false});
   final String label, value;
-  final String? secondary;
-  final bool accent, down;
+  final bool accent;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
-    final color = down ? scheme.error : accent ? scheme.primary : scheme.onSurface;
     return Column(crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min, children: [
       Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -367,13 +524,9 @@ class _StatCell extends StatelessWidget {
       const SizedBox(height: 2),
       Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
         style: type.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w800, color: color,
+          fontWeight: FontWeight.w800,
+          color: accent ? scheme.primary : scheme.onSurface,
           fontFeatures: const [FontFeature.tabularFigures()])),
-      if (secondary != null) Text(secondary!, maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: type.labelSmall?.copyWith(
-          fontSize: 9,
-          color: down ? scheme.error : accent ? scheme.primary : scheme.onSurfaceVariant)),
     ]);
   }
 }
@@ -438,51 +591,6 @@ class _RangeBar extends StatelessWidget {
           fontFeatures: const [FontFeature.tabularFigures()])),
       ]),
     ]);
-  }
-}
-
-/// Market/session and data-freshness indicator derived from the verified quote
-/// status. Never implies a live session when the broker feed is unavailable.
-class _SessionBadge extends StatelessWidget {
-  const _SessionBadge({required this.quote, required this.loading});
-  final CustomerLiveQuote? quote;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final type = Theme.of(context).textTheme;
-    final status = quote?.status;
-    final (String text, bool live, bool warn) = switch (status) {
-      'LIVE' => ('LIVE · ${_clock(quote!.exchangeAt)}', true, false),
-      'LAST_CLOSE' => ('LAST RECORDED · ${_clock(quote!.exchangeAt)}', false, false),
-      'MARKET_CLOSED' => ('MARKET CLOSED', false, true),
-      'STALE' => ('STALE DATA', false, true),
-      'CONNECTING' => ('CONNECTING…', false, true),
-      'RECONNECTING' => ('RECONNECTING…', false, true),
-      'BROKER_CONNECTION_REQUIRED' => ('BROKER OFFLINE', false, true),
-      'UNAVAILABLE' => ('DATA UNAVAILABLE', false, true),
-      _ => (loading ? 'CHECKING SESSION…' : 'SESSION UNAVAILABLE', false, true),
-    };
-    final color = live ? scheme.primary
-        : warn ? scheme.onSurfaceVariant : scheme.onSurface;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 7, height: 7, decoration: BoxDecoration(
-        color: live ? scheme.primary : scheme.onSurfaceVariant,
-        shape: BoxShape.circle)),
-      const SizedBox(width: 6),
-      Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
-        style: type.labelSmall?.copyWith(
-          color: color, fontWeight: FontWeight.w700, fontSize: 10))),
-    ]);
-  }
-
-  static String _clock(DateTime? value) {
-    if (value == null) return '—';
-    final local = value.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }
 

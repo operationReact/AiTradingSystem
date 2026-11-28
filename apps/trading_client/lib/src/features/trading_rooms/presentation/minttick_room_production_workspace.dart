@@ -77,6 +77,19 @@ class _MintTickRoomProductionWorkspaceState
     'ALL' => 'Equity + F&O',
     _ => 'NSE/BSE equities',
   };
+
+  /// User-facing horizon. For F&O the server stores positional rooms as the
+  /// 'Swing' focus; surface that distinctly as 'Positional'.
+  String get _focusLabel => widget.room.marketScope == 'FNO' &&
+          widget.room.focus == 'Swing'
+      ? 'Positional'
+      : widget.room.focus;
+
+  /// Header subtitle that distinguishes each supported room strategy rather
+  /// than showing one shared label for every F&O or equity room.
+  String get _roomSubtitle => widget.room.marketScope == 'FNO'
+      ? '$_focusLabel options · NIFTY · MY ROOM'
+      : '${widget.room.focus} · $_roomScopeLabel · MY ROOM';
   List<String> get _equityRouteBlockers =>
       (widget.liveEquityCapability?.blockers ?? const <String>[])
           .where((blocker) => blocker ==
@@ -261,6 +274,7 @@ class _MintTickRoomProductionWorkspaceState
         roomId: widget.room.id,
         mode: widget.room.mode,
         side: side,
+        initialProduct: widget.room.focus == 'Intraday' ? 'INTRADAY' : 'DELIVERY',
         initialInstrument: _selected,
         market: widget.market!,
         wallet: widget.wallet,
@@ -381,9 +395,7 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      widget.room.marketScope == 'FNO'
-                          ? 'Options · NIFTY · MY ROOM'
-                          : '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
+                      _roomSubtitle,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
@@ -551,25 +563,69 @@ class _MintTickRoomProductionWorkspaceState
         return const Center(child: Text(
           'Authenticated LIVE F&O connection is unavailable.'));
       }
-      return MintTickUpstoxFnoLivePanel(
-        key: ValueKey('room-live-fno-${widget.room.id}'),
-        roomId: widget.room.id,
-        repository: CustomerUpstoxFnoLiveRepository(widget.execution!.api),
-      );
+      return Column(children: [
+        _fnoStrategyNote(context),
+        const SizedBox(height: 8),
+        Expanded(child: MintTickUpstoxFnoLivePanel(
+          key: ValueKey('room-live-fno-${widget.room.id}'),
+          roomId: widget.room.id,
+          repository: CustomerUpstoxFnoLiveRepository(widget.execution!.api),
+        )),
+      ]);
     }
     if (widget.room.mode != 'PAPER' || widget.fno == null) {
       return const Center(child: Text('F&O PAPER account unavailable.'));
     }
     return SingleChildScrollView(
-      child: MintTickPaperFnoPanel(
-        key: ValueKey('room-fno-trade-${widget.room.id}'),
-        roomId: widget.room.id,
-        repository: widget.fno!,
-        onFilled: () async {
-          await _loadHistory();
-          await widget.onRefresh();
-        },
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _fnoStrategyNote(context),
+        const SizedBox(height: 8),
+        MintTickPaperFnoPanel(
+          key: ValueKey('room-fno-trade-${widget.room.id}'),
+          roomId: widget.room.id,
+          repository: widget.fno!,
+          onFilled: () async {
+            await _loadHistory();
+            await widget.onRefresh();
+          },
+        ),
+      ]),
+    );
+  }
+
+  /// Compact, focus-appropriate framing for an F&O room. The PAPER/LIVE option
+  /// desks share the same verified contract APIs, but the room's horizon is
+  /// made explicit so an Intraday room is not indistinguishable from a
+  /// Positional one. This is framing only and asserts no extra market data.
+  Widget _fnoStrategyNote(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    final intraday = widget.room.focus == 'Intraday';
+    final positional = widget.room.focus == 'Swing';
+    final label = intraday ? 'INTRADAY' : positional ? 'POSITIONAL' : 'OPTIONS';
+    final note = intraday
+        ? 'Intraday options · favour same-session square-off'
+        : positional
+            ? 'Positional options · overnight & multi-day holds'
+            : '$_focusLabel options';
+    return Container(
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: colors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.22))),
+      child: Row(children: [
+        Icon(intraday ? Icons.bolt_rounded : Icons.timeline_rounded,
+          size: 14, color: colors.primary),
+        const SizedBox(width: 6),
+        Text(label, style: type.labelSmall?.copyWith(
+          color: colors.primary, fontWeight: FontWeight.w800, fontSize: 10)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(note, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant, fontSize: 10))),
+      ]),
     );
   }
 
