@@ -20,13 +20,6 @@ const _reliance = InstrumentRecord(
   expiry: null, strike: null, lotSize: 1, tickSize: .05,
 );
 
-const _sbin = InstrumentRecord(
-  id: 202, exchange: 'NSE', exchangeSegment: 'NSE_CM',
-  symbolToken: '3045', tradingSymbol: 'SBIN-EQ',
-  name: 'State Bank of India', instrumentType: 'EQ',
-  expiry: null, strike: null, lotSize: 1, tickSize: .05,
-);
-
 class _Market extends Fake implements HttpCustomerMarketRepository {
   @override
   Future<InstrumentSearchPage> searchPage({
