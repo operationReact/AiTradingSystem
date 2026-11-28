@@ -12,11 +12,16 @@ class MintTickRoomCandlestickDesk extends StatefulWidget {
     required this.market,
     required this.onInstrument,
     this.initialInstrument,
+    this.initialFrame = 2,
     super.key,
   });
   final HttpCustomerMarketRepository market;
   final ValueChanged<InstrumentRecord?> onInstrument;
   final InstrumentRecord? initialInstrument;
+
+  /// Default timeframe index into [_frames] (0 = 5m, 1 = 1H, 2 = 1D). Intraday
+  /// rooms open on the 5-minute frame; swing/positional rooms open on 1D.
+  final int initialFrame;
 
   @override
   State<MintTickRoomCandlestickDesk> createState() =>
@@ -42,6 +47,8 @@ class _MintTickRoomCandlestickDeskState
   @override
   void initState() {
     super.initState();
+    final frame = widget.initialFrame;
+    if (frame >= 0 && frame < _frames.length) _frame = frame;
     if (widget.initialInstrument != null) {
       _instrument = widget.initialInstrument;
       WidgetsBinding.instance.addPostFrameCallback((_) {

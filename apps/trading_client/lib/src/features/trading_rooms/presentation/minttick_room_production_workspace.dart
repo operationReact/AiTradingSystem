@@ -14,7 +14,7 @@ import 'minttick_customer_widgets.dart';
 import '../data/customer_upstox_fno_live_repository.dart';
 import 'minttick_upstox_fno_live_panel.dart';
 import 'minttick_paper_fno_panel.dart';
-import 'minttick_room_candlestick_desk.dart';
+import 'minttick_room_equity_desk.dart';
 import 'minttick_room_order_sheet.dart';
 
 /// Exact structural counterpart of MintTick_Rooms_Production_Parity_Prototype.
@@ -579,11 +579,21 @@ class _MintTickRoomProductionWorkspaceState
     final count = _positions.where((p) => p.quantity > 0).length;
     return Column(children: [
       if (widget.market != null)
-        Expanded(child: MintTickRoomCandlestickDesk(
-          key: ValueKey('room-chart-$_chartVersion'),
+        Expanded(child: MintTickRoomEquityDesk(
+          key: ValueKey('room-equity-$_chartVersion'),
           market: widget.market!,
+          focus: widget.room.focus,
           initialInstrument: _selected,
-          onInstrument: (selected) => _selected = selected))
+          onInstrument: (selected) => _selected = selected,
+          holdingFor: (instrumentId) {
+            for (final position in _positions) {
+              if (position.instrumentId == instrumentId &&
+                  position.quantity > 0) {
+                return position.quantity;
+              }
+            }
+            return 0;
+          }))
       else
         Expanded(child: Center(child: Text('Market data unavailable.',
           style: styles.bodySmall))),
