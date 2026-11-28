@@ -242,7 +242,11 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository, MindLive
   @override
   Future<List<MindPaperRoom>> rooms() async => [
         for (final room in await HttpCustomerRoomRepository(api).list())
-          if (room.mode == 'PAPER' && room.status == 'PAPER_FUNDED') MindPaperRoom(room.id, room.name),
+          if (room.mode == 'PAPER' &&
+              room.status == 'PAPER_FUNDED' &&
+              room.focus == 'INTRADAY' &&
+              (room.marketScope == 'EQUITY' || room.marketScope == 'ALL'))
+            MindPaperRoom(room.id, room.name),
       ];
 
   @override
