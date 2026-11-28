@@ -29,16 +29,24 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('infra/ec2-paper/probe_fno_room_http500.py').read_text()
-          assert len(s) < 9000
+          assert len(s) < 12000
           for required in ['to_regclass', 'flyway_schema_history', 'customer_paper_fno_order',
                            'customer_paper_fno_position', 'FNO_ERROR_CLASS:',
-                           'FNO_RELEASE_SHA:']:
+                           'FNO_RELEASE_SHA:', 'APP_CONTAINER_STATE:', 'APP_API_HEALTH:',
+                           'APP_STARTUP_CLASS:']:
               assert required in s
           for forbidden in ['--with-decryption', 'get-parameter', 'placeOrder',
                             'submitOrder', 'print(proc.stderr)', 'print(proc.stdout)',
                             'os.system(', 'shell=True', 'docker compose up',
                             'docker restart', 'UPDATE customer_', 'DELETE FROM customer_']:
               assert forbidden not in s
+          import importlib.util
+          spec=importlib.util.spec_from_file_location('probe','infra/ec2-paper/probe_fno_room_http500.py')
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          assert module.app_startup_class('Flyway migration failed: exception')=='FLYWAY_FAILURE'
+          assert module.app_startup_class('Started AiTradingSystemApplication')=='APPLICATION_STARTED'
+          assert module.app_startup_class('')=='NO_CLASSIFIED_ERROR'
           PY
   diagnose:
     needs: validate
@@ -103,6 +111,9 @@ jobs:
                   "CUSTOMER_PAPER_ACCOUNT","CUSTOMER_TRADING_ROOM","FLYWAY_SCHEMA_HISTORY"]
           allow={"FNO_POSTGRES":{"RUNNING","UNAVAILABLE"},
                  "FNO_BACKEND":{"RUNNING","UNAVAILABLE"},
+                 "APP_CONTAINER_STATE":{"RUNNING","RESTARTING","EXITED","CREATED","UNAVAILABLE"},
+                 "APP_API_HEALTH":{"200","401","403","404","500","503","CONNECTION_REFUSED","TIMEOUT","UNAVAILABLE","OTHER"},
+                 "APP_STARTUP_CLASS":{"APPLICATION_STARTED","APPLICATION_FAILED","FLYWAY_FAILURE","DATABASE_FAILURE","CONFIGURATION_FAILURE","PORT_BIND_FAILURE","JVM_FAILURE","OTHER_STARTUP_ERROR","NO_CLASSIFIED_ERROR","UNAVAILABLE"},
                  "FNO_MIGRATION_92":{"APPLIED","NOT_APPLIED","UNAVAILABLE"},
                  "FNO_MIGRATION_94":{"APPLIED","NOT_APPLIED","UNAVAILABLE"},
                  "FNO_ERROR_CLASS":{"FNO_TABLE_MISSING","FNO_TABLE_PERMISSION",
