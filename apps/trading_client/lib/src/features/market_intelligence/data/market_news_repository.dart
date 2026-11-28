@@ -344,8 +344,8 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
 
   @override
   Future<List<NewsDrivenMindCandidate>> newsDrivenCandidates(String runId) async {
-    if (!RegExp(r'^[0-9a-fA-F-]{36}
-).hasMatch(runId)) {
+    if (runId.length != 36 ||
+        !RegExp(r'^[0-9a-fA-F-]{36}').hasMatch(runId)) {
       throw ArgumentError('Invalid news scan id');
     }
     final response = await api.getJson('/api/research/news-driven-scans/$runId/candidates');

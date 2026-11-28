@@ -143,7 +143,8 @@ public class NewsDrivenResearchScanService {
      */
     public List<NewsDrivenCandidateView> candidates(UUID runId) {
         ResearchScanSummary run = scans.requireRun(runId);
-        if (run.strategySet() == null || !List.of(run.strategySet().split(",")).contains(STRATEGY)) {
+        if (run.strategySet() == null ||
+                !java.util.Arrays.asList(run.strategySet().split(",")).contains(STRATEGY)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "News-driven scan not found");
         }
         Instant now = clock.instant();
