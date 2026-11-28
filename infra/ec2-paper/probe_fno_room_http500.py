@@ -44,6 +44,85 @@ def container(service):
     return ident if re.fullmatch(r"[a-f0-9]{12,64}", ident) else None
 
 
+
+def backend_container_state(backend):
+    """Return only an allowlisted Docker lifecycle state."""
+    import json
+    ident=backend
+    if not ident:
+        proc=run(["docker","ps","-aq","--filter",
+                  "label=com.docker.compose.project=aitradingsystem-paper",
+                  "--filter","label=com.docker.compose.service=backend"],5)
+        if proc is None or proc.returncode:
+            return "UNAVAILABLE"
+        ids=[x for x in proc.stdout.splitlines() if re.fullmatch(r"[a-f0-9]{12,64}",x)]
+        if len(ids)!=1:
+            return "UNAVAILABLE"
+        ident=ids[0]
+    proc=run(["docker","inspect","--format","{{.State.Status}}",ident],5)
+    if proc is None or proc.returncode:
+        return "UNAVAILABLE"
+    return {"running":"RUNNING","restarting":"RESTARTING","exited":"EXITED",
+            "created":"CREATED","dead":"EXITED"}.get(proc.stdout.strip(),"UNAVAILABLE")
+
+
+def api_health_status():
+    """Probe one fixed local GET endpoint and return only status/category."""
+    import urllib.error
+    import urllib.request
+    try:
+        req=urllib.request.Request("http://127.0.0.1:8080/api/health",method="GET")
+        with urllib.request.urlopen(req,timeout=5) as response:
+            return str(response.status) if response.status in (200,401,403,404,500,503) else "OTHER"
+    except urllib.error.HTTPError as error:
+        return str(error.code) if error.code in (200,401,403,404,500,503) else "OTHER"
+    except urllib.error.URLError as error:
+        reason=str(error.reason).lower()
+        if "refused" in reason:
+            return "CONNECTION_REFUSED"
+        if "timed out" in reason or "timeout" in reason:
+            return "TIMEOUT"
+        return "UNAVAILABLE"
+    except (OSError,TimeoutError):
+        return "UNAVAILABLE"
+
+
+def recent_backend_logs(backend):
+    """Read bounded logs in memory; callers emit categories only."""
+    if not backend:
+        return None
+    proc=run(["docker","logs","--since","30m","--tail","500",backend],10)
+    if proc is None or proc.returncode:
+        return None
+    return (proc.stdout+proc.stderr)[-131072:]
+
+
+def app_startup_class(log_text):
+    """Classify startup failure without returning raw log content."""
+    if log_text is None:
+        return "UNAVAILABLE"
+    body=log_text.lower()
+    if "could not resolve placeholder" in body or "failed to bind properties" in body:
+        return "CONFIGURATION_FAILURE"
+    if "flyway" in body and any(x in body for x in ("exception","migration failed","error")):
+        return "FLYWAY_FAILURE"
+    database_signals=("unable to obtain jdbc connection","connection refused",
+                      "password authentication failed","datasource")
+    failure_signals=("exception","failed","error","refused")
+    if any(x in body for x in database_signals) and any(x in body for x in failure_signals):
+        return "DATABASE_FAILURE"
+    if "address already in use" in body or "bindexception" in body:
+        return "PORT_BIND_FAILURE"
+    if "outofmemoryerror" in body or "fatal error" in body:
+        return "JVM_FAILURE"
+    if "application failed to start" in body or "application run failed" in body:
+        return "APPLICATION_FAILED"
+    if "started aitradingsystemapplication" in body:
+        return "APPLICATION_STARTED"
+    if "exception" in body or "error starting" in body or "failed to start" in body:
+        return "OTHER_STARTUP_ERROR"
+    return "NO_CLASSIFIED_ERROR"
+
 def sql_state(pg, statement, allowed):
     if not pg:
         return "UNAVAILABLE"
@@ -138,14 +217,13 @@ def effective_flags(backend):
     return result
 
 
-def backend_errors(backend):
+def backend_errors(backend, log_text=None):
     """Classify limited recent logs, discard every original line."""
-    if not backend:
+    if log_text is None:
+        log_text=recent_backend_logs(backend)
+    if log_text is None:
         return "UNAVAILABLE"
-    proc = run(["docker", "logs", "--since", "30m", "--tail", "500", backend], 10)
-    if proc is None or proc.returncode:
-        return "UNAVAILABLE"
-    body = (proc.stdout + proc.stderr)[-131072:].lower()
+    body=log_text.lower()
     if "customer_paper_fno_" in body and (
         "does not exist" in body or "undefined_table" in body):
         return "FNO_TABLE_MISSING"
@@ -173,6 +251,10 @@ def main():
     pg, backend = (container(n) for n in SERVICES)
     print("FNO_POSTGRES: " + ("RUNNING" if pg else "UNAVAILABLE"))
     print("FNO_BACKEND: " + ("RUNNING" if backend else "UNAVAILABLE"))
+    print("APP_CONTAINER_STATE: " + backend_container_state(backend))
+    print("APP_API_HEALTH: " + api_health_status())
+    log_text=recent_backend_logs(backend)
+    print("APP_STARTUP_CLASS: " + app_startup_class(log_text))
     print("FNO_RELEASE_SHA: " + release_state())
     for relation in (
         "customer_paper_fno_position", "customer_paper_fno_order",
@@ -186,7 +268,7 @@ def main():
         print("FNO_CONFIG_" + key + ": " + state)
     for key, state in sorted(effective_flags(backend).items()):
         print("FNO_EFFECTIVE_" + key + ": " + state)
-    print("FNO_ERROR_CLASS: " + backend_errors(backend))
+    print("FNO_ERROR_CLASS: " + backend_errors(backend,log_text))
 
 
 if __name__ == "__main__":
