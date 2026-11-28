@@ -162,13 +162,17 @@ class _RoomThesisEditorState extends State<_RoomThesisEditor> {
       if (error is ApiHttpFailure && error.statusCode == 409) {
         try {
           final latest = await widget.repository.thesis(widget.initial.roomId);
-          if (mounted) setState(() {
-            _serverVersion = latest;
-            _error = 'These notes changed elsewhere. Your draft is still here.';
-          });
+          if (mounted) {
+            setState(() {
+              _serverVersion = latest;
+              _error = 'These notes changed elsewhere. Your draft is still here.';
+            });
+          }
         } catch (_) {
-          if (mounted) setState(() => _error =
-              'The save conflicted and the latest notes could not be loaded.');
+          if (mounted) {
+            setState(() => _error =
+                'The save conflicted and the latest notes could not be loaded.');
+          }
         }
       } else {
         setState(() => _error = 'Save could not be verified. Review the notes and retry.');
