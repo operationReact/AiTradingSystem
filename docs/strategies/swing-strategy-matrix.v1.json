@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "minttick.swing-strategy-matrix.v1",
+  "generatedAt": "2026-11-28",
+  "generatedBy": "swing implementation session (branch ccr-fb98c349-uxw5hp)",
+  "catalogReality": {
+    "canonicalSource": "MintTick Mind Complete Implementation Master Plan (Notion 41336a82)",
+    "declaredTemplates": 232,
+    "declaredFamilies": 20,
+    "declaredNote": "232 strategy templates in 20 families are a DESIGN INVENTORY, not executed live strategies.",
+    "committedEnumeratedCatalogInRepo": false,
+    "number142Substantiated": false,
+    "number142Note": "The figure 142 (Swing) appears in neither the canonical plan nor committed repo fixtures; MODELS_AND_STRATEGIES.md is referenced but not committed."
+  },
+  "defaults": {
+    "market": "IN",
+    "holdingPeriodTradingDays": "5-15",
+    "risk": "moderate",
+    "startingCapitalInr": 30000,
+    "configurable": true,
+    "note": "User preferences are configurable defaults applied by the downstream backtest/paper layer, not hard-coded strategy limits."
+  },
+  "invariants": {
+    "longOnly": true,
+    "researchOnly": true,
+    "candidateIsNeverAnOrder": true,
+    "interval": "ONE_DAY",
+    "noLookahead": "enforced by BacktestContext point-in-time view and chronological ScanContext",
+    "stopLessThanReferenceLessThanTarget": true
+  },
+  "strategies": [
+    {"id": "SWING_DONCHIAN_BREAKOUT_V1", "name": "Donchian 20-Day Breakout (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 51, "inputs": ["dailyOHLCV"], "entry": "close > prior 20-day high AND close > SMA50", "stop": "lowest low of last 10 bars", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingDonchianBreakoutStrategy.java; SwingStrategiesTest#donchianBreakout...; backtest-SPI proof"},
+    {"id": "SWING_EMA_PULLBACK_V1", "name": "20/50 EMA Pullback (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 52, "inputs": ["dailyOHLCV"], "entry": "EMA20>EMA50; prior low<=EMA20; close reclaims EMA20 & > prior close", "stop": "min(last 2 lows)", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingEmaPullbackStrategy.java; SwingStrategiesTest#emaPullback..."},
+    {"id": "SWING_RSI2_MEANREV_V1", "name": "RSI(2) Mean Reversion in Uptrend (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 201, "inputs": ["dailyOHLCV"], "entry": "close>SMA200; prior RSI(2)<10; short-term turn up", "stop": "lowest low of last 5 bars", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingRsi2MeanReversionStrategy.java; SwingStrategiesTest#rsi2..."},
+    {"id": "SWING_MACD_CROSS_V1", "name": "MACD Bullish Zero-Line Cross (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 60, "inputs": ["dailyOHLCV"], "entry": "MACD line crosses above signal AND line>0", "stop": "lowest low of last 10 bars", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingMacdCrossStrategy.java; SwingStrategiesTest#macdCross..."},
+    {"id": "SWING_BOLLINGER_REVERSION_V1", "name": "Bollinger Lower-Band Reversion (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 101, "inputs": ["dailyOHLCV"], "entry": "close>SMA100; prior close<lower band; close re-enters band & > prior close", "stop": "lowest low of last 5 bars", "target": "middle band (else 2R)", "status": "IMPLEMENTED", "evidence": "SwingBollingerReversionStrategy.java; SwingStrategiesTest#bollinger..."},
+    {"id": "SWING_NEW_HIGH_VOLUME_V1", "name": "60-Day High + Volume Expansion (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 62, "inputs": ["dailyOHLCV", "volume"], "entry": "close >= 60-day high AND volume >= 1.5x avg(20)", "stop": "lowest low of last 10 bars", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingNewHighVolumeStrategy.java; SwingStrategiesTest#newHighVolume..."},
+    {"id": "SWING_GOLDEN_REGIME_PULLBACK_V1", "name": "Golden-Cross 50-SMA Pullback (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 201, "inputs": ["dailyOHLCV"], "entry": "SMA50>SMA200; low<=SMA50; bullish close back above SMA50", "stop": "latest low", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingGoldenRegimePullbackStrategy.java; SwingStrategiesTest#goldenRegime..."},
+    {"id": "SWING_ATR_TREND_V1", "name": "ATR-Stop Trend Continuation (Swing)", "classification": "unique-algorithm", "version": "1", "minimumCandles": 71, "inputs": ["dailyOHLCV"], "entry": "close>rising SMA50 & >SMA20 & > prior close", "stop": "close - 2*ATR(14)", "target": "2R", "status": "IMPLEMENTED", "evidence": "SwingAtrTrendStrategy.java; SwingStrategiesTest#atrTrend..."}
+  ],
+  "dataReadiness": {
+    "requiredInputs": ["validated daily OHLCV", "split/dividend-adjusted closes", "trading calendar", "as-of universe / listing identity"],
+    "perSymbolState": "BLOCKED_UNVERIFIED",
+    "reason": "Live DB/AWS verification unavailable this session (expired credentials). Private archive must not be promoted to canonical data without the controlled ingestion/validation path."
+  },
+  "integrationGaps": [
+    "ResearchScanService.run() rejects ONE_DAY; a daily-swing scan entrypoint is required for live candidate generation.",
+    "SmaBacktestEngine is SMA-specific; a generic strategy-driven, cost-aware (fees/taxes/slippage) OOS/walk-forward runner is required for net-of-cost evidence.",
+    "MintTick Mind Flutter status ladder for the swing family not yet rendered."
+  ],
+  "statusLadderDefinition": ["CATALOGUED", "IMPLEMENTED", "MISSING_DATA", "DATA_READY", "BACKTEST_EVALUATED", "PAPER_READY", "PAPER_RUNNING", "LIVE_READINESS_REVIEW"]
+}
