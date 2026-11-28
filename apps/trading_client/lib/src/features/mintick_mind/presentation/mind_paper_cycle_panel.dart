@@ -241,7 +241,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
             final (rooms, instruments) = snap.data!;
             if (rooms.isEmpty || instruments.isEmpty) {
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header,
-                Text(rooms.isEmpty ? 'Fund a PAPER room first (Trading Rooms → Activate PAPER wallet).'
+                Text(rooms.isEmpty ? 'Create and fund an INTRADAY PAPER equity room first.'
                     : 'Add an NSE/BSE cash equity to your watchlist first.',
                     key: const ValueKey('mind-paper-setup-missing'),
                     style: const TextStyle(color: MindPalette.text, fontSize: 12))]);
