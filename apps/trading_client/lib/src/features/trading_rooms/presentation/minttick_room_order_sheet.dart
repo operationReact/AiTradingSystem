@@ -9,7 +9,7 @@ import '../data/customer_room_repository.dart';
 import 'minttick_room_stock_picker.dart';
 
 /// The Buy/Sell bottom sheet matches the interactive MintTick HTML blueprint.
-/// PAPER submits only virtual fills. LIVE stores PRECHECK_BLOCKED intents only.
+/// PAPER submits virtual fills. LIVE submits only after server readiness, fresh preflight and owner confirmation.
 class MintTickRoomOrderSheet extends StatefulWidget {
   const MintTickRoomOrderSheet({
     required this.roomId,
@@ -465,8 +465,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
               if (_busy && !_awaitingConfirmation)
                 const LinearProgressIndicator(minHeight: 2),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 7),
-                child: Text(_error!, style: type.bodySmall?.copyWith(
-                  color: colors.error))),
+                child: Text(_error!, key: const ValueKey('room-order-error'),
+                  style: type.bodySmall?.copyWith(color: colors.error))),
               const SizedBox(height: 13),
               Row(children: [
                 Expanded(child: OutlinedButton(
