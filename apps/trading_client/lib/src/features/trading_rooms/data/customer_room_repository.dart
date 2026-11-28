@@ -58,6 +58,45 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
     return stored;
   }
 
+  Future<CustomerRoomThesis> thesis(String roomId) async {
+    _validateRoomId(roomId);
+    final value = CustomerRoomThesis.decode(
+      await api.getJson('$_path/$roomId/thesis'), expectedRoomId: roomId);
+    return value;
+  }
+
+  /// Saves owner-authored planning text with optimistic concurrency. A 409 is
+  /// surfaced to the editor so a stale draft can never overwrite newer notes.
+  Future<CustomerRoomThesis> saveThesis({
+    required String roomId,
+    required String content,
+    required int expectedRevision,
+  }) async {
+    _validateRoomId(roomId);
+    final normalized = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    if (normalized.length > CustomerRoomThesis.maxContentLength ||
+        normalized.runes.any((point) =>
+            (point < 32 && point != 9 && point != 10) || point == 127) ||
+        expectedRevision < 0) {
+      throw const FormatException('Invalid room thesis content or revision');
+    }
+    final value = CustomerRoomThesis.decode(await api.putJson(
+      '$_path/$roomId/thesis',
+      body: {'content': normalized, 'expectedRevision': expectedRevision},
+    ), expectedRoomId: roomId);
+    if (value.content != normalized || value.revision != expectedRevision + 1 ||
+        value.updatedAt == null) {
+      throw const FormatException('Unverified room thesis save response');
+    }
+    return value;
+  }
+
+  static void _validateRoomId(String roomId) {
+    if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(roomId)) {
+      throw const FormatException('Invalid room identifier');
+    }
+  }
+
   /// Read-only aggregate for compact tiles. Never treats planned LIVE capital
   /// as available brokerage cash. Server scopes every metric by customer.
   Future<List<CustomerRoomMetric>> dashboard() async {
@@ -131,6 +170,47 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
       mode: mode,
       marketScope: scope as String,
       status: status as String,
+    );
+  }
+}
+
+@immutable
+class CustomerRoomThesis {
+  const CustomerRoomThesis({
+    required this.roomId,
+    required this.content,
+    required this.revision,
+    required this.updatedAt,
+  });
+
+  static const maxContentLength = 5000;
+  final String roomId;
+  final String content;
+  final int revision;
+  final DateTime? updatedAt;
+
+  factory CustomerRoomThesis.decode(Object? raw, {required String expectedRoomId}) {
+    if (raw is! Map<String, dynamic>) {
+      throw const FormatException('Invalid room thesis');
+    }
+    final roomId = raw['roomId'];
+    final content = raw['content'];
+    final revision = raw['revision'];
+    final updatedRaw = raw['updatedAt'];
+    final updatedAt = updatedRaw == null
+        ? null : DateTime.tryParse(updatedRaw is String ? updatedRaw : '');
+    if (roomId != expectedRoomId || content is! String ||
+        content.length > maxContentLength || revision is! int || revision < 0 ||
+        (updatedRaw != null && updatedAt == null) ||
+        (revision == 0 && (content.isNotEmpty || updatedAt != null)) ||
+        (revision > 0 && updatedAt == null)) {
+      throw const FormatException('Unverified room thesis response');
+    }
+    return CustomerRoomThesis(
+      roomId: roomId as String,
+      content: content,
+      revision: revision,
+      updatedAt: updatedAt,
     );
   }
 }

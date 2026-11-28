@@ -71,6 +71,9 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/brokers/angel-one/disconnect");
     private static final java.util.regex.Pattern CUSTOMER_ROOM_DETAIL =
         java.util.regex.Pattern.compile("^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$");
+    private static final java.util.regex.Pattern CUSTOMER_ROOM_THESIS =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/thesis$");
 
     private static final java.util.regex.Pattern PAPER_WALLET_RESOURCE =
         java.util.regex.Pattern.compile(
@@ -162,6 +165,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                 && Set.of("DELETE", "OPTIONS").contains(method))
             || (CUSTOMER_ROOM_DETAIL.matcher(path).matches()
                 && Set.of("GET", "DELETE", "OPTIONS").contains(method))
+            || (CUSTOMER_ROOM_THESIS.matcher(path).matches()
+                && Set.of("GET", "PUT", "OPTIONS").contains(method))
             || (BROKER_READS.contains(path)
                 && Set.of("GET", "OPTIONS").contains(method))
             || (PORTFOLIO_READS.contains(path)

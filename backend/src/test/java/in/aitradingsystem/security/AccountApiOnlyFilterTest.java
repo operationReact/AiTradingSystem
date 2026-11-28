@@ -46,6 +46,13 @@ class AccountApiOnlyFilterTest {
         assertPasses("POST", "/api/customer/trading-rooms");
         assertPasses("GET", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
         assertPasses("DELETE", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
+        String roomThesis = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/thesis";
+        assertPasses("GET", roomThesis);
+        assertPasses("PUT", roomThesis);
+        assertPasses("OPTIONS", roomThesis);
+        assertBlocked("POST", roomThesis);
+        assertBlocked("DELETE", roomThesis);
+        assertBlocked("GET", "/api/customer/trading-rooms/not-a-room/thesis");
         assertPasses("POST", "/api/customer/brokers/angel-one/connect");
         assertPasses("POST", "/api/customer/brokers/angel-one/disconnect");
         assertPasses("POST", "/api/customer/brokers/upstox/start");

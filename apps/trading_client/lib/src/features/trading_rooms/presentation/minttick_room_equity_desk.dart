@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
+import '../data/customer_room_repository.dart';
 import 'minttick_room_candlestick_desk.dart';
+import 'minttick_room_thesis_editor.dart';
 
 /// Strategy family that drives the equity Trade layout and chart default.
 enum _Family { intraday, positional }
@@ -73,7 +75,9 @@ class _Priced {
 /// they were observed and refreshed only on demand — never silently polled.
 class MintTickRoomEquityDesk extends StatefulWidget {
   const MintTickRoomEquityDesk({
+    required this.roomId,
     required this.market,
+    this.roomRepository,
     required this.focus,
     required this.initialInstrument,
     required this.onInstrument,
@@ -81,7 +85,9 @@ class MintTickRoomEquityDesk extends StatefulWidget {
     super.key,
   });
 
+  final String roomId;
   final HttpCustomerMarketRepository market;
+  final HttpCustomerRoomRepository? roomRepository;
 
   /// Room horizon: 'Intraday', 'Swing', 'Long-term', 'Help me choose' or a
   /// legacy value. Resolved through [_strategyFor]; unknown values fall back.
@@ -408,14 +414,12 @@ class _MintTickRoomEquityDeskState extends State<MintTickRoomEquityDesk> {
             fontSize: 9, color: scheme.onSurfaceVariant)),
       ],
       const SizedBox(height: 8),
-      Row(children: [
-        Icon(Icons.sticky_note_2_outlined, size: 14, color: scheme.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Expanded(child: Text(
-          'Thesis & notes are not yet available for Trading Rooms.',
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
-      ]),
+      MintTickRoomThesisShortcut(
+        roomId: widget.roomId,
+        strategy: widget.focus,
+        repository: widget.roomRepository,
+        key: const ValueKey('room-thesis-shortcut'),
+      ),
     ]));
   }
 }
