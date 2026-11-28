@@ -313,18 +313,56 @@ extension _MindNewsScreens on _MindWorkspaceState {
                   style: TextStyle(color: MindPalette.muted, fontSize: 11))),
           for (final candidate in _newsScanCandidates.take(5))
             Padding(padding: const EdgeInsets.only(top: 7),
-              child: Row(children: [
-                Expanded(child: Text(candidate.symbol, style: const TextStyle(
-                    color: MindPalette.text, fontSize: 12, fontWeight: FontWeight.w800))),
-                Text(candidate.reasons.contains('NEWS_DIRECTION_POSITIVE')
-                    ? 'Positive news' : candidate.reasons.contains('NEWS_DIRECTION_NEGATIVE')
-                        ? 'Negative news' : 'Directional',
-                    style: const TextStyle(color: MindPalette.mint, fontSize: 10)),
-                const SizedBox(width: 7),
-                Text('dir ${candidate.score.toStringAsFixed(2)}',
-                    style: const TextStyle(color: MindPalette.text, fontSize: 11,
-                        fontWeight: FontWeight.w700)),
-              ]),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: MindPalette.card,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: MindPalette.border),
+                ),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                  childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                  title: Row(children: [
+                    Expanded(child: Text(candidate.symbol, style: const TextStyle(
+                        color: MindPalette.text, fontSize: 12, fontWeight: FontWeight.w800))),
+                    Text(candidate.direction == 'POSITIVE' ? 'Positive' : 'Negative',
+                        style: TextStyle(color: candidate.direction == 'POSITIVE'
+                            ? MindPalette.mint : MindPalette.red, fontSize: 10)),
+                    const SizedBox(width: 8),
+                    Text('dir ${candidate.score.toStringAsFixed(2)}',
+                        style: const TextStyle(color: MindPalette.text, fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ]),
+                  subtitle: Text(candidate.evidence.isEmpty
+                      ? 'No currently displayable supporting stories'
+                      : candidate.evidence.first.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
+                  children: [
+                    for (final story in candidate.evidence) Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(story.publisher.toUpperCase(),
+                            style: const TextStyle(color: MindPalette.mint, fontSize: 9,
+                                fontWeight: FontWeight.w800)),
+                        Text(story.title, style: const TextStyle(color: MindPalette.text,
+                            fontSize: 11, fontWeight: FontWeight.w700)),
+                        if (story.summary.isNotEmpty)
+                          Text(story.summary, style: const TextStyle(color: MindPalette.muted,
+                              fontSize: 10, height: 1.3)),
+                        Align(alignment: Alignment.centerLeft, child: TextButton(
+                          onPressed: () => _openMindNewsPublisher(story.url),
+                          child: const Text('Open source'),
+                        )),
+                      ]),
+                    ),
+                    if (candidate.evidence.isEmpty)
+                      const Align(alignment: Alignment.centerLeft,
+                        child: Text('Display rights or current analysis may no longer permit story details.',
+                          style: TextStyle(color: MindPalette.muted, fontSize: 10))),
+                  ],
+                ),
+              ),
             ),
         ],
         if (_newsScanCandidates.isNotEmpty) ...[
@@ -337,7 +375,7 @@ extension _MindNewsScreens on _MindWorkspaceState {
           )),
         ],
         const SizedBox(height: 4),
-        const Text('A research scan only. PAPER rechecks live data and risk; LIVE remains behind the existing proposal and order-confirmation gates.',
+        const Text('Direction strength is not an expected return. Supporting stories are rechecked for current display rights. PAPER rechecks live data and risk; LIVE requires the existing proposal and order confirmation.',
             style: TextStyle(color: MindPalette.muted, fontSize: 10, height: 1.3)),
       ]),
     );

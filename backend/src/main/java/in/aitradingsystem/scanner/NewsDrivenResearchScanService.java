@@ -133,6 +133,38 @@ public class NewsDrivenResearchScanService {
         return scans.requireRun(runId);
     }
 
+    public record NewsDrivenCandidateView(long instrumentId, String tradingSymbol,
+            double directionStrength, String direction, List<NewsContext.Evidence> supportingEvidence) {}
+
+    /**
+     * Rebuild the supporting story list at read time so revoked publisher DISPLAY rights
+     * cannot be bypassed by the stored candidate snapshot. The candidate score/direction
+     * remain the immutable scan-time decision; these are current display-permitted stories.
+     */
+    public List<NewsDrivenCandidateView> candidates(UUID runId) {
+        ResearchScanSummary run = scans.requireRun(runId);
+        if (run.strategySet() == null || !List.of(run.strategySet().split(",")).contains(STRATEGY)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "News-driven scan not found");
+        }
+        Instant now = clock.instant();
+        return scans.rankedCandidates(runId, 200).stream()
+            .filter(candidate -> STRATEGY.equals(candidate.strategy()))
+            .map(candidate -> {
+                String direction = candidate.reasons().contains("NEWS_DIRECTION_NEGATIVE")
+                    ? "NEGATIVE" : "POSITIVE";
+                NewsContext current;
+                try {
+                    current = news.contextFor(candidate.instrumentId(), candidate.tradingSymbol(), now);
+                } catch (RuntimeException unavailable) {
+                    current = NewsContext.unavailable(candidate.instrumentId(), candidate.tradingSymbol(), now);
+                }
+                List<NewsContext.Evidence> evidence = current.evidence().stream()
+                    .filter(NewsContext.Evidence::included).limit(3).toList();
+                return new NewsDrivenCandidateView(candidate.instrumentId(), candidate.tradingSymbol(),
+                    candidate.score(), direction, evidence);
+            }).toList();
+    }
+
     private static boolean eligible(NewsContext context) {
         return context != null
             && NewsContext.STATUS_INCLUDED_EVIDENCE.equals(context.status())

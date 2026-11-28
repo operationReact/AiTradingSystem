@@ -214,26 +214,52 @@ class NewsDrivenMindScan {
   }
 }
 
+class NewsDrivenMindEvidence {
+  const NewsDrivenMindEvidence({required this.publisher, required this.title,
+    required this.url, required this.summary, required this.publishedAt});
+  final String publisher, title, url, summary;
+  final DateTime? publishedAt;
+
+  factory NewsDrivenMindEvidence.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['source'] is! String ||
+        raw['title'] is! String || raw['url'] is! String ||
+        raw['evidenceSummary'] is! String) {
+      throw const FormatException('Invalid supporting news evidence');
+    }
+    final uri = Uri.tryParse(raw['url'] as String);
+    final published = raw['publishedAt'] == null
+        ? null : DateTime.tryParse('${raw['publishedAt']}');
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
+        uri.host.isEmpty || (raw['publishedAt'] != null && published == null)) {
+      throw const FormatException('Invalid supporting news evidence fields');
+    }
+    return NewsDrivenMindEvidence(publisher: raw['source'] as String,
+      title: raw['title'] as String, url: uri.toString(),
+      summary: raw['evidenceSummary'] as String, publishedAt: published?.toUtc());
+  }
+}
+
 class NewsDrivenMindCandidate {
   const NewsDrivenMindCandidate({required this.symbol, required this.score,
-    required this.referencePrice, required this.reasons});
+    required this.direction, required this.evidence});
   final String symbol;
   final double score;
-  final num? referencePrice;
-  final List<String> reasons;
+  final String direction;
+  final List<NewsDrivenMindEvidence> evidence;
 
   factory NewsDrivenMindCandidate.fromJson(Object? raw) {
     if (raw is! Map<String, dynamic> || raw['tradingSymbol'] is! String ||
-        raw['score'] is! num || !(raw['score'] as num).isFinite ||
-        (raw['referencePrice'] != null && raw['referencePrice'] is! num) ||
-        raw['reasons'] is! List || (raw['reasons'] as List).any((v) => v is! String)) {
+        raw['directionStrength'] is! num || !(raw['directionStrength'] as num).isFinite ||
+        !const ['POSITIVE', 'NEGATIVE'].contains(raw['direction']) ||
+        raw['supportingEvidence'] is! List) {
       throw const FormatException('Invalid news-driven candidate');
     }
     return NewsDrivenMindCandidate(
       symbol: raw['tradingSymbol'] as String,
-      score: (raw['score'] as num).toDouble(),
-      referencePrice: raw['referencePrice'] as num?,
-      reasons: List.unmodifiable((raw['reasons'] as List).cast<String>()),
+      score: (raw['directionStrength'] as num).toDouble(),
+      direction: raw['direction'] as String,
+      evidence: List.unmodifiable((raw['supportingEvidence'] as List)
+          .map(NewsDrivenMindEvidence.fromJson)),
     );
   }
 }
@@ -322,8 +348,7 @@ class HttpMarketNewsRepository implements MarketNewsRepository {
 ).hasMatch(runId)) {
       throw ArgumentError('Invalid news scan id');
     }
-    final response = await api.getJson('/api/research/scans/$runId/candidates',
-        query: {'limit': '20'});
+    final response = await api.getJson('/api/research/news-driven-scans/$runId/candidates');
     if (response is! List) throw const FormatException('Invalid news-driven candidate list');
     return List.unmodifiable(response.map(NewsDrivenMindCandidate.fromJson));
   }
