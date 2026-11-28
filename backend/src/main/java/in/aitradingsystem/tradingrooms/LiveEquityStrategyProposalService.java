@@ -149,7 +149,8 @@ public class LiveEquityStrategyProposalService {
     }
 
     static boolean eligibleCycle(MindPaperCycleService.Cycle cycle, Instant now) {
-        if (cycle == null || now == null || !STRATEGIES.contains(cycle.strategyCode())
+        if (cycle == null || now == null || cycle.strategyCode() == null
+                || !STRATEGIES.contains(cycle.strategyCode()) || cycle.interval() == null
                 || cycle.outcome() != MindPaperCycleService.Outcome.FILLED || cycle.liveOrder()
                 || cycle.orderId() == null || cycle.signalId() == null || cycle.signalId().isBlank()
                 || cycle.signalId().length() > 100 || cycle.signalAction() == null
@@ -157,14 +158,14 @@ public class LiveEquityStrategyProposalService {
                 || !("BUY".equals(cycle.side()) || "SELL".equals(cycle.side()))
                 || cycle.quantity() == null || cycle.quantity() < 1
                 || cycle.limitPrice() == null || cycle.limitPrice().signum() <= 0
+                || cycle.quoteLtp() == null || cycle.quoteLtp().signum() <= 0
                 || cycle.stopPrice() == null || cycle.stopPrice().signum() <= 0
                 || cycle.targetPrice() == null || cycle.targetPrice().signum() <= 0
                 || cycle.candleTime() == null || cycle.quoteExchangeAt() == null
                 || cycle.createdAt() == null || cycle.tradingSymbol() == null
                 || cycle.tradingSymbol().isBlank() || cycle.dataLabel() == null
                 || !cycle.dataLabel().contains("VERIFIED_LIVE_TICK")
-                || !Set.of("ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR")
-                    .contains(cycle.interval())) {
+                || !allowedIntradayInterval(cycle.strategyCode(), cycle.interval())) {
             return false;
         }
         Duration createdAge = Duration.between(cycle.createdAt(), now);
@@ -177,6 +178,13 @@ public class LiveEquityStrategyProposalService {
         return "BUY".equals(cycle.side())
             ? cycle.stopPrice().compareTo(price) < 0 && cycle.targetPrice().compareTo(price) > 0
             : cycle.stopPrice().compareTo(price) > 0 && cycle.targetPrice().compareTo(price) < 0;
+    }
+
+    private static boolean allowedIntradayInterval(String strategyCode, String interval) {
+        if ("SMA_TREND_VOLUME_V1".equals(strategyCode)) {
+            return Set.of("FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR").contains(interval);
+        }
+        return Set.of("ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE").contains(interval);
     }
 
     private static void requireEligibleCycle(MindPaperCycleService.Cycle cycle, Instant now) {
