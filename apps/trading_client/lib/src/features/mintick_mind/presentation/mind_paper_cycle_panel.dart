@@ -177,6 +177,7 @@ class _MindPaperCyclePanelState extends State<MindPaperCyclePanel> {
           title: const Text('Confirm LIVE intraday order'),
           content: Text(
             '${proposal.strategyCode} · ${proposal.tradingSymbol} · $roomName\\n'
+            'Broker: ${proposal.selectedBroker}\\n'
             '${proposal.side} ${proposal.quantity} LIMIT DAY @ ${proposal.limitPrice}\\n'
             'Strategy stop / target: ${proposal.stopPrice} / ${proposal.targetPrice}\\n\\n'
             'If all server checks pass, this sends one real order to your selected broker. '
