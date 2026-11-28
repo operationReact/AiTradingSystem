@@ -78,18 +78,7 @@ class _MintTickRoomProductionWorkspaceState
     _ => 'NSE/BSE equities',
   };
   List<String> get _equityRouteBlockers =>
-      (widget.liveEquityCapability?.blockers ?? const <String>[])
-          .where((blocker) => blocker ==
-                  'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED' ||
-              blocker == 'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER' ||
-              blocker == 'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED' ||
-              blocker == 'ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED' ||
-              blocker == 'BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED' ||
-              blocker ==
-                  'BROKER_ORDER_DISPATCH_AND_RECONCILIATION_NOT_IMPLEMENTED' ||
-              blocker == 'ANGEL_ONE_EQUITY_DISPATCH_NOT_COORDINATED' ||
-              blocker == 'UPSTOX_EQUITY_DISPATCH_NOT_COORDINATED')
-          .toList(growable: false);
+      widget.liveEquityCapability?.blockers ?? const <String>[];
   InstrumentRecord? _selected;
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
@@ -99,6 +88,7 @@ class _MintTickRoomProductionWorkspaceState
   Map<int, CustomerLiveQuote> _positionQuotes = const {};
   int _historyGeneration = 0;
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
+  List<LiveEquityOrder> _liveOrders = const [];
   bool _historyLoading = false;
   String? _historyError;
 
@@ -215,20 +205,33 @@ class _MintTickRoomProductionWorkspaceState
           setState(() => _historyLoading = false);
         }
       }
-    } else if (widget.room.mode == 'LIVE' && widget.intents != null) {
+    } else if (widget.room.mode == 'LIVE') {
       setState(() { _historyLoading = true; _historyError = null; });
       try {
-        final intents = await widget.intents!.list(widget.room.id);
-        if (mounted) { setState(() => _liveIntents = intents.where(
-          (item) => item.mode == 'LIVE' && item.state == 'PRECHECK_BLOCKED')
-          .toList()); }
+        final rows = await Future.wait<Object>([
+          widget.intents?.list(widget.room.id) ??
+              Future.value(<CustomerBlockedOrderIntent>[]),
+          widget.execution?.liveOrders(widget.room.id) ??
+              Future.value(<LiveEquityOrder>[]),
+        ]);
+        if (mounted && request == _historyGeneration) {
+          setState(() {
+            _liveIntents = (rows[0] as List<CustomerBlockedOrderIntent>)
+                .where((item) => item.mode == 'LIVE' && item.state == 'PRECHECK_BLOCKED')
+                .toList(growable: false);
+            _liveOrders = rows[1] as List<LiveEquityOrder>;
+          });
+        }
       } catch (_) {
-        if (mounted) { setState(() {
+        if (mounted && request == _historyGeneration) { setState(() {
           _liveIntents = const [];
-          _historyError = 'LIVE intent history could not be verified.';
+          _liveOrders = const [];
+          _historyError = 'LIVE order history could not be verified.';
         }); }
       } finally {
-        if (mounted) setState(() => _historyLoading = false);
+        if (mounted && request == _historyGeneration) {
+          setState(() => _historyLoading = false);
+        }
       }
     }
   }
@@ -236,6 +239,21 @@ class _MintTickRoomProductionWorkspaceState
   Future<void> _refresh() async {
     await widget.onRefresh();
     if (mounted) await _loadHistory();
+  }
+
+  Future<void> _reconcileLiveOrder(LiveEquityOrder order) async {
+    final execution = widget.execution;
+    if (execution == null || _historyLoading) return;
+    setState(() { _historyLoading = true; _historyError = null; });
+    try {
+      await execution.reconcileLiveOrder(roomId: widget.room.id, orderId: order.id);
+      if (mounted) await _loadHistory();
+    } catch (_) {
+      if (mounted) setState(() =>
+          _historyError = 'Broker reconciliation is inconclusive. Do not resubmit.');
+    } finally {
+      if (mounted) setState(() => _historyLoading = false);
+    }
   }
 
   Future<void> _order(String side) async {
@@ -266,7 +284,7 @@ class _MintTickRoomProductionWorkspaceState
         wallet: widget.wallet,
         paper: widget.paper,
         execution: widget.execution,
-        intents: widget.intents,
+        liveEquityCapability: widget.liveEquityCapability,
         onChanged: _refresh,
         onInstrumentSelected: (item) {
           if (mounted) {
@@ -304,11 +322,14 @@ class _MintTickRoomProductionWorkspaceState
         (sum, p) => sum + (p.quantity > 0 ? p.costBasisPaise : 0));
     final fnoReturn = fnoPnl != null && fnoBasis > 0
         ? fnoPnl * 100 / fnoBasis : null;
+    final liveReady = widget.liveEquityCapability?.executionEnabled == true;
     final readyNote = isPaper
       ? widget.room.marketScope == 'FNO'
           ? 'PAPER · No real-money orders · server-verified execution only'
           : 'PAPER · Virtual cash · manual simulated orders only'
-      : 'LIVE · Broker authorization required · order execution locked';
+      : liveReady
+          ? 'LIVE · Per-order server preflight and owner confirmation required'
+          : 'LIVE · Order dispatch blocked · check Mind readiness';
 
     return Scaffold(
       body: SafeArea(child: Center(child: ConstrainedBox(
@@ -778,7 +799,7 @@ class _MintTickRoomProductionWorkspaceState
       ));
     }
     final isPaper = widget.room.mode == 'PAPER';
-    final rows = isPaper ? _paperOrders.length : _liveIntents.length;
+    final rows = isPaper ? _paperOrders.length : _liveOrders.length + _liveIntents.length;
     return Column(children: [
       _PageTitle('Order history', trailing: '$rows', onRefresh: _loadHistory),
       const _RowColumns(),
@@ -787,7 +808,7 @@ class _MintTickRoomProductionWorkspaceState
         ? Center(child: Text(_historyError!))
         : rows == 0
           ? Center(child: Text(isPaper
-            ? 'No confirmed Paper fills.' : 'No blocked Live intents.'))
+            ? 'No confirmed Paper fills.' : 'No LIVE orders or saved intents.'))
           : ListView.builder(itemCount: rows, itemBuilder: (context, index) {
             if (isPaper) {
               final order = _paperOrders[index];
@@ -797,16 +818,32 @@ class _MintTickRoomProductionWorkspaceState
                 middle: order.side,
                 right: 'PAPER FILL');
             }
-            final intent = _liveIntents[index];
+            if (index < _liveOrders.length) {
+              final order = _liveOrders[index];
+              return Column(children: [
+                _DataLine(
+                  primary: order.tradingSymbol,
+                  secondary: '${order.quantity} × ₹${order.limitPrice} · '
+                      '${order.filledQuantity} filled',
+                  middle: order.side,
+                  right: order.state),
+                if (order.requiresReconciliation)
+                  Align(alignment: Alignment.centerRight, child: TextButton(
+                    onPressed: _historyLoading
+                      ? null : () => _reconcileLiveOrder(order),
+                    child: const Text('Reconcile with broker'))),
+              ]);
+            }
+            final intent = _liveIntents[index - _liveOrders.length];
             return _DataLine(
               primary: intent.tradingSymbol,
               secondary: '${intent.quantity} × ₹${intent.limitPrice}',
               middle: intent.side,
-              right: 'BLOCKED');
+              right: 'DRAFT');
           })),
-      const _FlatNotice(
-        'PAPER rows are virtual fills. LIVE rows are blocked intents, '
-        'not real-money executions.'),
+      _FlatNotice(isPaper
+        ? 'PAPER rows are virtual fills.'
+        : 'LIVE rows show broker order state and non-executing saved drafts.'),
       _actions(),
     ]);
   }
