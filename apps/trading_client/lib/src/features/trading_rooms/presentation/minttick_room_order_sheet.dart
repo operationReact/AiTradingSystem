@@ -258,6 +258,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
         }
       } else {
         final capability = widget.liveEquityCapability;
+        final liveBlockers = capability?.blockers ?? const <String>['READINESS_UNVERIFIED'];
         if (capability?.executionEnabled != true) {
           setState(() => _error = liveBlockers.isEmpty
             ? 'LIVE dispatch is disabled or readiness could not be verified.'
@@ -292,7 +293,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
         }
         if (!mounted) return;
         final approved = await _confirm(
-          'Broker: ${capability.selectedBroker ?? 'unverified'}\n'
+          'Broker: ${capability?.selectedBroker ?? 'unverified'}\n'
           '$_side $quantity ${stock.tradingSymbol} at ₹$limitPrice · INTRADAY LIMIT DAY.\n\n'
           'This sends one real-money order to your selected broker if the server rechecks pass. '
           'No stop-loss or target order is attached. Review the order state in LIVE Orders; '
