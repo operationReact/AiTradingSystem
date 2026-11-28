@@ -277,6 +277,34 @@ class CustomerUpstoxOAuthServiceTest {
     }
 
     @Test
+    void equityProfileRequiresNseLimitAndIntradayProductPermissions() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-equity-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-equity-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\","
+            + "\"is_active\":true,\"exchanges\":[\"NSE\",\"BSE\"],"
+            + "\"products\":[\"I\"],\"order_types\":[\"LIMIT\"]}"));
+
+        var allowed = service.equityEntitlement(owner);
+        assertThat(allowed.supportsIntradayLimits()).isTrue();
+        assertThat(allowed.supportsIntradayLimits("NSE")).isTrue();
+        assertThat(allowed.supportsIntradayLimits("BSE")).isTrue();
+        assertThat(allowed.status()).isEqualTo("UPSTOX_EQUITY_PROFILE_VERIFIED");
+        assertThat(allowed.toString()).doesNotContain("private-equity-token");
+
+        when(api.profile("private-equity-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\","
+            + "\"is_active\":true,\"exchanges\":[\"NSE\"],"
+            + "\"products\":[\"D\"],\"order_types\":[\"LIMIT\"]}"));
+        var carryforwardOnly = service.equityEntitlement(owner);
+        assertThat(carryforwardOnly.supportsIntradayLimits()).isFalse();
+        assertThat(carryforwardOnly.status()).isEqualTo("UPSTOX_INTRADAY_PRODUCT_NOT_ENABLED");
+    }
+
+    @Test
     void missingNfoOrMismatchedOwnerCannotClaimSegmentPermission() throws Exception {
         UUID owner = UUID.randomUUID();
         var service = service();

@@ -39,11 +39,14 @@ class CustomerExecutionReadinessServiceIT extends AbstractPostgresIT {
         assertThat(liveReadiness.mode()).isEqualTo("LIVE");
         assertThat(liveReadiness.virtualCashReady()).isFalse();
         assertThat(liveReadiness.brokerConnected()).isFalse();
+        // No broker chosen yet: hosting is evaluated only for a selected broker.
+        // Equity consent is per order, so no room-level consent blocker exists.
         assertThat(liveReadiness.blockers()).contains(
-            "REGISTERED_STATIC_IP_NOT_VERIFIED",
-            "ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED",
-            "EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED",
+            "ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED",
+            "ACCOUNT_WIDE_RISK_POLICY_NOT_CONFIGURED",
             "EXECUTION_DISABLED");
+        assertThat(liveReadiness.blockers()).doesNotContain(
+            "EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
         assertThat(liveReadiness.executionEnabled()).isFalse();
     }
 
@@ -60,8 +63,7 @@ class CustomerExecutionReadinessServiceIT extends AbstractPostgresIT {
         assertThat(upstox.blockers()).doesNotContain("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
         assertThat(upstox.blockers()).contains("BROKER_NOT_CONNECTED",
             "REGISTERED_STATIC_IP_NOT_VERIFIED",
-            "ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED",
-            "EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED", "EXECUTION_DISABLED");
+            "ACCOUNT_WIDE_RISK_POLICY_NOT_CONFIGURED", "EXECUTION_DISABLED");
         assertThat(upstox.executionEnabled()).isFalse();
         var angel = service.selectLiveBroker(owner, live, "ANGEL_ONE");
         assertThat(angel.selectedBroker()).isEqualTo("ANGEL_ONE");
