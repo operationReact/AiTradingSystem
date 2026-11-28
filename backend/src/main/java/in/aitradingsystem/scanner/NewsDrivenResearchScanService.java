@@ -168,6 +168,22 @@ public class NewsDrivenResearchScanService {
             }).toList();
     }
 
+    public record NewsDrivenDecisionView(long instrumentId, String tradingSymbol, String outcome,
+            String reasonCode, Instant dataCutoffAt) {}
+
+    /** Return the bounded symbol-by-symbol decision trail for this news-originated run. */
+    public List<NewsDrivenDecisionView> decisions(UUID runId) {
+        ResearchScanSummary run = scans.requireRun(runId);
+        if (run.strategySet() == null ||
+                !java.util.Arrays.asList(run.strategySet().split(",")).contains(STRATEGY)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "News-driven scan not found");
+        }
+        return scans.newsDrivenDecisions(runId, 100).stream()
+            .map(row -> new NewsDrivenDecisionView(row.instrumentId(), row.tradingSymbol(), row.outcome(),
+                row.reasonCode(), row.dataCutoffAt()))
+            .toList();
+    }
+
     private static boolean eligible(NewsContext context) {
         return context != null
             && NewsContext.STATUS_INCLUDED_EVIDENCE.equals(context.status())
