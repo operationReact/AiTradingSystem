@@ -73,6 +73,18 @@ public class LiveEquityOrderCoordinator {
     public Dispatch submit(UUID owner, UUID roomId, String idempotencyKey,
             long instrumentId, String side, int quantity, BigDecimal limitPrice,
             String confirmation) {
+        return submit(owner, roomId, idempotencyKey, instrumentId, side, quantity,
+            limitPrice, confirmation, null);
+    }
+
+    /**
+     * Strategy proposals pin the broker the owner reviewed. The expected broker
+     * is checked against the fresh preflight before the durable claim; the claim
+     * then rechecks the same broker under the owner lock.
+     */
+    public Dispatch submit(UUID owner, UUID roomId, String idempotencyKey,
+            long instrumentId, String side, int quantity, BigDecimal limitPrice,
+            String confirmation, String expectedBroker) {
         if (!policy.dispatchEnabled()) {
             // Gate off: refuse before anything is read from a broker or written.
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -93,6 +105,10 @@ public class LiveEquityOrderCoordinator {
         if (!proposal.blockers().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "LIVE intraday equity preflight is not executable");
+        }
+        if (expectedBroker != null && !expectedBroker.equals(proposal.selectedBroker())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Selected LIVE broker changed after strategy proposal review");
         }
         CustomerLiveEquityOrderService.Claim claim = orders.claimForSubmission(owner,
             roomId, idempotencyKey, proposal, true);
