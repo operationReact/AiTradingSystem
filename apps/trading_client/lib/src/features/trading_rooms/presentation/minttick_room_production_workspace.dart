@@ -112,6 +112,11 @@ class _MintTickRoomProductionWorkspaceState
   Map<int, CustomerLiveQuote> _positionQuotes = const {};
   int _historyGeneration = 0;
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
+  /// Server-recorded LIVE equity orders (owner-scoped history). Empty and
+  /// unverified until a read succeeds, which keeps "no orders" distinct from
+  /// "could not be verified".
+  List<LiveEquityOrder> _liveEquityOrders = const [];
+  bool _liveEquityOrdersVerified = false;
   bool _historyLoading = false;
   String? _historyError;
 
@@ -170,6 +175,9 @@ class _MintTickRoomProductionWorkspaceState
 
   Future<void> _loadHistory() async {
     final request = ++_historyGeneration;
+    if (widget.room.mode == 'LIVE' && widget.room.marketScope != 'FNO') {
+      _loadLiveEquityOrders();
+    }
     // F&O has a separate owner-scoped positions ledger. Never count cash
     // equities in the option KPI ribbon, and never present failed reads as 0.
     if (widget.room.marketScope == 'FNO' &&
@@ -846,6 +854,9 @@ class _MintTickRoomProductionWorkspaceState
       ));
     }
     final isPaper = widget.room.mode == 'PAPER';
+    if (!isPaper && widget.execution != null) {
+      return _liveEquityOrdersView(context);
+    }
     final rows = isPaper ? _paperOrders.length : _liveIntents.length;
     return Column(children: [
       _PageTitle('Order history', trailing: '$rows', onRefresh: _loadHistory),
@@ -875,6 +886,74 @@ class _MintTickRoomProductionWorkspaceState
       const _FlatNotice(
         'PAPER rows are virtual fills. LIVE rows are blocked intents, '
         'not real-money executions.'),
+      _actions(),
+    ]);
+  }
+
+  /// Reads the owner-scoped LIVE equity history from the server. A failed read
+  /// leaves history unverified rather than presenting it as empty.
+  Future<void> _loadLiveEquityOrders() async {
+    final repo = widget.execution;
+    if (repo == null || widget.room.mode != 'LIVE' ||
+        widget.room.marketScope == 'FNO') {
+      return;
+    }
+    try {
+      final orders = await repo.listLiveEquityOrders(widget.room.id);
+      if (!mounted) return;
+      setState(() {
+        _liveEquityOrders = orders;
+        _liveEquityOrdersVerified = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _liveEquityOrdersVerified = false);
+    }
+  }
+
+  /// Server-confirmed state only. ACCEPTED is never shown as FILLED, and a
+  /// partial fill shows the server's own filled quantity.
+  static String _liveOrderStateLabel(LiveEquityOrder order) => switch (order.status) {
+        LiveEquityOrderStatus.acknowledged => 'ACCEPTED',
+        LiveEquityOrderStatus.partiallyFilled =>
+          'PARTIAL ${order.filledQuantity}/${order.quantity}',
+        LiveEquityOrderStatus.filled => 'FILLED',
+        LiveEquityOrderStatus.rejected => 'REJECTED',
+        LiveEquityOrderStatus.cancelled => 'CANCELLED',
+        LiveEquityOrderStatus.submitting ||
+        LiveEquityOrderStatus.unknown => 'UNKNOWN · RECONCILE',
+      };
+
+  Widget _liveEquityOrdersView(BuildContext context) {
+    final type = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final rows = _liveEquityOrders;
+    return Column(children: [
+      _PageTitle('Order history',
+        trailing: _liveEquityOrdersVerified ? '${rows.length}' : 'UNVERIFIED',
+        onRefresh: _loadLiveEquityOrders),
+      const _RowColumns(),
+      if (_historyLoading) const LinearProgressIndicator(minHeight: 2),
+      Expanded(child: !_liveEquityOrdersVerified
+        ? Center(child: Text('LIVE order history could not be verified.',
+            key: const ValueKey('room-live-orders-unverified'),
+            style: type.bodySmall?.copyWith(color: scheme.error)))
+        : rows.isEmpty
+          ? Center(child: Text('No LIVE equity orders recorded.',
+              style: type.bodySmall))
+          : ListView.builder(
+              itemCount: rows.length,
+              itemBuilder: (context, index) {
+                final order = rows[index];
+                return _DataLine(
+                  primary: order.tradingSymbol,
+                  secondary: '${order.quantity} × ₹${order.limitPrice}',
+                  middle: order.side,
+                  right: _liveOrderStateLabel(order));
+              })),
+      const _FlatNotice(
+        'LIVE rows are server-recorded broker orders. A state is shown only '
+        'when the broker or reconciliation confirms it.'),
       _actions(),
     ]);
   }

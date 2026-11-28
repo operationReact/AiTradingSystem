@@ -66,6 +66,31 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   String? _outcome;
   String? _pendingKey;
 
+  /// Server-owned LIVE order history, reloaded on every open so unresolved
+  /// state survives closing and reopening the ticket.
+  List<LiveEquityOrder> _liveOrders = const [];
+  bool _liveOrdersVerified = false;
+  bool _reconciling = false;
+  String? _reconcileMessage;
+
+  bool get _liveExecutable {
+    final live = widget.liveCapability;
+    return live != null && live.executionEnabled &&
+        live.orderRouteImplemented && live.blockers.isEmpty;
+  }
+
+  /// Orders the server has not yet proven against the broker order book.
+  List<LiveEquityOrder> get _unresolved => [
+        for (final order in _liveOrders)
+          if (order.status.needsReconciliation) order,
+      ];
+
+  /// While LIVE dispatch is executable, a new order is allowed only with
+  /// verified history that contains no unresolved order. Unverified history
+  /// blocks too: an unknown history is never treated as an empty one.
+  bool get _liveGateBlocked => widget.mode == 'LIVE' && _liveExecutable &&
+      (!_liveOrdersVerified || _unresolved.isNotEmpty);
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +100,60 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     _paperEnabled = widget.wallet?.halted == false;
     if (_stock != null) {
       _verifyQuote();
+    }
+    if (widget.mode == 'LIVE') {
+      _loadLiveOrders();
+    }
+  }
+
+  /// Reads the owner-scoped server history. A failure leaves history
+  /// unverified, which blocks new LIVE orders until a later read succeeds.
+  Future<void> _loadLiveOrders() async {
+    final repo = widget.execution;
+    if (widget.mode != 'LIVE' || repo == null) return;
+    try {
+      final orders = await repo.listLiveEquityOrders(widget.roomId);
+      if (!mounted) return;
+      setState(() {
+        _liveOrders = orders;
+        _liveOrdersVerified = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _liveOrdersVerified = false);
+    }
+  }
+
+  /// Asks the server to reconcile one order with the broker's order book.
+  /// The result is accepted only as the server reports it. Unresolved stays
+  /// unresolved, and nothing here can place an order.
+  Future<void> _reconcile(LiveEquityOrder order) async {
+    final repo = widget.execution;
+    if (_reconciling || repo == null) return;
+    setState(() { _reconciling = true; _reconcileMessage = null; });
+    try {
+      final updated =
+          await repo.reconcileLiveEquityOrder(widget.roomId, order.id);
+      if (updated.id != order.id) {
+        throw const FormatException('Unexpected reconcile response');
+      }
+      if (!mounted) return;
+      setState(() {
+        _liveOrders = [
+          for (final o in _liveOrders) o.id == updated.id ? updated : o,
+        ];
+        _reconcileMessage = updated.status.needsReconciliation
+            ? 'Still unresolved. The broker has not confirmed this order yet.'
+            : _statusText(updated);
+        if (_unresolved.isEmpty) _pendingKey = null;
+      });
+      await widget.onChanged();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _reconcileMessage =
+          'Reconciliation could not be verified. Orders stay blocked.');
+    } finally {
+      if (mounted) setState(() => _reconciling = false);
     }
   }
 
@@ -223,6 +302,11 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   }
 
   Future<void> _place() async {
+    if (_liveGateBlocked) {
+      setState(() => _error = 'Reconcile unresolved LIVE orders, and wait for the '
+          'order history to verify, before placing another order.');
+      return;
+    }
     if (_busy || _unknown || !_valid()) {
       setState(() => _error = 'Select a verified stock, quantity and limit price.');
       return;
@@ -389,10 +473,12 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
       if (!mounted) return;
       setState(() {
         _outcome = _statusText(order);
+        _liveOrders = [
+          order,
+          for (final o in _liveOrders) if (o.id != order.id) o,
+        ];
         if (order.status.needsReconciliation) {
-          _unknown = true;
-          _error = 'Order outcome UNKNOWN. Reconcile room order history before '
-              'placing another order. Automatic resubmission is disabled.';
+          _reconcileMessage = 'Unresolved. Reconcile before placing another order.';
         } else {
           _pendingKey = null;
         }
@@ -408,13 +494,17 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
           _pendingKey = null;
           _error = 'Order rejected by the server. Nothing was placed.';
         } else {
-          _unknown = requestSent;
           _error = requestSent
-              ? 'Order outcome UNKNOWN. Reconcile room order history before '
-                  'placing another order. Automatic resubmission is disabled.'
+              ? 'Order outcome UNKNOWN. The server is checking its record. '
+                  'Reconcile before placing another order.'
               : 'Order could not be submitted. Check stock, quote and price.';
         }
       });
+      // After a dispatch attempt, the server's own record decides whether an
+      // order is pending. Re-read it rather than trusting the local outcome.
+      if (requestSent && !definiteRejection) {
+        await _loadLiveOrders();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -438,6 +528,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     final colors = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     final isPaper = widget.mode == 'PAPER';
+    final isLiveTicket = widget.mode == 'LIVE';
     return SafeArea(
       top: false,
       child: Padding(
@@ -564,6 +655,19 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
               ],
               if (_busy && !_awaitingConfirmation)
                 const LinearProgressIndicator(minHeight: 2),
+              if (isLiveTicket && _unresolved.isNotEmpty)
+                _UnresolvedOrders(
+                  orders: _unresolved,
+                  reconciling: _reconciling,
+                  message: _reconcileMessage,
+                  onReconcile: _reconcile,
+                ),
+              if (isLiveTicket && _liveExecutable && !_liveOrdersVerified)
+                Padding(padding: const EdgeInsets.only(top: 9),
+                  child: Text('LIVE order history could not be verified. '
+                      'New orders are blocked until it loads.',
+                    key: const ValueKey('room-live-history-unverified'),
+                    style: type.bodySmall?.copyWith(color: colors.error))),
               if (_outcome != null) Padding(padding: const EdgeInsets.only(top: 7),
                 child: Text(_outcome!, key: const ValueKey('room-order-outcome'),
                   style: type.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
@@ -578,7 +682,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 const SizedBox(width: 9),
                 Expanded(child: FilledButton(
                   key: const ValueKey('room-ticket-review'),
-                  onPressed: _busy || _unknown || !_valid() ||
+                  onPressed: _busy || _unknown || _liveGateBlocked || !_valid() ||
                     (isPaper && !_paperEnabled) ? null : _place,
                   child: Text(isPaper ? 'Review Paper order' : 'Validate intent'))),
               ]),
@@ -628,6 +732,57 @@ class _SideButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       child: Text(side, style: const TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Server-recorded LIVE orders the broker has not yet confirmed. Shown on every
+/// open of the ticket until the server reports each one resolved.
+class _UnresolvedOrders extends StatelessWidget {
+  const _UnresolvedOrders({required this.orders, required this.reconciling,
+    required this.message, required this.onReconcile});
+  final List<LiveEquityOrder> orders;
+  final bool reconciling;
+  final String? message;
+  final ValueChanged<LiveEquityOrder> onReconcile;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    return Container(
+      key: const ValueKey('room-live-unresolved'),
+      margin: const EdgeInsets.only(top: 9),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.errorContainer.withValues(alpha: 0.35),
+        border: Border.all(color: colors.error),
+        borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('UNRESOLVED LIVE ORDER · RECONCILE FIRST',
+          style: type.labelMedium?.copyWith(
+            color: colors.error, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text('The broker has not confirmed these orders. New LIVE orders stay '
+            'blocked until the server confirms each one.',
+          style: type.bodySmall),
+        for (final order in orders) ...[
+          const SizedBox(height: 6),
+          Row(children: [
+            Expanded(child: Text(
+              '${order.side} ${order.quantity} ${order.tradingSymbol} · '
+              '${order.status.name.toUpperCase()}',
+              style: type.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
+            TextButton(
+              key: ValueKey('room-live-reconcile-${order.id}'),
+              onPressed: reconciling ? null : () => onReconcile(order),
+              child: const Text('Reconcile')),
+          ]),
+        ],
+        if (message != null) Text(message!,
+          key: const ValueKey('room-live-reconcile-message'),
+          style: type.bodySmall),
+      ]),
     );
   }
 }

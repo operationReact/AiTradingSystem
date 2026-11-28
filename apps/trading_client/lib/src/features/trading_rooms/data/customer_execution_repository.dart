@@ -137,6 +137,19 @@ class HttpCustomerExecutionRepository {
       '/api/customer/trading-rooms/$roomId/live/equity/orders/$orderId/reconcile',
     ));
   }
+
+  /// The owner-scoped LIVE equity order history, as the server records it.
+  /// Every element is decoded strictly; a single invalid row fails the whole
+  /// list so an unverified row is never silently dropped or shown.
+  Future<List<LiveEquityOrder>> listLiveEquityOrders(String roomId) async {
+    final raw = await api.getJson(
+      '/api/customer/trading-rooms/$roomId/live/equity/orders',
+    );
+    if (raw is! List) {
+      throw const FormatException('Invalid LIVE equity order list');
+    }
+    return List.unmodifiable(raw.map(LiveEquityOrder.decode));
+  }
 }
 
 /// Exact per-order consent phrase the server requires. Must match the backend
