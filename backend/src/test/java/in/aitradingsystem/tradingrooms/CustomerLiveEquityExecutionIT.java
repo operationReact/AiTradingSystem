@@ -29,6 +29,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,8 +45,7 @@ import org.springframework.web.server.ResponseStatusException;
  * request leaves this JVM and no real order is ever placed.
  */
 @TestPropertySource(properties = {
-    "minttick.live-equity.dispatch-enabled=true",
-    "minttick.live-equity.angel-one-hosting-attested=true"
+    "minttick.live-equity.dispatch-enabled=true"
 })
 class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -60,7 +60,27 @@ class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
     @MockitoBean InstrumentMasterService instruments;
     @MockitoBean IndianCashMarketCalendar calendar;
     @Autowired CustomerLiveEquityOrderService orders;
+    @Autowired LiveEquityReconciliationCoordinator reconciliation;
     @Autowired LiveEquityOrderCoordinator coordinator;
+
+    /** Operator attestation for this test's Angel One hosting evidence. */
+    private UUID hostingAttestation;
+
+    @BeforeEach
+    void recordHostingAttestation() {
+        hostingAttestation = UUID.randomUUID();
+        jdbc.sql("""
+            INSERT INTO live_equity_hosting_attestation
+              (id, broker, egress_ip, operator_reference, attested_at, expires_at)
+            VALUES (:id, 'ANGEL_ONE', '203.0.113.10', 'IT-OPERATOR-ATTESTATION', NOW(), NOW() + INTERVAL '1 day')
+            """).param("id", hostingAttestation).update();
+    }
+
+    @AfterEach
+    void revokeHostingAttestation() {
+        jdbc.sql("UPDATE live_equity_hosting_attestation SET revoked_at = NOW(), revoked_by_reference = 'IT-CLEANUP' WHERE id = :id")
+            .param("id", hostingAttestation).update();
+    }
 
     /** Broker and market stubs; reset per test by Spring's MockitoBean lifecycle. */
     @BeforeEach
@@ -99,6 +119,18 @@ class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
         assertThat(first.order().brokerOrderId()).isEqualTo(bid);
         assertThat(first.order().filledQuantity()).isZero();
         verify(angel, times(1)).submitVerifiedIntradayLimitOnce(any(), any());
+    }
+
+    @Test
+    void revokedHostingAttestationBlocksBeforeAnyRowOrRequest() throws Exception {
+        jdbc.sql("UPDATE live_equity_hosting_attestation SET revoked_at = NOW(), revoked_by_reference = 'IT-REVOKE' WHERE id = :id")
+            .param("id", hostingAttestation).update();
+        UUID owner = customer();
+        UUID room = liveAngelRoom(owner);
+        riskPolicy(owner, 100_000, 50_000, 100, 5_000);
+
+        assertRefused(owner, room, "idem-hosting-0001", "BUY", 10);
+        verify(angel, never()).submitVerifiedIntradayLimitOnce(any(), any());
     }
 
     @Test
@@ -205,13 +237,13 @@ class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
         String tag = brokerTag(order.id());
 
         // Empty history is not a rejection: the exposure stays reserved.
-        var stillReserved = orders.reconcileFromBroker(owner, room, order.id());
+        var stillReserved = reconciliation.reconcile(owner, room, order.id());
         assertThat(stillReserved.state()).isEqualTo("UNKNOWN");
         assertThat(stillReserved.outcomeCode()).startsWith("RECONCILE_RESERVED:");
 
         when(angel.orders(any())).thenReturn(new CustomerAngelOneSessionService.BrokerRead(
             "ANGEL_ONE", Instant.now(), json(angelRecord(bid, tag, "complete", 10, "100.10"))));
-        var filled = orders.reconcileFromBroker(owner, room, order.id());
+        var filled = reconciliation.reconcile(owner, room, order.id());
         assertThat(filled.state()).isEqualTo("FILLED");
         assertThat(filled.filledQuantity()).isEqualTo(10);
         assertThat(filled.brokerOrderId()).isEqualTo(bid);
@@ -234,7 +266,7 @@ class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
 
         when(angel.orders(any())).thenReturn(new CustomerAngelOneSessionService.BrokerRead(
             "ANGEL_ONE", Instant.now(), json(angelRecord(bid, tag, "cancelled", 4, "100.00"))));
-        var result = orders.reconcileFromBroker(owner, room, order.id());
+        var result = reconciliation.reconcile(owner, room, order.id());
 
         assertThat(result.state()).isEqualTo("PARTIALLY_FILLED");
         assertThat(result.filledQuantity()).isEqualTo(4);
@@ -257,7 +289,7 @@ class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
         var order = coordinator.submit(owner, room, "idem-hist-0001", 42L, "BUY", 10, PRICE, CONSENT).order();
         when(angel.orders(any())).thenThrow(new RuntimeException("provider timeout"));
 
-        var result = orders.reconcileFromBroker(owner, room, order.id());
+        var result = reconciliation.reconcile(owner, room, order.id());
 
         assertThat(result.state()).isEqualTo("UNKNOWN");
         assertThat(result.outcomeCode()).isEqualTo("RECONCILE_RESERVED:BROKER_HISTORY_UNAVAILABLE");
@@ -397,7 +429,7 @@ class CustomerLiveEquityExecutionIT extends AbstractPostgresIT {
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND));
-        assertThatThrownBy(() -> orders.reconcileFromBroker(intruder, room, order.id()))
+        assertThatThrownBy(() -> reconciliation.reconcile(intruder, room, order.id()))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND));

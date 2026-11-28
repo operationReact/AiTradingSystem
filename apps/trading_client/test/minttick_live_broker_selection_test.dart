@@ -105,6 +105,31 @@ void main() {
     }), throwsFormatException);
   });
 
+  test('a consistent implemented capability decodes without becoming executable', () {
+    final capability = LiveEquityCapability.decode({
+      'roomId': 'live-room-2',
+      'selectedBroker': 'UPSTOX',
+      'brokerConnected': true,
+      'orderRouteImplemented': true,
+      'executionEnabled': true,
+      'blockers': <String>[],
+    });
+    expect(capability.orderRouteImplemented, isTrue);
+    expect(capability.executionEnabled, isTrue);
+    expect(capability.blockers, isEmpty);
+  });
+
+  test('an implemented route with a blocker is rejected as inconsistent', () {
+    expect(() => LiveEquityCapability.decode({
+      'roomId': 'live-room-2',
+      'selectedBroker': 'UPSTOX',
+      'brokerConnected': true,
+      'orderRouteImplemented': true,
+      'executionEnabled': true,
+      'blockers': ['PER_ORDER_PREFLIGHT_REQUIRED'],
+    }), throwsFormatException);
+  });
+
   testWidgets('Live room explicitly selects one broker but remains blocked',
       (tester) async {
     tester.view.devicePixelRatio = 1;

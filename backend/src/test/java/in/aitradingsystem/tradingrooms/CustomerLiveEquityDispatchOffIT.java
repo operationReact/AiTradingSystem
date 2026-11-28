@@ -36,6 +36,7 @@ class CustomerLiveEquityDispatchOffIT extends AbstractPostgresIT {
     @Autowired UserAccountStore users;
     @Autowired LiveEquityOrderCoordinator coordinator;
     @Autowired CustomerLiveEquityOrderService orders;
+    @Autowired CustomerExecutionReadinessService readiness;
     @MockitoBean CustomerAngelOneSessionService angel;
     @MockitoBean CustomerUpstoxOAuthService upstox;
     @MockitoBean InstrumentMasterService instruments;
@@ -80,14 +81,16 @@ class CustomerLiveEquityDispatchOffIT extends AbstractPostgresIT {
 
     @Test
     void claimItselfRefusesWhileTheGateIsOffEvenWithConsent() {
-        // Defense in depth: even bypassing the coordinator, the durable claim
-        // is refused by the readiness gate (EXECUTION_DISABLED) with no row.
+        // Defense in depth: a real, broker-backed preflight carries EXECUTION_DISABLED,
+        // and the database-owned claim refuses it with no row written.
         UUID owner = customer();
         UUID room = liveAngelRoom(owner);
         riskPolicy(owner);
+        var proposal = readiness.preflight(owner, room, 42L, "BUY", 10, new BigDecimal("100.00"));
+        assertThat(proposal.blockers()).contains("EXECUTION_DISABLED");
 
-        assertThatThrownBy(() -> orders.claimForSubmission(owner, room, "idem-off-00002", 42L,
-                "BUY", 10, new BigDecimal("100.00"), true))
+        assertThatThrownBy(() -> orders.claimForSubmission(owner, room, "idem-off-00002",
+                proposal, true))
             .isInstanceOf(ResponseStatusException.class);
         assertThat(jdbc.sql("SELECT COUNT(*) FROM customer_live_equity_order WHERE user_id=:o")
             .param("o", owner).query(Long.class).single()).isZero();

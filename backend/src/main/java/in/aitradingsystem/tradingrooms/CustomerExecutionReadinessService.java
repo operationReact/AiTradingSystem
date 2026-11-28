@@ -104,6 +104,7 @@ public class CustomerExecutionReadinessService {
                             BigDecimal todayRoomBuyNotional,
                             boolean brokerCashVerified, boolean roomExposureVerified,
                             BigDecimal todayRealisedLoss,
+                            Instant evaluatedAt,
                             boolean executable,
                             List<String> blockers) {}
 
@@ -170,7 +171,7 @@ public class CustomerExecutionReadinessService {
             if ("UPSTOX".equals(selected) && !registeredIpMatches) {
                 blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
             }
-            if ("ANGEL_ONE".equals(selected) && !policy.angelOneHostingAttested()) {
+            if ("ANGEL_ONE".equals(selected) && !angelOneHostingAttested()) {
                 blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
             }
             if (!riskPolicyConfigured) blockers.add("ACCOUNT_WIDE_RISK_POLICY_NOT_CONFIGURED");
@@ -209,23 +210,16 @@ public class CustomerExecutionReadinessService {
     /**
      * Explicitly binds an owner-selected broker to a LIVE Room. No PIN, token,
      * trading capital, order authorization, or broker request crosses this API.
-     * The composite FK prevents persistence against PAPER Rooms.
+     * The single upsert is atomic on its own: ownership is enforced by its WHERE
+     * clause and LIVE mode by the composite foreign key. Readiness, which calls
+     * broker profile endpoints, runs after the write and holds no transaction.
      */
-    @Transactional
     public Readiness selectLiveBroker(UUID owner, UUID roomId, String selected) {
         if (!"ANGEL_ONE".equals(selected) && !"UPSTOX".equals(selected)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Choose Angel One or Upstox");
         }
-        Room room = jdbc.sql("""
-                SELECT mode, status, market_scope, planned_budget_inr FROM customer_trading_room
-                WHERE id=:room AND user_id=:owner FOR UPDATE
-                """)
-            .param("room", roomId).param("owner", owner)
-            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"),
-                rs.getString("market_scope"), rs.getLong("planned_budget_inr")))
-            .optional().orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND, "Trading Room not found"));
+        Room room = ownedRoom(owner, roomId);
         if (!"LIVE".equals(room.mode())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Paper Rooms cannot select a LIVE broker");
@@ -276,6 +270,22 @@ public class CustomerExecutionReadinessService {
         }
     }
 
+    /**
+     * Deployment-level operator attestation that the server egress IP is
+     * registered with Angel One. Any read failure is "not attested".
+     */
+    private boolean angelOneHostingAttested() {
+        try {
+            return jdbc.sql("""
+                    SELECT EXISTS (SELECT 1 FROM live_equity_hosting_attestation
+                     WHERE broker='ANGEL_ONE' AND revoked_at IS NULL
+                       AND attested_at <= now() AND expires_at > now())
+                    """).query(Boolean.class).single();
+        } catch (RuntimeException unavailable) {
+            return false;
+        }
+    }
+
     private boolean registeredUpstoxIpMatches(UUID owner) {
         try {
             return UpstoxRegisteredIpAssessment.assess(
@@ -291,6 +301,7 @@ public class CustomerExecutionReadinessService {
      */
     public Preflight preflight(UUID owner, UUID roomId, long instrumentId,
                               String side, int quantity, BigDecimal limitPrice) {
+        Instant evaluatedAt = Instant.now();
         Readiness readiness = readiness(owner, roomId);
         if ("FNO".equals(ownedRoom(owner, roomId).marketScope())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -353,7 +364,7 @@ public class CustomerExecutionReadinessService {
                 instrument.tradingSymbol(), instrument.exchange(), side,
                 quantity, "LIMIT", "DAY", limitPrice, notional, availableFunds, budget,
                 todayRoomBuyNotional, cashBalanceVerified, roomExposureVerified,
-                todayRealisedLoss, false, List.copyOf(blockers));
+                todayRealisedLoss, evaluatedAt, false, List.copyOf(blockers));
     }
 
     /**
@@ -518,6 +529,11 @@ public class CustomerExecutionReadinessService {
             // A failed provider read is a blocker, never a fallback to platform data.
         }
         return false;
+    }
+
+    /** Database-only ownership proof (404 for another customer's room). Never calls a broker. */
+    public void requireOwnedRoom(UUID owner, UUID roomId) {
+        ownedRoom(owner, roomId);
     }
 
     private Room ownedRoom(UUID owner, UUID roomId) {

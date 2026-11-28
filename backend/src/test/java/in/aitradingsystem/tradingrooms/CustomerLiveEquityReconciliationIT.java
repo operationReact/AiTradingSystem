@@ -1,5 +1,10 @@
 package in.aitradingsystem.tradingrooms;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+import java.util.List;
+import java.math.BigDecimal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -32,6 +37,7 @@ class CustomerLiveEquityReconciliationIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
     @Autowired UserAccountStore users;
     @Autowired CustomerLiveEquityOrderService orders;
+    @Autowired LiveEquityReconciliationCoordinator reconciliation;
     @MockitoBean CustomerUpstoxOAuthService upstox;
     @MockitoBean CustomerAngelOneSessionService angel;
     @MockitoBean InstrumentMasterService instruments;
@@ -61,7 +67,7 @@ class CustomerLiveEquityReconciliationIT extends AbstractPostgresIT {
             new CustomerUpstoxOAuthService.AccountData("UPSTOX", Instant.now(),
                 history.get("data")));
 
-        var result = orders.reconcileFromBroker(owner, room, orderId);
+        var result = reconciliation.reconcile(owner, room, orderId);
         assertThat(result.state()).isEqualTo("FILLED");
         assertThat(result.filledQuantity()).isEqualTo(10);
         assertThat(result.brokerOrderId()).isEqualTo(brokerId);
@@ -78,10 +84,32 @@ class CustomerLiveEquityReconciliationIT extends AbstractPostgresIT {
             new CustomerUpstoxOAuthService.AccountData("UPSTOX", Instant.now(),
                 JSON.createArrayNode()));
 
-        var result = orders.reconcileFromBroker(owner, room, orderId);
+        var result = reconciliation.reconcile(owner, room, orderId);
         assertThat(result.state()).isEqualTo("UNKNOWN");
         assertThat(result.outcomeCode()).startsWith("RECONCILE_RESERVED:");
         assertThat(result.filledQuantity()).isZero();
+    }
+
+    @Test
+    void applyRefusesToOverwriteAnOrderThatChangedAfterTheSnapshot() throws Exception {
+        UUID owner = customer();
+        UUID room = liveUpstoxRoom(owner);
+        String tag = LiveEquityCorrelationTag.generate();
+        UUID orderId = seedReconcilableOrder(owner, room, tag);
+        var seen = orders.loadForReconcile(owner, room, orderId);
+        // Another writer records a newer state after the snapshot but before apply.
+        jdbc.sql("UPDATE customer_live_equity_order SET state='ACKNOWLEDGED', broker_order_id='UPCHG1' WHERE id=:id")
+            .param("id", orderId).update();
+        var resolution = LiveEquityReconciler.reconcile(new LiveEquityReconciler.Expected(
+            "UPSTOX", tag, "NSE", "RELIANCE", "BUY", 10, new BigDecimal("100.00"), null),
+            List.of());
+
+        assertThatThrownBy(() -> orders.applyReconciliation(owner, room, orderId, seen, resolution))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT));
+        assertThat(jdbc.sql("SELECT state FROM customer_live_equity_order WHERE id=:id")
+            .param("id", orderId).query(String.class).single()).isEqualTo("ACKNOWLEDGED");
     }
 
     @Test

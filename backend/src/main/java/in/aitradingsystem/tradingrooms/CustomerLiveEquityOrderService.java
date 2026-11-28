@@ -1,18 +1,17 @@
 package in.aitradingsystem.tradingrooms;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
-import in.aitradingsystem.provider.upstox.CustomerUpstoxOAuthService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -34,17 +33,11 @@ public class CustomerLiveEquityOrderService {
 
     private final JdbcClient jdbc;
     private final CustomerExecutionReadinessService readiness;
-    private final CustomerAngelOneSessionService angelOne;
-    private final CustomerUpstoxOAuthService upstox;
 
     public CustomerLiveEquityOrderService(JdbcClient jdbc,
-            CustomerExecutionReadinessService readiness,
-            CustomerAngelOneSessionService angelOne,
-            CustomerUpstoxOAuthService upstox) {
+            CustomerExecutionReadinessService readiness) {
         this.jdbc = jdbc;
         this.readiness = readiness;
-        this.angelOne = angelOne;
-        this.upstox = upstox;
     }
 
     public record Order(UUID id, UUID roomId, String broker, long instrumentId,
@@ -61,9 +54,13 @@ public class CustomerLiveEquityOrderService {
     }
 
     private record StoredOrder(Order order, String payloadHash) {}
+
+    /** A broker-backed preflight older than this is never used for a new claim. */
+    static final Duration PROPOSAL_MAX_AGE = Duration.ofSeconds(10);
     private record ClaimRoom(String mode, String marketScope, long plannedBudgetInr,
                              String selectedBroker) {}
-    private record Reconcilable(String state, String broker, String brokerTag,
+    /** Order snapshot read before any broker I/O, re-checked under lock before applying. */
+    public record Reconcilable(String state, String broker, String brokerTag,
             String brokerOrderId, String exchange, String tradingSymbol, String side,
             int quantity, BigDecimal limitPrice, int filledQuantity) {}
 
@@ -76,8 +73,7 @@ public class CustomerLiveEquityOrderService {
      */
     @Transactional
     public Claim claimForSubmission(UUID owner, UUID roomId, String idempotencyKey,
-            long instrumentId, String side, int quantity, BigDecimal limitPrice,
-            boolean consentConfirmed) {
+            CustomerExecutionReadinessService.Preflight proposal, boolean consentConfirmed) {
         if (owner == null || roomId == null || idempotencyKey == null
                 || !idempotencyKey.matches("[A-Za-z0-9_-]{8,64}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -87,11 +83,17 @@ public class CustomerLiveEquityOrderService {
             throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
                 "Explicit per-order LIVE equity confirmation required");
         }
-        // Recompute the authoritative preflight. A stale client snapshot is never
-        // trusted, and every mutable broker and risk gate applies at claim time.
-        CustomerExecutionReadinessService.Preflight proposal =
-            readiness.preflight(owner, roomId, instrumentId, side, quantity, limitPrice);
-        if (proposal.instrumentId() != instrumentId
+        // Broker-backed checks (session, quote, funds, positions, hosting) ran
+        // BEFORE this transaction, in the coordinator. This transaction owns only
+        // the database-authoritative checks below, under the owner's row lock. A
+        // proposal older than PROPOSAL_MAX_AGE is refused so broker-side facts
+        // cannot drift far from the claim.
+        if (proposal == null || proposal.evaluatedAt() == null
+                || Duration.between(proposal.evaluatedAt(), Instant.now()).compareTo(PROPOSAL_MAX_AGE) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "LIVE intraday equity preflight expired; retry the order");
+        }
+        if (proposal.roomId() == null || !roomId.equals(proposal.roomId())
                 || !"LIVE".equals(proposal.mode())
                 || proposal.selectedBroker() == null
                 || !("ANGEL_ONE".equals(proposal.selectedBroker())
@@ -261,10 +263,31 @@ public class CustomerLiveEquityOrderService {
         return requireOrder(owner, roomId, orderId);
     }
 
+    /**
+     * Idempotent replay without any broker call. Returns the stored order only when
+     * the request matches it exactly; a different order under the same key is a
+     * conflict, never a second dispatch.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Claim> findReplay(UUID owner, UUID roomId, String idempotencyKey,
+            long instrumentId, String side, int quantity, BigDecimal limitPrice) {
+        StoredOrder prior = byIdempotencyKey(owner, roomId, idempotencyKey);
+        if (prior == null) {
+            return Optional.empty();
+        }
+        Order o = prior.order();
+        if (o.instrumentId() != instrumentId || !Objects.equals(o.side(), side)
+                || o.quantity() != quantity || o.limitPrice().compareTo(limitPrice) != 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Idempotency key was already used for a different order");
+        }
+        return Optional.of(new Claim(o, false, null));
+    }
+
     @Transactional(readOnly = true)
     public List<Order> list(UUID owner, UUID roomId) {
         // First prove this is the caller's room; a foreign room returns 404 even if empty.
-        readiness.readiness(owner, roomId);
+        readiness.requireOwnedRoom(owner, roomId);
         return jdbc.sql("""
             SELECT id,room_id,broker,instrument_id,trading_symbol,exchange,side,
                    quantity,limit_price,state,broker_order_id,filled_quantity,outcome_code,
@@ -372,20 +395,38 @@ public class CustomerLiveEquityOrderService {
             rs.getTimestamp("updated_at").toInstant());
     }
 
+    /** Read-only snapshot used before any broker call. Holds no row lock. */
+    @Transactional(readOnly = true)
+    public Reconcilable loadForReconcile(UUID owner, UUID roomId, UUID orderId) {
+        return jdbc.sql("""
+                SELECT state,broker,broker_tag,broker_order_id,exchange,trading_symbol,
+                       side,quantity,limit_price,filled_quantity
+                FROM customer_live_equity_order
+                WHERE id=:id AND user_id=:owner AND room_id=:room
+                """)
+            .param("id", orderId).param("owner", owner).param("room", roomId)
+            .query((rs,n) -> new Reconcilable(rs.getString("state"),rs.getString("broker"),
+                rs.getString("broker_tag"),rs.getString("broker_order_id"),
+                rs.getString("exchange"),rs.getString("trading_symbol"),rs.getString("side"),
+                rs.getInt("quantity"),rs.getBigDecimal("limit_price"),rs.getInt("filled_quantity")))
+            .optional().orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "LIVE equity order not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public Order getOrder(UUID owner, UUID roomId, UUID orderId) {
+        return requireOrder(owner, roomId, orderId);
+    }
+
     /**
-     * Reconcile one reserved order using ONLY the authenticated owner's own
-     * selected-broker session and an exact correlation-tag plus order-identity
-     * match. Missing, stale, malformed, duplicated or contradictory broker
-     * evidence leaves the order reserved and fails closed. This never retries or
-     * submits an order; it only reads the broker's order book/history. Raw broker
-     * errors and account data never cross this boundary.
+     * Apply a reconciliation decision computed from broker evidence read OUTSIDE
+     * this transaction. The row is locked and re-checked against the snapshot the
+     * decision was based on; any change since then is a conflict, never a blind write.
+     * No broker call happens here.
      */
     @Transactional
-    public Order reconcileFromBroker(UUID owner, UUID roomId, UUID orderId) {
-        if (owner == null || roomId == null || orderId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reconcile request");
-        }
-        readiness.readiness(owner, roomId); // prove ownership; foreign room is 404
+    public Order applyReconciliation(UUID owner, UUID roomId, UUID orderId,
+            Reconcilable seen, LiveEquityReconciler.Resolution res) {
         Reconcilable o = jdbc.sql("""
                 SELECT state,broker,broker_tag,broker_order_id,exchange,trading_symbol,
                        side,quantity,limit_price,filled_quantity
@@ -400,6 +441,11 @@ public class CustomerLiveEquityOrderService {
                 rs.getInt("quantity"),rs.getBigDecimal("limit_price"),rs.getInt("filled_quantity")))
             .optional().orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND, "LIVE equity order not found"));
+        if (!o.state().equals(seen.state()) || o.filledQuantity() != seen.filledQuantity()
+                || !Objects.equals(o.brokerOrderId(), seen.brokerOrderId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Order changed during reconciliation; retry the reconciliation");
+        }
         LiveEquityOrderState current;
         try {
             current = LiveEquityOrderState.valueOf(o.state());
@@ -410,18 +456,10 @@ public class CustomerLiveEquityOrderService {
         if (!current.requiresReconciliation()) {
             return requireOrder(owner, roomId, orderId); // terminal: nothing to do
         }
-
-        List<BrokerOrderRecord> records = readBrokerRecords(o.broker(), owner, o.brokerTag());
-        var expected = new LiveEquityReconciler.Expected(o.broker(), o.brokerTag(),
-            o.exchange(), o.tradingSymbol(), o.side(), o.quantity(), o.limitPrice(),
-            o.brokerOrderId());
-        LiveEquityReconciler.Resolution res = LiveEquityReconciler.reconcile(expected, records);
-
         if (res.reserved()) {
             recordReconcileReserved(owner, roomId, orderId, current, res.outcomeCode());
             return requireOrder(owner, roomId, orderId);
         }
-
         LiveEquityOrderState observed = res.observedState();
         // Fills must never regress; a lower broker-reported fill is contradictory.
         if (res.filledQuantity() < o.filledQuantity()) {
@@ -477,29 +515,6 @@ public class CustomerLiveEquityOrderService {
             .param("code", "RECONCILE_RESERVED:" + reason)
             .param("id", orderId).param("owner", owner).param("room", roomId)
             .param("state", current.name()).update();
-    }
-
-    /**
-     * Read the owner's own broker order book/history for this correlation tag.
-     * Any provider failure or absent session yields {@code null} so the
-     * reconciler fails closed. Broker payloads and errors are not logged.
-     */
-    private List<BrokerOrderRecord> readBrokerRecords(String broker, UUID owner, String tag) {
-        try {
-            if ("UPSTOX".equals(broker)) {
-                JsonNode data = upstox.orderHistoryByTag(owner, tag).data();
-                return UpstoxEquityOrderHistoryParser.parse(data);
-            }
-            if ("ANGEL_ONE".equals(broker)) {
-                JsonNode body = angelOne.orders(owner).data();
-                JsonNode array = body == null ? null
-                    : (body.isArray() ? body : body.path("data"));
-                return AngelOneEquityOrderBookParser.parse(array);
-            }
-        } catch (RuntimeException providerUnavailable) {
-            return null;
-        }
-        return null;
     }
 
     private Order requireOrder(UUID owner, UUID roomId, UUID orderId) {

@@ -41,15 +41,18 @@ public class LiveEquityOrderCoordinator {
     public static final String CONSENT = "CONFIRM_LIVE_INTRADAY_EQUITY";
 
     private final CustomerLiveEquityOrderService orders;
+    private final CustomerExecutionReadinessService readiness;
     private final InstrumentMasterService instruments;
     private final CustomerAngelOneSessionService angelOne;
     private final CustomerUpstoxOAuthService upstox;
     private final LiveEquityExecutionPolicy policy;
 
     public LiveEquityOrderCoordinator(CustomerLiveEquityOrderService orders,
+            CustomerExecutionReadinessService readiness,
             InstrumentMasterService instruments, CustomerAngelOneSessionService angelOne,
             CustomerUpstoxOAuthService upstox, LiveEquityExecutionPolicy policy) {
         this.orders = orders;
+        this.readiness = readiness;
         this.instruments = instruments;
         this.angelOne = angelOne;
         this.upstox = upstox;
@@ -62,17 +65,37 @@ public class LiveEquityOrderCoordinator {
     /** Result of the single broker request (or of a pre-send rejection). */
     private record Outcome(LiveEquityOrderState state, String brokerOrderId, String code) {}
 
+    /**
+     * Ordering: gate, consent, replay lookup (no broker call), broker-backed
+     * preflight (outside any database transaction), fail-fast blocker check, the
+     * database-only claim, then exactly one broker request. No step retries.
+     */
     public Dispatch submit(UUID owner, UUID roomId, String idempotencyKey,
             long instrumentId, String side, int quantity, BigDecimal limitPrice,
             String confirmation) {
         if (!policy.dispatchEnabled()) {
-            // Gate off: refuse before any claim, so nothing is reserved and nothing is sent.
+            // Gate off: refuse before anything is read from a broker or written.
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "LIVE intraday equity preflight is not executable");
+        }
+        if (!CONSENT.equals(confirmation)) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
+                "Explicit per-order LIVE equity confirmation required");
+        }
+        var replay = orders.findReplay(owner, roomId, idempotencyKey, instrumentId, side,
+            quantity, limitPrice);
+        if (replay.isPresent()) {
+            return new Dispatch(replay.get().order(), false);
+        }
+        // Broker-backed reads happen here, with no database transaction open.
+        CustomerExecutionReadinessService.Preflight proposal =
+            readiness.preflight(owner, roomId, instrumentId, side, quantity, limitPrice);
+        if (!proposal.blockers().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "LIVE intraday equity preflight is not executable");
         }
         CustomerLiveEquityOrderService.Claim claim = orders.claimForSubmission(owner,
-            roomId, idempotencyKey, instrumentId, side, quantity, limitPrice,
-            CONSENT.equals(confirmation));
+            roomId, idempotencyKey, proposal, true);
         if (!claim.created()) {
             return new Dispatch(claim.order(), false);
         }

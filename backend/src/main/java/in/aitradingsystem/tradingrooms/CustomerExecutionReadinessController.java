@@ -42,6 +42,7 @@ public class CustomerExecutionReadinessController {
     private final CustomerExecutionReadinessService service;
     private final CustomerLiveEquityOrderService liveEquityOrders;
     private final LiveEquityOrderCoordinator coordinator;
+    private final LiveEquityReconciliationCoordinator reconciliation;
     private final boolean dispatchEnabled;
     private final CustomerIdentityStore identities;
 
@@ -49,11 +50,13 @@ public class CustomerExecutionReadinessController {
             CustomerExecutionReadinessService service,
             CustomerLiveEquityOrderService liveEquityOrders,
             LiveEquityOrderCoordinator coordinator,
+            LiveEquityReconciliationCoordinator reconciliation,
             LiveEquityExecutionPolicy policy,
             CustomerIdentityStore identities) {
         this.service = service;
         this.liveEquityOrders = liveEquityOrders;
         this.coordinator = coordinator;
+        this.reconciliation = reconciliation;
         this.dispatchEnabled = policy != null && policy.dispatchEnabled();
         this.identities = identities;
     }
@@ -144,7 +147,7 @@ public class CustomerExecutionReadinessController {
     public ResponseEntity<CustomerLiveEquityOrderService.Order> reconcileLiveEquityOrder(
             @PathVariable UUID roomId, @PathVariable UUID orderId,
             Authentication authentication) {
-        return noStore(liveEquityOrders.reconcileFromBroker(
+        return noStore(reconciliation.reconcile(
             customer(authentication), roomId, orderId));
     }
 

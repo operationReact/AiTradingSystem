@@ -524,10 +524,11 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         try {
           equityCapability = await widget.executionRepository!
               .liveEquityCapability(widget.room.id);
-          if (equityCapability.roomId != widget.room.id ||
-              equityCapability.executionEnabled ||
-              equityCapability.orderRouteImplemented) {
-            throw const FormatException('Unexpected LIVE equity capability');
+          // The decoder already rejects an executable capability that is
+          // inconsistent (blockers, disconnected broker, no route). Accept a
+          // consistent one, whether the route is closed or implemented.
+          if (equityCapability.roomId != widget.room.id) {
+            throw const FormatException('Mismatched LIVE equity capability');
           }
         } catch (_) {
           equityCapability = null;
