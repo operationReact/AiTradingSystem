@@ -152,7 +152,82 @@ abstract interface class MindPaperCycleRepository {
   Future<List<MindPaperCycle>> recent(String roomId);
 }
 
-class HttpMindPaperCycleRepository implements MindPaperCycleRepository {
+/// Optional owner-confirmed bridge from a fresh PAPER signal to the guarded LIVE
+/// cash-equity order coordinator.
+abstract interface class MindLiveStrategyProposalRepository {
+  Future<List<MindPaperRoom>> liveIntradayRooms();
+  Future<MindLiveStrategyProposal> createLiveProposal({
+    required String liveRoomId,
+    required String sourcePaperRoomId,
+    required String sourceCycleId,
+  });
+  Future<Object?> submitLiveProposal({
+    required String liveRoomId,
+    required String proposalId,
+  });
+}
+
+class MindLiveStrategyProposal {
+  const MindLiveStrategyProposal({
+    required this.id,
+    required this.strategyCode,
+    required this.tradingSymbol,
+    required this.side,
+    required this.quantity,
+    required this.limitPrice,
+    required this.stopPrice,
+    required this.targetPrice,
+    required this.expiresAt,
+    required this.status,
+  });
+
+  final String id;
+  final String strategyCode;
+  final String tradingSymbol;
+  final String side;
+  final int quantity;
+  final num limitPrice;
+  final num stopPrice;
+  final num targetPrice;
+  final DateTime expiresAt;
+  final String status;
+
+  static MindLiveStrategyProposal parse(Object? raw) {
+    if (raw is! Map<String, dynamic> ||
+        raw['id'] is! String ||
+        raw['strategyCode'] is! String ||
+        raw['tradingSymbol'] is! String ||
+        raw['side'] is! String ||
+        raw['quantity'] is! int ||
+        raw['limitPrice'] is! num ||
+        raw['stopPrice'] is! num ||
+        raw['targetPrice'] is! num ||
+        raw['expiresAt'] is! String ||
+        raw['status'] is! String) {
+      throw const FormatException('Invalid LIVE strategy proposal');
+    }
+    final expiresAt = DateTime.tryParse(raw['expiresAt'] as String);
+    if (expiresAt == null ||
+        !const ['BUY', 'SELL'].contains(raw['side']) ||
+        !const ['PENDING', 'EXPIRED', 'SUBMITTED'].contains(raw['status'])) {
+      throw const FormatException('Inconsistent LIVE strategy proposal');
+    }
+    return MindLiveStrategyProposal(
+      id: raw['id'] as String,
+      strategyCode: raw['strategyCode'] as String,
+      tradingSymbol: raw['tradingSymbol'] as String,
+      side: raw['side'] as String,
+      quantity: raw['quantity'] as int,
+      limitPrice: raw['limitPrice'] as num,
+      stopPrice: raw['stopPrice'] as num,
+      targetPrice: raw['targetPrice'] as num,
+      expiresAt: expiresAt,
+      status: raw['status'] as String,
+    );
+  }
+}
+
+class HttpMindPaperCycleRepository implements MindPaperCycleRepository, MindLiveStrategyProposalRepository {
   HttpMindPaperCycleRepository(this.api, {Random? random}) : _random = random ?? Random.secure();
   final AuthenticatedApiClient api;
   final Random _random;
@@ -164,6 +239,43 @@ class HttpMindPaperCycleRepository implements MindPaperCycleRepository {
         for (final room in await HttpCustomerRoomRepository(api).list())
           if (room.mode == 'PAPER' && room.status == 'PAPER_FUNDED') MindPaperRoom(room.id, room.name),
       ];
+
+  @override
+  Future<List<MindPaperRoom>> liveIntradayRooms() async => [
+        for (final room in await HttpCustomerRoomRepository(api).list())
+          if (room.mode == 'LIVE' &&
+              room.focus == 'INTRADAY' &&
+              (room.marketScope == 'EQUITY' || room.marketScope == 'ALL'))
+            MindPaperRoom(room.id, room.name),
+      ];
+
+  @override
+  Future<MindLiveStrategyProposal> createLiveProposal({
+    required String liveRoomId,
+    required String sourcePaperRoomId,
+    required String sourceCycleId,
+  }) async {
+    _room(liveRoomId);
+    _room(sourcePaperRoomId);
+    _room(sourceCycleId);
+    return MindLiveStrategyProposal.parse(await api.postJson(
+      '/api/customer/trading-rooms/$liveRoomId/live/equity/strategy-proposals',
+      body: {'sourcePaperRoomId': sourcePaperRoomId, 'sourceCycleId': sourceCycleId},
+    ));
+  }
+
+  @override
+  Future<Object?> submitLiveProposal({
+    required String liveRoomId,
+    required String proposalId,
+  }) async {
+    _room(liveRoomId);
+    _room(proposalId);
+    return api.postJson(
+      '/api/customer/trading-rooms/$liveRoomId/live/equity/strategy-proposals/$proposalId/submit',
+      headers: {'X-Confirm-Live-Equity-Order': 'CONFIRM_LIVE_INTRADAY_EQUITY'},
+    );
+  }
 
   @override
   Future<List<MindPaperInstrument>> instruments() async {
