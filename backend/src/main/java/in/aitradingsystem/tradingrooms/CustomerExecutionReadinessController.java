@@ -93,18 +93,24 @@ public class CustomerExecutionReadinessController {
     public ResponseEntity<LiveEquityCapability> liveEquityCapability(
             @PathVariable UUID roomId, Authentication authentication) {
         var readiness = service.readiness(customer(authentication), roomId);
+        return noStore(capability(roomId, readiness, dispatchEnabled));
+    }
+
+    /**
+     * Capability contract shared with the Flutter decoder: executionEnabled is
+     * true only when the dispatch gate is on AND readiness has no blockers, and an
+     * executable capability never carries a blocker. With the gate off the route
+     * reports itself as not implemented.
+     */
+    static LiveEquityCapability capability(UUID roomId,
+            CustomerExecutionReadinessService.Readiness readiness, boolean dispatchEnabled) {
         var blockers = new java.util.ArrayList<>(readiness.blockers());
-        // The route is reported as implemented only when the deployment dispatch
-        // gate is on. Otherwise it stays fail-closed and says so.
-        boolean routeOpen = dispatchEnabled;
-        if (!routeOpen) {
+        if (!dispatchEnabled) {
             blockers.add("LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED");
-        } else {
-            blockers.add("PER_ORDER_PREFLIGHT_REQUIRED");
         }
-        return noStore(new LiveEquityCapability(roomId, readiness.selectedBroker(),
-            readiness.brokerConnected(), routeOpen,
-            routeOpen && readiness.executionEnabled(), List.copyOf(blockers)));
+        boolean executable = dispatchEnabled && readiness.executionEnabled() && blockers.isEmpty();
+        return new LiveEquityCapability(roomId, readiness.selectedBroker(),
+            readiness.brokerConnected(), dispatchEnabled, executable, List.copyOf(blockers));
     }
 
     /**

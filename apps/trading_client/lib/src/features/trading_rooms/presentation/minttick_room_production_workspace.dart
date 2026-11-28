@@ -83,7 +83,6 @@ class _MintTickRoomProductionWorkspaceState
                   'LIVE_INTRADAY_EQUITY_ORDER_ROUTE_NOT_IMPLEMENTED' ||
               blocker == 'AUTHORITATIVE_QUOTE_NOT_VERIFIED_FOR_ORDER' ||
               blocker == 'SERVER_SIDE_ORDER_RISK_NOT_EVALUATED' ||
-              blocker == 'PER_ORDER_PREFLIGHT_REQUIRED' ||
               blocker == 'ACCOUNT_WIDE_RISK_POLICY_NOT_ENABLED' ||
               blocker == 'BROKER_ORDER_DISPATCH_NOT_IMPLEMENTED' ||
               blocker ==

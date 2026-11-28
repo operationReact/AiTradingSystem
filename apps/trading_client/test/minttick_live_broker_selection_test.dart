@@ -126,7 +126,7 @@ void main() {
       'brokerConnected': true,
       'orderRouteImplemented': true,
       'executionEnabled': true,
-      'blockers': ['PER_ORDER_PREFLIGHT_REQUIRED'],
+      'blockers': ['ACCOUNT_WIDE_RISK_POLICY_NOT_CONFIGURED'],
     }), throwsFormatException);
   });
 
